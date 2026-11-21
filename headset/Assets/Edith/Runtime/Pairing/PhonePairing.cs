@@ -157,13 +157,6 @@ namespace Edith.Pairing
                 andType.text = "and type";
                 ShowCode(flow.Code);
             }
-            else if (flow.Phase == PairPhase.Connected)
-            {
-                title.text = "Phone connected";
-                line.text = "EDITH knows where you are.";
-                address.text = andType.text = "";
-                ShowCode(null);
-            }
             var target = flow.Visible && !Suppressed ? 1f : 0f;
             group.alpha = Mathf.MoveTowards(group.alpha, target, Time.deltaTime / FadeSeconds);
             canvas.enabled = group.alpha > 0f;

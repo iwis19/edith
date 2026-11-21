@@ -13,7 +13,7 @@ import wave
 LINE = "Hi, I'm EDITH! Tell me what you love and I'll find the fun in whatever you look at."
 VOICES = {
     "Enthusiastic": ("Puck", "Say this with big, bright, excited energy"),
-    "Calm": ("Vindemiatrix", "Say this slowly and warmly, like a quiet museum guide"),
+    "Calm": ("Vindemiatrix", "Say this calmly and warmly, at a normal speaking pace"),
     "Light": ("Callirrhoe", "Say this in an easygoing, slightly cheeky way"),
 }
 

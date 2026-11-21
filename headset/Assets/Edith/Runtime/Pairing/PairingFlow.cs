@@ -49,9 +49,9 @@ namespace Edith.Pairing
         /// Every feature but the pairing panel stays off.
         public bool Locked => Phase == PairPhase.Confirming || Phase == PairPhase.Requesting || Phase == PairPhase.Showing;
 
-        /// The panel is on screen: a code is on its way or up, or the pairing was just confirmed. Confirming a remembered
-        /// pairing takes one call and shows nothing.
-        public bool Visible => Phase == PairPhase.Requesting || Phase == PairPhase.Showing || Phase == PairPhase.Connected;
+        /// The panel is on screen: a code is on its way or up. It goes as soon as the phone connects, and confirming a
+        /// remembered pairing takes one call and shows nothing.
+        public bool Visible => Phase == PairPhase.Requesting || Phase == PairPhase.Showing;
 
         /// The call to make now, or None. Asking again before its result comes back returns None.
         public PairCall Next(float now)
