@@ -4,6 +4,9 @@ using UnityEngine;
 
 namespace Edith.Look
 {
+    /// What started a Look: a box pinched around something, or a scan pin opened with a pinch.
+    public enum LookSource { Pinch, Scan }
+
     /// The `meta` fields of a POST /look and a POST /collect.
     public static class LookMeta
     {
@@ -11,7 +14,7 @@ namespace Edith.Look
         sealed class Wire
         {
             public int look_id;
-            public string source = "pinch";
+            public string source;
             public string captured_at;
         }
 
@@ -22,9 +25,10 @@ namespace Edith.Look
             public string collected_at;
         }
 
-        public static string Json(int lookId, DateTime capturedAt) => JsonUtility.ToJson(new Wire
+        public static string Json(int lookId, LookSource source, DateTime capturedAt) => JsonUtility.ToJson(new Wire
         {
             look_id = lookId,
+            source = source == LookSource.Scan ? "scan" : "pinch",
             captured_at = Utc(capturedAt),
         });
 
