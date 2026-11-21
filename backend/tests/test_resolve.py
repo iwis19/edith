@@ -310,3 +310,48 @@ async def test_a_malformed_search_reply_raises():
     for bad in ({"error": "x"}, [{"lat": "95", "lon": "0"}], [{"lat": "x", "lon": "0"}]):
         with pytest.raises((ValueError, KeyError)):
             await resolver(FakeSearch(found=bad)).locate("Waterloo")
+
+
+WIKI_OVERPASS = {"elements": [
+    {"type": "node", "lat": 43.4724, "lon": -80.5449,
+     "tags": {"name": "Old Clock", "historic": "yes", "wikipedia": "en:Old Clock"}},
+    {"type": "node", "lat": 43.4725, "lon": -80.5449,
+     "tags": {"name": "Plain Hall", "building": "yes"}},
+]}
+
+
+class WikiServices(FakeServices):
+    def __init__(self, summary: httpx.Response | None = None):
+        super().__init__(overpass=WIKI_OVERPASS)
+        self.summary = summary or httpx.Response(200, json={"extract": "The Old Clock was built in 1850.  It still chimes."})
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if request.url.host.endswith("wikipedia.org"):
+            self.requests.append(request)
+            return self.summary
+        return super().__call__(request)
+
+
+async def test_a_sight_with_a_wikipedia_article_is_given_the_opening_of_it_once():
+    services = WikiServices()
+    r = resolver(services)
+    sights = (await r.resolve(fix())).whereabouts.sights
+    assert {s.name: s.fact for s in sights} == {"Old Clock": "The Old Clock was built in 1850. It still chimes.",
+                                                "Plain Hall": None}
+    assert services.to("en.wikipedia.org")[0].url.path == "/api/rest_v1/page/summary/Old_Clock"
+    await r.resolve(fix(43.4800, -80.5449))
+    assert len(services.to("en.wikipedia.org")) == 1, "the same article is not fetched twice"
+
+
+async def test_a_wikipedia_failure_leaves_the_sight_without_a_fact_and_the_resolution_complete():
+    resolution = await resolver(WikiServices(httpx.Response(503))).resolve(fix())
+    assert resolution.complete
+    assert all(s.fact is None for s in resolution.whereabouts.sights)
+
+
+async def test_a_malformed_article_tag_is_never_fetched():
+    overpass = {"elements": [{"type": "node", "lat": 43.4724, "lon": -80.5449,
+                              "tags": {"name": "Odd", "historic": "yes", "wikipedia": "evil.com/x:Odd"}}]}
+    services = FakeServices(overpass=overpass)
+    await resolver(services).resolve(fix())
+    assert not [r for r in services.requests if r.url.host.endswith("evil.com") or "wikipedia" in r.url.host]

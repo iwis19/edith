@@ -5,6 +5,7 @@ import asyncio
 import logging
 import re
 import time
+from urllib.parse import quote
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -18,6 +19,8 @@ from .location import LocationFix, Resolution, Sight, Whereabouts, distance_m
 log = logging.getLogger("edith.location")
 
 USER_AGENT = f"EDITH/{VERSION}"
+# Wikimedia refuses a User-Agent that gives no way to reach the project, so its requests name the public repository.
+WIKIPEDIA_USER_AGENT = f"{USER_AGENT} (+https://github.com/iwis19/westernhackers)"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 # The public Overpass servers are often at capacity, so the next answers when one fails.
@@ -42,6 +45,11 @@ CACHE_MAX = 256
 PLACE_CACHE_MAX = 1024
 # Names come from OpenStreetMap, which anyone can edit, and go into prompts.
 MAX_NAME_CHARS = 80
+# The opening of a sight's Wikipedia article is fetched for the nearest few sights that carry one, once per article.
+FACT_SIGHTS = 6
+FACT_CHARS = 400
+FACT_CACHE_MAX = 512
+WIKI_LANG = re.compile(r"^[a-z]{2,3}(-[a-z]{2,8})?$")
 
 # Nominatim reverse at street zoom names the road, not the campus around it, so a notable unit usually comes from the
 # areas Overpass says contain the point. Their tags, most notable first.
@@ -146,7 +154,7 @@ def overpass_sights(reply: dict, lat: float, lon: float) -> list[Sight]:
         name = clean_name(tags.get("name") or "")
         if not name or "lat" not in point:
             continue
-        sights.append(Sight(name=name, kind=_kind(tags), tier=tier(tags),
+        sights.append(Sight(name=name, kind=_kind(tags), tier=tier(tags), wikipedia=tags.get("wikipedia"),
                             distance_m=round(distance_m(lat, lon, point["lat"], point["lon"]))))
     return sights
 
@@ -199,6 +207,7 @@ class HttpResolver:
         self._nominatim_last: float | None = None
         self._cache: OrderedDict[tuple[float, float], tuple[float, Resolution]] = OrderedDict()
         self._points: OrderedDict[str, tuple[float, float] | None] = OrderedDict()
+        self._facts: OrderedDict[str, str | None] = OrderedDict()
 
     async def resolve(self, fix: LocationFix) -> Resolution | None:
         lat, lon = round(fix.lat, 4), round(fix.lon, 4)
@@ -213,13 +222,43 @@ class HttpResolver:
             log.info("a location service failed: %s", failed)
         osm = _Osm() if isinstance(osm, BaseException) else osm
         place = place_name({} if isinstance(address, BaseException) else address, osm.campus)
-        # The campus is already the place, so it is not also a sight.
+        # The campus is already the place, so it is not also a sight, unless it has an article to take a fact from.
         campus = normalise(osm.campus) if osm.campus else None
-        near = [s for s in osm.sights if s.distance_m <= MAX_SIGHT_M and normalise(s.name) != campus]
-        resolution = Resolution(whereabouts=Whereabouts(place=place, sights=merge_sights(near)), complete=not failed)
+        near = [s for s in osm.sights if s.distance_m <= MAX_SIGHT_M and (normalise(s.name) != campus or s.wikipedia)]
+        sights = await self._with_facts(merge_sights(near))
+        resolution = Resolution(whereabouts=Whereabouts(place=place, sights=sights), complete=not failed)
         if resolution.complete:
             self._remember(lat, lon, resolution)
         return resolution
+
+    async def _with_facts(self, sights: list[Sight]) -> list[Sight]:
+        """The nearest sights that have a Wikipedia article, each given the opening of it. A fetch that fails leaves
+        that sight without a fact."""
+        wanted = [s for s in sights if s.wikipedia][:FACT_SIGHTS]
+        facts = await asyncio.gather(*(self._fact(s.wikipedia) for s in wanted), return_exceptions=True)
+        found = {s.name: f for s, f in zip(wanted, facts) if isinstance(f, str)}
+        return [s.model_copy(update={"fact": found[s.name]}) if s.name in found else s for s in sights]
+
+    async def _fact(self, article: str) -> str | None:
+        if article in self._facts:
+            return self._facts[article]
+        lang, _, title = article.partition(":")
+        if not WIKI_LANG.match(lang) or not title:
+            return None
+        try:
+            response = await self._http.get(
+                f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'), safe='')}",
+                timeout=SERVICE_TIMEOUT_S, headers={"User-Agent": WIKIPEDIA_USER_AGENT}, follow_redirects=True)
+            response.raise_for_status()
+            extract = response.json().get("extract")
+        except (httpx.HTTPError, ValueError) as exc:
+            log.info("a Wikipedia summary was not fetched: %s", type(exc).__name__)
+            return None
+        fact = " ".join(extract.split())[:FACT_CHARS] if isinstance(extract, str) and extract.strip() else None
+        self._facts[article] = fact
+        while len(self._facts) > FACT_CACHE_MAX:
+            self._facts.popitem(last=False)
+        return fact
 
     def _cached(self, lat: float, lon: float) -> Resolution | None:
         found = self._cache.get((lat, lon))

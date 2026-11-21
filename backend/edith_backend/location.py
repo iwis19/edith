@@ -53,6 +53,9 @@ class Sight(BaseModel):
     # Wikipedia, 1 a university or public building, 2 another named building, 3 an ordinary shop or restaurant. The
     # nearest of the best tiers fill the list.
     tier: int = 2
+    # The article tag OpenStreetMap carries for it ("en:Yasaka Pagoda") and, once fetched, the opening of that article.
+    wikipedia: str | None = None
+    fact: str | None = None
 
 
 class Whereabouts(BaseModel):
@@ -198,5 +201,11 @@ def describe_place(found: Whereabouts | None, max_sights: int) -> str | None:
     head = f"This person is at {found.place}." if found.place else "This person's place name is not known."
     if not found.sights:
         return f"{head} No named sights are known nearby."
-    lines = ", ".join(f"{s.name} ({s.distance_m} m, {s.kind})" for s in found.sights[:max_sights])
-    return f"{head} Named sights nearby, nearest first: {lines}."
+    # The sights with a fact are listed first, so a far landmark's fact is not cut off by a nearer plain building.
+    by_fact = [s for s in found.sights if s.fact] + [s for s in found.sights if not s.fact]
+    shown = sorted(by_fact[:max_sights], key=lambda s: s.distance_m)
+    lines = ", ".join(f"{s.name} ({s.distance_m} m, {s.kind})" for s in shown)
+    text = f"{head} Named sights nearby, nearest first: {lines}."
+    if facts := [f"- {s.name}: {s.fact}" for s in shown if s.fact]:
+        text += "\nWhat Wikipedia says about some of them:\n" + "\n".join(facts)
+    return text
