@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from edith_backend.agents.ask import ASK_PROMPT, NAV_NOTE, NAV_START_NOTE, SEARCH_NOTE, LiveAsk
+from edith_backend.agents.ask import ACTIONS_NOTE, ASK_PROMPT, NAV_NOTE, NAV_START_NOTE, SEARCH_NOTE, LiveAsk
 from edith_backend.location import Locations, Sight, Whereabouts
 from edith_backend.app import create_app
 from edith_backend.config import LIVE_VOICES, Settings
@@ -56,7 +56,7 @@ async def test_the_setup_asks_for_spoken_english_with_transcripts(settings, stor
     assert config["speechConfig"]["voiceConfig"] == {"prebuiltVoiceConfig": {"voiceName": "Kore"}}
     assert setup["inputAudioTranscription"] == {}
     assert setup["outputAudioTranscription"] == {}
-    assert setup["systemInstruction"]["parts"][0]["text"] == f"{ASK_PROMPT}\n\n{NAV_NOTE}"
+    assert setup["systemInstruction"]["parts"][0]["text"] == f"{ASK_PROMPT}\n\n{NAV_NOTE}\n\n{ACTIONS_NOTE}"
     assert "always answer in English" in ASK_PROMPT
 
 
@@ -87,13 +87,29 @@ async def test_search_is_offered_only_when_turned_on(settings, store):
     assert {"googleSearch": {}} in searching["tools"]
 
 
-async def test_the_navigation_and_hunt_tools_are_always_offered_in_one_declaration(settings, store):
+async def test_every_function_tool_is_always_offered_in_one_declaration(settings, store):
     for search in (False, True):
         setup = setup_of(await ask_session(settings, store, live(search=search)))
         declarations = [t["functionDeclarations"] for t in setup["tools"] if "functionDeclarations" in t]
-        assert [[f["name"] for f in d] for d in declarations] == [
-            ["find_place", "stop_navigation", "start_hunt", "stop_hunt"]]
-        assert NAV_NOTE in setup["systemInstruction"]["parts"][0]["text"]
+        assert [[f["name"] for f in d] for d in declarations] == [[
+            "find_place", "stop_navigation", "start_hunt", "stop_hunt", "scan", "collect_snapshot", "clear_snapshots"]]
+        text = setup["systemInstruction"]["parts"][0]["text"]
+        assert NAV_NOTE in text and ACTIONS_NOTE in text
+
+
+async def test_the_hand_actions_take_no_arguments(settings, store):
+    setup = setup_of(await ask_session(settings, store, live()))
+    functions = {f["name"]: f for f in setup["tools"][0]["functionDeclarations"]}
+    for name in ("scan", "collect_snapshot", "clear_snapshots"):
+        assert "parameters" not in functions[name]
+        assert functions[name]["description"]
+
+
+async def test_the_persona_says_when_to_call_each_hand_action_and_what_to_say_after(settings, store):
+    text = setup_of(await ask_session(settings, store, live()))["systemInstruction"]["parts"][0]["text"]
+    assert "call scan, then name the things it pinned" in text
+    assert "call collect_snapshot and say in a few words what you saved" in text
+    assert "call clear_snapshots and say how many went" in text
 
 
 async def test_the_persona_limits_search_to_questions_that_need_the_web(settings, store):
@@ -150,7 +166,7 @@ async def test_the_persona_names_the_phones_place_and_nearest_sights_when_a_fix_
 
 async def test_with_no_fix_the_persona_has_no_place(settings, store):
     setup = setup_of(await ask_session(settings, store, live()))
-    assert setup["systemInstruction"]["parts"][0]["text"] == f"{ASK_PROMPT}\n\n{NAV_NOTE}"
+    assert setup["systemInstruction"]["parts"][0]["text"] == f"{ASK_PROMPT}\n\n{NAV_NOTE}\n\n{ACTIONS_NOTE}"
 
 
 async def test_a_scan_pin_hint_names_what_this_means(settings, store):

@@ -169,7 +169,17 @@ The response is `{"url", "setup", "model"}`:
 - `setup`: the JSON text the headset sends as its first message. It sets the model, spoken English, the voice, transcription of both sides (so the card can show the spoken answer) and EDITH's persona. With `LIVE_SEARCH=true` it adds the `googleSearch` tool and a persona line that limits searching to questions that need current or factual web information. The headset reads the sources from `serverContent.groundingMetadata.groundingChunks[].web` and shows up to three site names under the answer.
 - `model`: the Live model ID.
 
-The setup always declares four function tools in one `functionDeclarations` entry: `find_place` and `stop_navigation` for directions (the headset answers them through `/navigate`), and `start_hunt` (optional `interests`: an array of strings) and `stop_hunt` (no arguments) for the hunt. For the hunt tools, the persona tells the model to call them when the person asks for a scavenger hunt or asks to stop one. The headset runs a call by sending `POST /hunt` (with `{"interests": [...]}` when given) or `POST /hunt/stop`, and answers the call with the response JSON as the `toolResponse` (`{"functionResponses": [{"id": <the call's id>, "name": <the call's name>, "response": <the HuntState>}]}`). An error body from those routes goes back the same way. While the profile has an active hunt, the persona also lists the open targets, the found ones and the time left, so "what's left?" is answered from the session.
+The setup always declares seven function tools in one `functionDeclarations` entry: `find_place` and `stop_navigation` for directions (the headset answers them through `/navigate`), `start_hunt` (optional `interests`: an array of strings) and `stop_hunt` (no arguments) for the hunt, and `scan`, `collect_snapshot` and `clear_snapshots` (no arguments) for the hand actions. For the hunt tools, the persona tells the model to call them when the person asks for a scavenger hunt or asks to stop one. The headset runs a call by sending `POST /hunt` (with `{"interests": [...]}` when given) or `POST /hunt/stop`, and answers the call with the response JSON as the `toolResponse` (`{"functionResponses": [{"id": <the call's id>, "name": <the call's name>, "response": <the HuntState>}]}`). An error body from those routes goes back the same way. While the profile has an active hunt, the persona also lists the open targets, the found ones and the time left, so "what's left?" is answered from the session.
+
+The three hand actions run on the headset alone, as the gestures would: `scan` runs the palms-out scan, `collect_snapshot` collects the snapshot nearest the line of sight as the fist pull does, and `clear_snapshots` removes every snapshot in the room. The persona tells the model to call them when the person asks to scan or what is around them, to save or collect the snapshot they are looking at, or to clear their snapshots, and to answer in a sentence afterwards. The headset answers with these results:
+
+| Tool | Result | Error codes |
+| --- | --- | --- |
+| `scan` | `{"pins": [{"name": "...", "hook": "..."}]}` | `scan_busy`, `nothing_found`, `scan_failed`, `scan_timeout` |
+| `collect_snapshot` | `{"collected": "<the snapshot's name>"}` | `nothing_in_view`, `still_looking` |
+| `clear_snapshots` | `{"cleared": <count>}` | none |
+
+An error comes back as `{"error": {"code": "...", "message": "..."}}`.
 
 | Status | `error.code` | Meaning |
 | --- | --- | --- |
