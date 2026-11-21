@@ -15,6 +15,8 @@ namespace Edith.Tests
     {
         const string Dropouts = "right-hand-dropouts.jsonl.gz";
         const string Clean = "right-hand-clean.jsonl.gz";
+        /// Six quick drags of about 30 cm each, read through OVRHand's pinch flag.
+        const string FastDrags = "right-hand-fast-drags.jsonl.gz";
 
         // Mid-drag dropouts: the last pinching frame and the frame the pinch came back on. The pinch flag dropped for
         // 194 and 222 ms, and at 21.2 s tracking also reported the fingertips 5.8 cm apart before they closed again.
@@ -78,8 +80,17 @@ namespace Edith.Tests
             Assert.Greater(Looks(events).Count, 5);
         }
 
+        [Test]
+        public void Each_fast_drag_ends_in_one_Look()
+        {
+            var events = Replay(FastDrags);
+            Assert.AreEqual(6, Looks(events).Count);
+            Assert.IsFalse(events.Any(e => e.pinch == PinchEvent.Resumed || e.pinch == PinchEvent.Cancelled || e.pinch == PinchEvent.Tap));
+        }
+
         [TestCase(Dropouts)]
         [TestCase(Clean)]
+        [TestCase(FastDrags)]
         public void Every_release_settles_within_the_rejoin_window(string fixture)
         {
             var tuning = new PinchTuning();
