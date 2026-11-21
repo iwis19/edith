@@ -45,7 +45,8 @@ PLACE_NOTE = (
 )
 PROMPT_SIGHTS = 5
 
-# Always appended: the headset answers these two tools by asking the backend, and shows the blue arrow itself.
+# Appended, with the two tools, only when the directions gesture opened the session: declaring tools makes every other
+# answer start later. The headset answers the tools by asking the backend, and shows the blue arrow itself.
 NAV_NOTE = (
     "You can guide the person somewhere nearby. When they ask where the nearest kind of place is, for directions, or "
     "how to get to a named place, landmark, restaurant, shop or station, call find_place: pick the closest category, "
@@ -136,10 +137,13 @@ class LiveAsk:
             "inputAudioTranscription": {},
             "outputAudioTranscription": {},
         }
-        tools: list[dict] = [{"functionDeclarations": [FIND_PLACE, STOP_NAVIGATION]}]
+        tools: list[dict] = []
+        if request.navigate:
+            tools.append({"functionDeclarations": [FIND_PLACE, STOP_NAVIGATION]})
         if self._search:
             tools.append({"googleSearch": {}})
-        setup["tools"] = tools
+        if tools:
+            setup["tools"] = tools
         return setup
 
     async def _mint_token(self) -> str:
@@ -161,9 +165,8 @@ def _persona(found: Whereabouts | None, hint: AskHint | None, search: bool, navi
     notes = [ASK_PROMPT]
     if search:
         notes.append(SEARCH_NOTE)
-    notes.append(NAV_NOTE)
     if navigate:
-        notes.append(NAV_START_NOTE)
+        notes += [NAV_NOTE, NAV_START_NOTE]
     facts = describe_place(found, PROMPT_SIGHTS)
     if facts is not None:
         notes.append(PLACE_NOTE.format(facts=facts))
