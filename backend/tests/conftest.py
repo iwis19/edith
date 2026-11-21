@@ -9,7 +9,7 @@ import pytest
 
 from edith_backend.app import create_app
 from edith_backend.config import Settings
-from edith_backend.db import LookRecord, Memory
+from edith_backend.db import LookRecord, Memory, ToldFact
 
 def pytest_asyncio_loop_factories(config, item):
     # psycopg's async mode cannot run on Windows' default proactor loop.
@@ -37,6 +37,7 @@ class RecordingStore:
     def __init__(self) -> None:
         self.records: list[LookRecord] = []
         self.memories: dict[int, tuple[Memory, uuid.UUID, bytes, uuid.UUID]] = {}
+        self.told: dict[uuid.UUID, dict[str, ToldFact]] = {}
 
     async def open(self) -> None:
         pass
@@ -80,6 +81,15 @@ class RecordingStore:
     async def memory_image(self, profile_id, memory_id):
         entry = self.memories.get(memory_id)
         return entry[2] if entry and entry[1] == profile_id else None
+
+    async def load_told_facts(self, profile_id):
+        return sorted(self.told.get(profile_id, {}).values(), key=lambda t: t.told_at)
+
+    async def save_told_fact(self, profile_id, told):
+        self.told.setdefault(profile_id, {})[told.fact] = told
+
+    async def load_recent_places(self):
+        return [(r.profile_id, r.photo_place, r.captured_at.timestamp()) for r in self.records if r.photo_place]
 
 
 @pytest.fixture

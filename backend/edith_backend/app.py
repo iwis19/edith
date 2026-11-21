@@ -147,8 +147,8 @@ def create_app(
     locations = locations or Locations(resolver)
     geocoder = geocoder or resolver
     pairings = pairings or Pairings()
-    agent = agent or make_card_agent(settings, locations.whereabouts)
     store = store or make_store(settings.database_url, settings.db_pool_max)
+    agent = agent or make_card_agent(settings, locations.whereabouts, store)
     ask = ask or make_live_ask(settings)
     scanner = scanner or make_scan_agent(settings, store, locations.whereabouts)
     # Looks still streaming, by look_ref, so a /collect that arrives before the Look is recorded can wait for it. A
@@ -159,9 +159,15 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await store.open()
+        # A sleeping database can take seconds to wake, so startup does not wait for the places. Looks before the load
+        # finishes go without the places from before the restart. Only the model agent remembers places.
+        restore = getattr(agent, "restore_places", None)
+        restoring = asyncio.create_task(restore()) if restore else None
         yield
         for task in geocoding:
             task.cancel()
+        if restoring:
+            restoring.cancel()
         if _recording:
             await asyncio.wait(_recording, timeout=10)
         await store.close()
@@ -493,6 +499,7 @@ def _record(
         duration_ms=duration_ms,
         kind=details.kind if details else None,
         place=details.place if details else None,
+        photo_place=details.photo_place if details else None,
     )
 
 

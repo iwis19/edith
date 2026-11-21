@@ -5,8 +5,8 @@ using UnityEngine.UI;
 
 namespace Edith.Scan
 {
-    /// What a scan draws in the room: a dot with a hook on each pin, the ring that fills between the palms, and the
-    /// line of text for a scan that found nothing. Each is a world-space canvas that faces the eye and is scaled with
+    /// What a scan draws in the room: a dot on each pin with a ring that fills while it is looked at, the ring that
+    /// fills between the palms, and the line of text for a scan that found nothing. Each is a world-space canvas that faces the eye and is scaled with
     /// its distance, so text reads the same from anywhere in the room.
     public sealed class ScanMarks : IDisposable
     {
@@ -16,16 +16,24 @@ namespace Edith.Scan
             internal CanvasGroup Group;
             internal Vector3 At;
             internal float Fade, Target = 1f;
+            internal Image Gaze, Pulse;
+            internal float Age;
         }
 
         // 1 canvas unit is half a millimetre at ReferenceMeters.
         const float MetresPerUnit = 0.0005f, ReferenceMeters = 0.5f, MinScaleMeters = 0.3f;
-        const float DotSize = 28f, LabelWidth = 420f, LabelHeight = 160f, LabelGap = 10f;
+        const float DotSize = 28f, LabelWidth = 420f, LabelHeight = 160f;
         const float FadeSeconds = 0.25f;
         const float StatusSeconds = 2.5f;
         // The ring is about 9 cm across at ReferenceMeters. Its line is a share of its radius, and it breathes this
         // fast and this much while the reply is awaited.
         const float RingSize = 180f, RingThickness = 0.14f, PulseHz = 1.4f, PulseScale = 0.08f;
+        const float GazeSize = 84f;
+        // A new pin's ripple: each ring grows to this many times the dot's size over RippleSeconds, RippleCount times.
+        const float RippleSeconds = 0.6f, RippleCount = 2f, RippleGrowth = 5f;
+        const float OutlineWidth = 4f;
+        static readonly Color GazeColor = new Color(0.35f, 0.9f, 0.5f);
+        static readonly Color OutlineColor = new Color(0f, 0f, 0f, 0.75f);
         static readonly Color TextColor = new Color(0.95f, 0.95f, 0.97f);
         static readonly Color HoldColor = new Color(0.95f, 0.95f, 0.97f, 0.55f);
         static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
@@ -48,23 +56,46 @@ namespace Edith.Scan
             this.material = material;
         }
 
-        /// A pin at `at` that fades in. Hand it to Remove to fade it out.
-        public Mark AddPin(Vector3 at, string label)
+        /// A pin at `at`: a bare dot that fades in. Hand it to Remove to fade it out.
+        public Mark AddPin(Vector3 at)
         {
             var pin = new Mark { At = at };
             var root = NewCanvas("ScanPin", pin);
-            var image = new GameObject("Dot", typeof(Image), typeof(Shadow)).GetComponent<Image>();
-            image.sprite = dot;
-            image.color = TextColor;
-            image.raycastTarget = false;
-            image.material = material;
-            image.GetComponent<Shadow>().effectColor = ShadowColor;
-            image.rectTransform.SetParent(root, false);
-            image.rectTransform.sizeDelta = new Vector2(DotSize, DotSize);
-            Label(root, 19, TextAnchor.LowerCenter, new Vector2(0f, DotSize * 0.5f + LabelGap + LabelHeight * 0.5f)).text = label;
+            pin.Pulse = Disc(root, ringSprite, TextColor, DotSize);
+            // The dark disc behind the white one keeps the dot visible against sky, concrete or a lit window.
+            Disc(root, dot, OutlineColor, DotSize + 2f * OutlineWidth);
+            Disc(root, dot, TextColor, DotSize);
+            var gaze = new GameObject("Gaze", typeof(Image)).GetComponent<Image>();
+            gaze.sprite = ringSprite;
+            gaze.type = Image.Type.Filled;
+            gaze.fillMethod = Image.FillMethod.Radial360;
+            gaze.fillOrigin = (int)Image.Origin360.Top;
+            gaze.fillClockwise = true;
+            gaze.fillAmount = 0f;
+            gaze.color = GazeColor;
+            gaze.raycastTarget = false;
+            gaze.material = material;
+            gaze.rectTransform.SetParent(root, false);
+            gaze.rectTransform.sizeDelta = new Vector2(GazeSize, GazeSize);
+            pin.Gaze = gaze;
             pins.Add(pin);
             return pin;
         }
+
+        Image Disc(RectTransform root, Sprite sprite, Color color, float size)
+        {
+            var image = new GameObject("Dot", typeof(Image)).GetComponent<Image>();
+            image.sprite = sprite;
+            image.color = color;
+            image.raycastTarget = false;
+            image.material = material;
+            image.rectTransform.SetParent(root, false);
+            image.rectTransform.sizeDelta = new Vector2(size, size);
+            return image;
+        }
+
+        /// Fills the ring around `pin` to `progress` while it is looked at.
+        public void SetGaze(Mark pin, float progress) => pin.Gaze.fillAmount = progress;
 
         public void Remove(Mark pin) => pin.Target = 0f;
 
@@ -117,6 +148,7 @@ namespace Edith.Scan
             {
                 var pin = pins[i];
                 Step(pin, step, eye, 1f);
+                Ripple(pin);
                 if (pin.Target > 0f || pin.Fade > 0f) continue;
                 UnityEngine.Object.Destroy(pin.Go);
                 pins.RemoveAt(i);
@@ -147,6 +179,23 @@ namespace Edith.Scan
                 UnityEngine.Object.Destroy(sprite.texture);
                 UnityEngine.Object.Destroy(sprite);
             }
+        }
+
+        // A new pin sends out rings that grow from the dot and fade, so it is easy to spot where it landed.
+        static void Ripple(Mark pin)
+        {
+            if (!pin.Pulse.enabled) return;
+            pin.Age += Time.deltaTime;
+            var round = pin.Age / RippleSeconds;
+            if (round >= RippleCount)
+            {
+                pin.Pulse.enabled = false;
+                return;
+            }
+            var t = round - Mathf.Floor(round);
+            var eased = 1f - (1f - t) * (1f - t);
+            pin.Pulse.rectTransform.sizeDelta = Vector2.one * Mathf.Lerp(DotSize, DotSize * RippleGrowth, eased);
+            pin.Pulse.color = new Color(TextColor.r, TextColor.g, TextColor.b, 1f - t);
         }
 
         static void Step(Mark mark, float step, Vector3 eye, float scale)

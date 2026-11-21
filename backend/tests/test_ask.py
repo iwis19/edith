@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from edith_backend.agents.ask import ASK_PROMPT, LiveAsk
+from edith_backend.agents.ask import ASK_PROMPT, SEARCH_NOTE, LiveAsk
 from edith_backend.location import Locations, Sight, Whereabouts
 from edith_backend.app import create_app
 from edith_backend.config import LIVE_VOICES, Settings
@@ -86,6 +86,13 @@ async def test_search_is_offered_only_when_turned_on(settings, store):
     assert searching["tools"] == [{"googleSearch": {}}]
 
 
+async def test_the_persona_limits_search_to_questions_that_need_the_web(settings, store):
+    quiet = setup_of(await ask_session(settings, store, live()))["systemInstruction"]["parts"][0]["text"]
+    searching = setup_of(await ask_session(settings, store, live(search=True)))["systemInstruction"]["parts"][0]["text"]
+    assert SEARCH_NOTE not in quiet
+    assert searching.startswith(ASK_PROMPT) and SEARCH_NOTE in searching
+
+
 @pytest.mark.parametrize("body", [None, {}])
 async def test_an_empty_body_is_accepted(settings, store, body):
     assert (await ask_session(settings, store, live(), body)).status_code == 200
@@ -134,3 +141,19 @@ async def test_the_persona_names_the_phones_place_and_nearest_sights_when_a_fix_
 async def test_with_no_fix_the_persona_is_unchanged(settings, store):
     setup = setup_of(await ask_session(settings, store, live()))
     assert setup["systemInstruction"]["parts"][0]["text"] == ASK_PROMPT
+
+
+async def test_a_scan_pin_hint_names_what_this_means(settings, store):
+    body = {"hint": {"name": "the Peace Tower", "hook": "Climb it for a view over the river."}}
+    text = setup_of(await ask_session(settings, store, live(), body))["systemInstruction"]["parts"][0]["text"]
+    assert text.startswith(ASK_PROMPT)
+    assert "a pin you placed on the Peace Tower" in text and "Climb it for a view over the river." in text
+    assert 'they mean the Peace Tower' in text
+
+
+@pytest.mark.parametrize("hint", [{"name": ""}, {"name": "x" * 201}, {"name": "a mug", "hook": "x" * 301}])
+async def test_a_malformed_hint_is_refused_before_a_token_is_minted(settings, store, hint):
+    seen: list[httpx.Request] = []
+    response = await ask_session(settings, store, live(seen), {"hint": hint})
+    assert response.status_code == 422
+    assert seen == []

@@ -31,7 +31,7 @@ namespace Edith.Scan
 
     /// Scan, end to end on the headset. Both palms held open and facing away send one whole camera frame to the
     /// backend, which picks the few most interesting things in it. Each gets a pin: a dot on the object, placed by
-    /// depth, with a short hook above it. A new scan replaces the pins of the last, and recentring the view clears
+    /// depth, that opens into a card saying its short hook. A new scan replaces the pins of the last, and recentring the view clears
     /// them. TryOpen turns a pinch on a pin into the box a Look needs.
     public sealed class ScanController : MonoBehaviour
     {
@@ -45,7 +45,7 @@ namespace Edith.Scan
         [SerializeField] Font font;
         [SerializeField] Material material;
         [SerializeField] ScanTuning tuning = new ScanTuning();
-        /// While another panel holds it, the palms start no scan. Optional.
+        /// While another panel holds it, the palms start no scan and a look opens no pin. Optional.
         [SerializeField] HandGate gate;
 
         // A pin sits this far in front of the surface it was measured on, so the surface does not occlude it.
@@ -53,11 +53,19 @@ namespace Edith.Scan
         // The backend gives up at 7 s and says why; past this the person is told EDITH could not be reached.
         const float ReplySeconds = 8f;
         const float NearLogSeconds = 1f;
+        // About half the bytes of the full 1280x960 frame, so the upload stays short on slow Wi-Fi.
+        const int FrameLongSide = 960;
         // The depth remembered for a scan: cells about 4 degrees across, a few sight lines measured each frame so
         // the whole frame is covered several times a second.
         const int DepthColumns = 16, DepthRows = 12, DepthRaysPerFrame = 24;
         // Where the ring and the status line sit for a scan that did not start from the pose.
         const float StatusAhead = 0.45f, StatusBelow = 0.1f;
+        // A card's text grows with its distance, so it covers about this much below the photo and at least this much
+        // either side of its centre, as tangents of the angle from the eye. Its depth is measured on a grid this many
+        // samples across, and it hangs this far in front of the nearest surface found.
+        const float TextBelow = 0.22f, TextHalfWidth = 0.1f;
+        const int ClearSamples = 5;
+        const float ClearMeters = 0.05f;
 
         sealed class Placed
         {
@@ -86,6 +94,13 @@ namespace Edith.Scan
         ScanDepthGrid depth;
         Pose depthPose;
         int depthCursor;
+        Placed gazed;
+        float gazeSeconds;
+        Quaternion lastEyeRotation;
+
+        /// Fires with the box to hang and photograph, and the pin it came from, when a pin has been looked at long
+        /// enough. The pin has left the room.
+        public event Action<SightBox, ScanPin> Opened;
 
         /// The pins in the room, most interesting first.
         public IReadOnlyList<ScanPin> Pins => pins;
@@ -134,6 +149,7 @@ namespace Edith.Scan
             }
 
             if (depth != null) RememberDepth();
+            Gaze();
             marks.SetRing(ringAt, holdProgress, scanning);
             marks.Tick(eye.position);
         }
@@ -141,10 +157,13 @@ namespace Edith.Scan
         // After hand tracking has updated, like the pinch and the grab.
         void LateUpdate()
         {
+            var left = leftHand.Read();
             var right = rightHand.Read();
             // A hand closing on, holding or letting go of a card is busy, so its open hand cannot pose.
-            if ((grab != null && grab.Claimed) || (gate != null && gate.Held)) right.Tracked = false;
-            var pose = tracker.Step(leftHand.Read(), right);
+            if (grab != null && grab.Claimed(HandSide.Left)) left.Tracked = false;
+            if (grab != null && grab.Claimed(HandSide.Right)) right.Tracked = false;
+            if (gate != null && gate.Held) left.Tracked = right.Tracked = false;
+            var pose = tracker.Step(left, right);
             holdProgress = pose.Progress;
             if (pose.Progress > 0f) ringAt = pose.Between;
             if (pose.Fired)
@@ -187,7 +206,7 @@ namespace Edith.Scan
             try
             {
                 var capturedAt = DateTime.UtcNow;
-                var frame = await headsetCamera.CaptureFullAsync();
+                var frame = await headsetCamera.CaptureFullAsync(FrameLongSide);
                 if (this == null) return;
                 Debug.Log($"[EDITH scan] {id} captured {frame.Size.x}x{frame.Size.y}, {frame.Jpeg.Length / 1024} KB, {Ms()} ms in");
                 if (environmentRaycast != null)
@@ -217,7 +236,7 @@ namespace Edith.Scan
             {
                 if (this == null) return;
                 var why = e is OperationCanceledException ? "timeout" : e.GetBaseException().Message;
-                Debug.Log($"[EDITH scan] {id} failed {Ms()} ms in: {why}");
+                Debug.Log($"[EDITH scan] {id} failed {Ms()} ms in: {why}\n{e}");
                 // No answer at all is nearly always the headset's Wi-Fi, such as a network waiting on a sign-in page.
                 var unreachable = e is OperationCanceledException || e is HttpRequestException;
                 Fail(unreachable ? "Couldn't reach EDITH. Check the Wi-Fi." : "Couldn't look around.");
@@ -230,11 +249,12 @@ namespace Edith.Scan
         }
 
         /// Turns a pinch at `pinchPoint`, seen from `eye`, into a Look of the pin it is in line with. `box` is the
-        /// box to hang and photograph, as if the person had drawn it around the pin's object, and the pin leaves the
-        /// room. False when no pin is in line with the pinch, or the pin's object is too close to frame.
-        public bool TryOpen(Vector3 pinchPoint, Pose eye, out SightBox box)
+        /// box to hang and photograph, as if the person had drawn it around the pin's object, and `opened` the pin,
+        /// which leaves the room. False when no pin is in line with the pinch, or the pin's object is too close to frame.
+        public bool TryOpen(Vector3 pinchPoint, Pose eye, out SightBox box, out ScanPin opened)
         {
             box = default;
+            opened = default;
             if (pinchPoint == eye.position) return false;
             points.Clear();
             foreach (var pin in pins) points.Add(pin.Point);
@@ -249,9 +269,80 @@ namespace Edith.Scan
                 return false;
             }
             Debug.Log($"[EDITH scan] open \"{pins[index].Name}\" {distance:F2} m away, card at {cardDepth:F2} m");
+            opened = pins[index];
             RemovePin(index);
             box = around;
             return true;
+        }
+
+        // A pin is a bare dot. Pointing the head at it and holding still fills its ring; when full, the pin opens as a
+        // Look whose box is the pin's object as seen from here, hung at the object's own distance so the photo lines
+        // up with what is around it, and whose card says the pin's hook. A far pin only points the way and never opens.
+        void Gaze()
+        {
+            var turning = Quaternion.Angle(lastEyeRotation, eye.rotation) / Mathf.Max(Time.deltaTime, 1e-4f);
+            lastEyeRotation = eye.rotation;
+
+            var index = -1;
+            if (!scanning && (gate == null || !gate.Held))
+            {
+                points.Clear();
+                // A point at the eye is skipped, which leaves the far pins out.
+                foreach (var pin in pins) points.Add(pin.Far ? eye.position : pin.Point);
+                index = ScanGeometry.NearestToLine(new Ray(eye.position, eye.forward), points, tuning.gazeOpenDegrees);
+            }
+            var looked = index >= 0 ? placed[index] : null;
+
+            if (looked != gazed)
+            {
+                if (gazed != null && placed.Contains(gazed)) marks.SetGaze(gazed.Mark, 0f);
+                gazed = looked;
+                gazeSeconds = 0f;
+            }
+            else if (looked != null && turning <= tuning.gazeStillDegreesPerSecond) gazeSeconds += Time.deltaTime;
+            if (gazed == null) return;
+
+            marks.SetGaze(gazed.Mark, Mathf.Clamp01(gazeSeconds / tuning.gazeOpenSeconds));
+            if (gazeSeconds < tuning.gazeOpenSeconds) return;
+
+            var distance = (pins[index].Point - eye.position).magnitude;
+            if (ScanGeometry.BoxAround(eye.position, gazed.Quad, distance) is not { } around)
+            {
+                Debug.Log($"[EDITH scan] pin \"{pins[index].Name}\" not opened by gaze, too close to frame from {distance:F2} m");
+                gazeSeconds = -tuning.gazeOpenSeconds;
+                return;
+            }
+            var card = ClearOfSurfaces(around);
+            Debug.Log($"[EDITH scan] open \"{pins[index].Name}\" by gaze {distance:F2} m away, card at {card.Depth:F2} m");
+            gazed = null;
+            var opened = pins[index];
+            RemovePin(index);
+            Opened?.Invoke(card, opened);
+        }
+
+        // Cards are drawn behind any real surface in front of them, so a ceiling seen at a slant or the glass in front
+        // of a view would hide part of the photo or its text. The card comes forward along its own sight lines until
+        // every part of it, and the text under it, is in front of what depth measures there. From here it still lines
+        // up with the object.
+        SightBox ClearOfSurfaces(in SightBox box)
+        {
+            if (environmentRaycast == null) return box;
+            var t = box.Tangent;
+            float xMin = Mathf.Min(t.xMin, t.center.x - TextHalfWidth), xMax = Mathf.Max(t.xMax, t.center.x + TextHalfWidth);
+            float yMin = t.yMin - TextBelow, yMax = t.yMax;
+            var forward = box.Eye.rotation * Vector3.forward;
+            var nearest = box.Depth;
+            for (var i = 0; i < ClearSamples; i++)
+            for (var j = 0; j < ClearSamples; j++)
+            {
+                var u = i / (ClearSamples - 1f);
+                var v = j / (ClearSamples - 1f);
+                var towards = box.PointAt(Mathf.Lerp(xMin, xMax, u), Mathf.Lerp(yMin, yMax, v), 1f) - box.Eye.position;
+                if (!environmentRaycast.Raycast(new Ray(box.Eye.position, towards), out var hit, tuning.maxPinMeters)) continue;
+                nearest = Mathf.Min(nearest, Vector3.Dot(hit.point - box.Eye.position, forward) - ClearMeters);
+            }
+            var depth = Mathf.Max(nearest, tuning.minPinMeters);
+            return depth < box.Depth ? new SightBox(box.Eye, box.Tangent, depth) : box;
         }
 
         /// The pin at the smallest angle from the line of sight of `eye`, within `maxDegrees` of it. `degrees` is
@@ -319,7 +410,7 @@ namespace Edith.Scan
                 var far = source == PinSource.Far;
                 var pin = new ScanPin(onObject - ray.direction * LiftMeters, pick.Name, pick.Hook, far);
                 pins.Add(pin);
-                placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point, far ? $"{pick.Hook} (far)" : pick.Hook) });
+                placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point) });
                 Debug.Log($"[EDITH scan] {id} pin \"{pick.Name}\" {meters:F2} m away ({source}, depth {answer}), hook \"{pick.Hook}\"");
             }
         }

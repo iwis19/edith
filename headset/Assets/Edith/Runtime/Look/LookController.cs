@@ -68,6 +68,8 @@ namespace Edith.Look
             /// Null until the photo is ready, and for good when the camera failed.
             public LookClient Request;
             public bool Confirmed;
+            /// A scan pin's hook, which its card says instead of the backend's fact. Null for a drawn box.
+            public string Caption;
         }
 
         readonly List<Release> releases = new List<Release>();
@@ -84,7 +86,7 @@ namespace Edith.Look
             room = new SnapshotRoom(transform, occludedMaterial, font);
             room.Pocketed += OnPocketed;
             grab.Bind(room);
-            ask.Bind(room);
+            ask.Bind(room, headsetCamera);
         }
 
         IEnumerator Start()
@@ -99,10 +101,16 @@ namespace Edith.Look
             }
         }
 
-        void OnEnable() => pinch.Stepped += OnPinch;
+        void OnEnable()
+        {
+            pinch.Stepped += OnPinch;
+            if (scan != null) scan.Opened += OpenBox;
+        }
+
         void OnDisable()
         {
             pinch.Stepped -= OnPinch;
+            if (scan != null) scan.Opened -= OpenBox;
             foreach (var release in releases) release.Request?.Cancel();
             foreach (var entry in hung) entry.Request?.Cancel();
         }
@@ -199,10 +207,19 @@ namespace Edith.Look
         /// Takes a Look of the scan pin the pinch is in line with, as if its box had been drawn and let go.
         bool Open(Vector3 pinchPoint)
         {
-            if (scan == null || !scan.TryOpen(pinchPoint, new Pose(eye.position, eye.rotation), out var box)) return false;
-            releases.Add(new Release { LookId = nextLookId++, Source = LookSource.Scan, Box = box, Frame = Capture(box), Confirmed = true });
+            if (scan == null || !scan.TryOpen(pinchPoint, new Pose(eye.position, eye.rotation), out var box, out var pin)) return false;
+            OpenBox(box, pin);
             return true;
         }
+
+        // The pin knows how far its object is, so the photo is cropped there rather than at whatever depth meets
+        // first through the box, such as the window in front of a view.
+        void OpenBox(SightBox box, ScanPin pin) =>
+            releases.Add(new Release
+            {
+                LookId = nextLookId++, Source = LookSource.Scan, Box = box, Confirmed = true, Caption = pin.Hook,
+                Frame = Capture(box, Vector3.Dot(pin.Point - box.Eye.position, box.Eye.rotation * Vector3.forward)),
+            });
 
         void Hang(Release release)
         {
@@ -217,16 +234,18 @@ namespace Edith.Look
                 photo.LoadImage(release.Frame.Result.Jpeg);
             }
             var snapshot = room.Place(release.Box, photo);
+            if (release.Caption != null) snapshot.Caption = release.Caption;
             hung.Add(new Hung { Snapshot = snapshot, Request = release.Request, Jpeg = release.Frame.IsFaulted ? null : release.Frame.Result.Jpeg });
             if (release.Request == null) snapshot.Apply(LookEvent.Failure("camera", CameraNotReady));
             Debug.Log($"[EDITH look] snapshot {snapshot.Id} hung for look {release.LookId}{(photo != null ? $" with a {photo.width}x{photo.height} photo" : " without a photo")}");
         }
 
-        Task<CameraFrame> Capture(in SightBox box)
+        /// `subjectDepth`, when known, is how far the framed object is along the box's forward axis.
+        Task<CameraFrame> Capture(in SightBox box, float? subjectDepth = null)
         {
             try
             {
-                var depth = SubjectDepth(box);
+                var depth = subjectDepth ?? SubjectDepth(box);
                 var t = box.Tangent;
                 return headsetCamera.CaptureAsync(new WorldQuad(
                     box.PointAt(t.xMin, t.yMin, depth), box.PointAt(t.xMax, t.yMin, depth),

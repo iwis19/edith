@@ -34,6 +34,7 @@ namespace Edith.Snapshots
         Vector3 pocketPoint;
         Vector3 fullScale;
         CardView view;
+        string caption;
 
         public SightBox Box { get; private set; }
 
@@ -80,8 +81,8 @@ namespace Edith.Snapshots
             snapshot.group.alpha = 0f;
             snapshot.group.interactable = false;
             snapshot.group.blocksRaycasts = false;
-            snapshot.view = CardView.Build(rect, box.Size * UnitsPerMetre, font, material);
-            snapshot.view.Show(snapshot.Card);
+            snapshot.view = CardView.Build(rect, box.Size * UnitsPerMetre, box.Depth, font, material);
+            snapshot.view.Show(snapshot.Card, null);
             return snapshot;
         }
 
@@ -99,8 +100,20 @@ namespace Edith.Snapshots
         public void Apply(in LookEvent e)
         {
             Card.Apply(e);
-            view.Show(Card);
+            view.Show(Card, caption);
             enabled = true;
+        }
+
+        /// Text the card says in place of the backend's fact, such as a scan pin's hook. The backend's answer still
+        /// colours the card.
+        public string Caption
+        {
+            get => caption;
+            set
+            {
+                caption = value;
+                view.Show(Card, caption);
+            }
         }
 
         /// Fades out, then destroys the snapshot.
@@ -159,7 +172,7 @@ namespace Edith.Snapshots
             if (typing)
             {
                 Card.Advance(Time.deltaTime);
-                view.Show(Card);
+                view.Show(Card, caption);
             }
             if (fade != target || !settled || typing) return;
             if (Leaving) Destroy(gameObject);

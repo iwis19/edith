@@ -5,30 +5,40 @@ using UnityEngine;
 
 namespace Edith.Pinch
 {
-    /// Steps the pinch tracker on the right hand once per frame, after hand tracking has updated.
+    /// Steps the pinch of both hands once per frame, after hand tracking has updated. PinchPair lets one hand pinch
+    /// at a time, so listeners hear a single pinch.
     public sealed class PinchInput : MonoBehaviour
     {
-        [SerializeField] RightHandSource hand;
+        [SerializeField] RightHandSource right;
+        [SerializeField] LeftHandSource left;
         [SerializeField] PinchTuning tuning = new PinchTuning();
-        /// While a fist holds or has just pocketed a card the hand is not pinching.
+        /// While a fist holds or has just pocketed a card that hand is not pinching.
         [SerializeField] GrabInput grab;
 
-        PinchTracker tracker;
+        PinchPair pair;
         PinchPhase loggedPhase;
         PinchRejection loggedRejection;
 
         /// Every frame's reading, so listeners see each event exactly once.
         public event Action<PinchReading> Stepped;
 
-        void Awake() => tracker = new PinchTracker(tuning);
+        /// The hand whose pinch the readings follow, or null while neither hand pinches.
+        public HandSide? Owner => pair?.Owner;
+
+        void Awake() => pair = new PinchPair(tuning);
 
         void LateUpdate()
         {
-            var frame = hand.Read();
-            if (grab != null && grab.Claimed) frame.Pinching = false;
-            var reading = tracker.Step(frame);
+            var reading = pair.Step(Read(right), Read(left));
             Log(reading);
             Stepped?.Invoke(reading);
+        }
+
+        HandFrame Read(HandSource hand)
+        {
+            var frame = hand.Read();
+            if (grab != null && grab.Claimed(hand.Side)) frame.Pinching = false;
+            return frame;
         }
 
         void Log(in PinchReading reading)
@@ -38,7 +48,7 @@ namespace Edith.Pinch
             if (reading.Phase != loggedPhase)
             {
                 loggedPhase = reading.Phase;
-                Debug.Log($"[EDITH pinch] phase {loggedPhase}");
+                Debug.Log($"[EDITH pinch] phase {loggedPhase}{(pair.Owner is HandSide side ? $", {side} hand" : "")}");
             }
             if (reading.Event == PinchEvent.None && reading.Rejection != loggedRejection)
             {

@@ -9,9 +9,11 @@ import httpx
 from openai import AsyncOpenAI
 
 from ..config import Settings
+from ..db import Store
 from ..events import CardEvent, Fact, LookMeta, Name, RarityEvent
 from ..location import Whereabouts
-from .card_model import CardModelAgent
+from .card_model import CardModelAgent, FactHistory
+from .embeddings import GeminiEmbedder, KindEmbedder
 from .writers import GeminiWriter, OpenAIWriter
 
 log = logging.getLogger("edith")
@@ -58,23 +60,33 @@ class StubCardAgent:
         yield RarityEvent(tier=tier)
 
 
+def make_embedder(settings: Settings) -> KindEmbedder | None:
+    if not settings.gemini_api_key:
+        return None
+    return GeminiEmbedder(httpx.AsyncClient(), settings.gemini_api_key.get_secret_value(), settings.embedding_model,
+                          settings.embedding_dimensions, settings.embedding_timeout_s)
+
+
 def make_card_agent(
-    settings: Settings, whereabouts: Callable[[UUID], Whereabouts | None] = lambda _: None
+    settings: Settings, whereabouts: Callable[[UUID], Whereabouts | None] = lambda _: None, store: Store | None = None
 ) -> CardAgent:
     """The writers come from card_provider. Without that provider's key the stub answers, so the pipe works with no
-    keys at all. `whereabouts` gives the phone's place for a profile."""
+    keys at all. `whereabouts` gives the phone's place for a profile. `store` keeps the facts told across restarts, and
+    a Gemini key matches kinds of object by embedding."""
+    history = dict(whereabouts=whereabouts, embedder=make_embedder(settings), archive=store,
+                   facts=FactHistory(similarity=settings.kind_similarity))
     if settings.card_provider == "openai" and settings.openai_api_key:
         client = AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value(),
                              timeout=settings.look_timeout_s, max_retries=1)
         return CardModelAgent(
             name_writer=OpenAIWriter(client, settings.openai_name_model),
             fact_writer=OpenAIWriter(client, settings.openai_fact_model, settings.openai_fact_reasoning_effort),
-            whereabouts=whereabouts,
+            **history,
         )
     if settings.card_provider == "gemini" and settings.gemini_api_key:
         writer = GeminiWriter(httpx.AsyncClient(timeout=settings.look_timeout_s),
                               settings.gemini_api_key.get_secret_value(), settings.gemini_card_model,
                               settings.gemini_thinking_level)
-        return CardModelAgent(name_writer=writer, fact_writer=writer, whereabouts=whereabouts)
+        return CardModelAgent(name_writer=writer, fact_writer=writer, **history)
     log.warning("no %s key, so Looks get canned stub cards", settings.card_provider)
     return StubCardAgent(settings)

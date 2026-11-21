@@ -6,18 +6,20 @@ using UnityEngine;
 
 namespace Edith.Grab
 {
-    /// Steps the grab tracker on the right hand once per frame, before PinchInput so a fist is claimed before pinch reads it.
+    /// Steps the grab of both hands once per frame, before PinchInput so a fist is claimed before pinch reads it.
     [DefaultExecutionOrder(-50)]
     public sealed class GrabInput : MonoBehaviour
     {
-        [SerializeField] RightHandSource hand;
+        [SerializeField] RightHandSource right;
+        [SerializeField] LeftHandSource left;
         [SerializeField] GrabTuning tuning = new GrabTuning();
 
         readonly List<IGrabTargets> owners = new List<IGrabTargets>();
         readonly List<(int id, SightBox box)> targets = new List<(int id, SightBox box)>();
-        GrabTracker tracker;
-        GrabPhase loggedPhase;
-        bool loggedClosed;
+        readonly bool[] claimed = new bool[2];
+        readonly GrabPhase[] loggedPhase = new GrabPhase[2];
+        readonly bool[] loggedClosed = new bool[2];
+        GrabPair pair;
 
         /// Adds `owner`'s cards to the ones a fist can grab, from the next frame on.
         public void Register(IGrabTargets owner)
@@ -27,44 +29,51 @@ namespace Edith.Grab
 
         public void Unregister(IGrabTargets owner) => owners.Remove(owner);
 
-        /// True from the grab until the hand opens; pinch ignores the hand meanwhile.
-        public bool Claimed { get; private set; }
+        /// True from that hand's grab until it opens; pinch ignores the hand meanwhile.
+        public bool Claimed(HandSide side) => claimed[(int)side];
 
-        /// Every frame's reading, so listeners see each event exactly once.
-        public event Action<GrabReading> Stepped;
+        /// Every frame's reading of each hand, the right hand first, so listeners see each event exactly once.
+        public event Action<HandSide, GrabReading> Stepped;
 
-        void Awake() => tracker = new GrabTracker(tuning);
+        void Awake() => pair = new GrabPair(tuning);
 
         void LateUpdate()
         {
             targets.Clear();
             for (var i = 0; i < owners.Count; i++)
                 owners[i].AddGrabTargets(targets);
-            var reading = tracker.Step(hand.Read(), targets);
-            Claimed = reading.Claimed;
-            LogCurl();
-            Log(reading);
-            Stepped?.Invoke(reading);
+            var (rightReading, leftReading) = pair.Step(right.Read(), left.Read(), targets);
+            Report(HandSide.Right, rightReading);
+            Report(HandSide.Left, leftReading);
+        }
+
+        void Report(HandSide side, in GrabReading reading)
+        {
+            claimed[(int)side] = reading.Claimed;
+            LogCurl(side);
+            Log(side, reading);
+            Stepped?.Invoke(side, reading);
         }
 
         // Every close and open logs its curl, and an open the deepest curl of that fist, so GrabTuning can be set from real hands.
-        void LogCurl()
+        void LogCurl(HandSide side)
         {
-            if (tracker.IsClosed == loggedClosed) return;
-            loggedClosed = tracker.IsClosed;
-            Debug.Log(loggedClosed
-                ? $"[EDITH grab] closed curl {tracker.LastCurl:F2}"
-                : $"[EDITH grab] opened curl {tracker.LastCurl:F2}, deepest {tracker.DeepestCurl:F2}");
+            var tracker = pair.Tracker(side);
+            if (tracker.IsClosed == loggedClosed[(int)side]) return;
+            loggedClosed[(int)side] = tracker.IsClosed;
+            Debug.Log(tracker.IsClosed
+                ? $"[EDITH grab] {side} closed curl {tracker.LastCurl:F2}"
+                : $"[EDITH grab] {side} opened curl {tracker.LastCurl:F2}, deepest {tracker.DeepestCurl:F2}");
         }
 
-        void Log(in GrabReading reading)
+        void Log(HandSide side, in GrabReading reading)
         {
             if (reading.Event != GrabEvent.None)
-                Debug.Log($"[EDITH grab] {reading.Event} card {reading.CardId}");
-            if (reading.Phase != loggedPhase)
+                Debug.Log($"[EDITH grab] {side} {reading.Event} card {reading.CardId}");
+            if (reading.Phase != loggedPhase[(int)side])
             {
-                loggedPhase = reading.Phase;
-                Debug.Log($"[EDITH grab] phase {loggedPhase}");
+                loggedPhase[(int)side] = reading.Phase;
+                Debug.Log($"[EDITH grab] {side} phase {reading.Phase}");
             }
         }
     }

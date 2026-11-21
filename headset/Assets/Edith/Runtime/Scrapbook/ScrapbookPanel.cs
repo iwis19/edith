@@ -225,7 +225,7 @@ namespace Edith.Scrapbook
             if (!Open || content != Content.Browsing) return;
             if (reading.Phase == PinchPhase.Dragging)
             {
-                var hand = rightHand.Read();
+                var hand = pinch.Owner == HandSide.Left ? leftHand.Read() : rightHand.Read();
                 // A hand lost mid-drag reads wherever its joints were left.
                 if (!hand.Tracked) return;
                 var x = Vector3.Dot(hand.PinchPoint - frame.position, frame.right);

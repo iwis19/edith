@@ -157,6 +157,35 @@ async def test_overpass_falls_through_to_the_next_server():
         httpx.URL(OVERPASS_URLS[0]).host, httpx.URL(OVERPASS_URLS[1]).host]
 
 
+TIMED_OUT = {"remark": "runtime error: Query timed out in \"query\" at line 4 after 25 seconds.", "elements": []}
+
+
+async def test_an_overpass_remark_is_a_failure_that_is_retried_not_cached_as_no_sights():
+    services = FakeServices(overpass=TIMED_OUT)
+    r = resolver(services)
+    first = await r.resolve(fix())
+    assert not first.complete
+    assert first.whereabouts.sights == []
+    assert len(services.to(httpx.URL(OVERPASS_URLS[0]).host)) == 1, "the next mirror is tried"
+    services.overpass = OVERPASS
+    second = await r.resolve(fix())
+    assert second.complete
+    assert len(second.whereabouts.sights) == 3
+
+
+async def test_a_remark_from_one_overpass_server_falls_through_to_the_next():
+    class OneBad(FakeServices):
+        def __call__(self, request):
+            if request.url.host == httpx.URL(OVERPASS_URLS[0]).host:
+                self.requests.append(request)
+                return httpx.Response(200, json=TIMED_OUT)
+            return super().__call__(request)
+
+    resolution = await resolver(OneBad()).resolve(fix())
+    assert resolution.complete
+    assert len(resolution.whereabouts.sights) == 3
+
+
 async def test_when_every_service_fails_there_is_no_resolution():
     down = {httpx.URL(u).host for u in OVERPASS_URLS} | {"nominatim.openstreetmap.org"}
     assert await resolver(FakeServices(down=down)).resolve(fix()) is None

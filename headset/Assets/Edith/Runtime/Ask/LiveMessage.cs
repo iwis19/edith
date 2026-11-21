@@ -16,6 +16,8 @@ namespace Edith.Ask
         /// New pieces of what the person said and of what Gemini said, each to append to the pieces before it.
         public string InputText = "", OutputText = "";
         public bool TurnComplete, Interrupted;
+        /// Short names of the web pages Google Search grounded the answer in, as SourceName gives them.
+        public readonly List<string> Sources = new List<string>();
 
         [Serializable] sealed class Wire { public ServerContent serverContent; }
 
@@ -24,7 +26,12 @@ namespace Edith.Ask
             public ModelTurn modelTurn;
             public Transcription inputTranscription, outputTranscription;
             public bool turnComplete, interrupted;
+            public Grounding groundingMetadata;
         }
+
+        [Serializable] sealed class Grounding { public Chunk[] groundingChunks; }
+        [Serializable] sealed class Chunk { public Web web; }
+        [Serializable] sealed class Web { public string uri, title; }
 
         [Serializable] sealed class ModelTurn { public Part[] parts; }
         [Serializable] sealed class Part { public InlineData inlineData; }
@@ -56,6 +63,13 @@ namespace Edith.Ask
             message.Interrupted = content.interrupted;
             message.InputText = content.inputTranscription?.text ?? "";
             message.OutputText = content.outputTranscription?.text ?? "";
+            var chunks = content.groundingMetadata?.groundingChunks;
+            if (chunks != null)
+                foreach (var chunk in chunks)
+                {
+                    var name = SourceName(chunk?.web?.title, chunk?.web?.uri);
+                    if (name.Length > 0 && !message.Sources.Contains(name)) message.Sources.Add(name);
+                }
             var parts = content.modelTurn?.parts;
             if (parts == null) return message;
             foreach (var part in parts)
@@ -72,6 +86,19 @@ namespace Edith.Ask
                 }
             }
             return message;
+        }
+
+        /// The page title, or its site when the title is missing or is itself an address. Empty when neither is usable.
+        public static string SourceName(string title, string uri)
+        {
+            title = (title ?? "").Trim();
+            if (title.Length > 0 && title.IndexOf("://", StringComparison.Ordinal) < 0) return title;
+            if (Uri.TryCreate(string.IsNullOrEmpty(title) ? uri : title, UriKind.Absolute, out var address))
+            {
+                var host = address.Host;
+                return host.StartsWith("www.", StringComparison.Ordinal) ? host.Substring(4) : host;
+            }
+            return "";
         }
 
         static bool HasKey(string json, string key)

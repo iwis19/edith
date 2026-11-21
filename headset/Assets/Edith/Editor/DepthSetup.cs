@@ -23,6 +23,22 @@ namespace Edith.Editor
         const string HandPrefab = "Packages/com.meta.xr.sdk.core/Prefabs/OVRHandPrefab.prefab";
         const string DepthObjectName = "EnvironmentDepth";
 
+        /// Batch entry for updating the depth objects in an already configured scene.
+        public static void BatchAdd()
+        {
+            var exitCode = 1;
+            try
+            {
+                AddToScene(ProjectSetup.ScenePath);
+                exitCode = 0;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            EditorApplication.Exit(exitCode);
+        }
+
         /// The Depth API on OpenXR reads depth through Unity OpenXR: Meta's occlusion subsystem, which needs both
         /// features.
         public static void EnableFeatures()
@@ -92,6 +108,9 @@ namespace Edith.Editor
             SetInt(visual.GetComponent<OVRHand>(), "HandType", (int)hand);
             SetInt(visual.GetComponent<OVRSkeleton>(), "_skeletonType", (int)skeleton);
             SetInt(visual.GetComponent<OVRMesh>(), "_meshType", (int)mesh);
+            SetInt(visual.GetComponent<OVRMeshRenderer>(), "_confidenceBehavior", (int)OVRMeshRenderer.ConfidenceBehavior.None);
+            if (visual.GetComponent<TrackedHandOccluder>() == null)
+                visual.AddComponent<TrackedHandOccluder>();
             foreach (var renderer in visual.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
                 var slots = new Material[renderer.sharedMaterials.Length];

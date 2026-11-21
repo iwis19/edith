@@ -9,5 +9,6 @@ EditorBuildSettings:
     path: Assets/Edith/Scenes/Main.unity
     guid: bc209e68a2b1bb34e8860232b2354c68
   m_configObjects:
+    com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 8de98500ae3601e478ece8499ede8583, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 105d3fb8f430f3a4a892d77f05c0e9dc, type: 2}
     com.unity.xr.openxr.settings4: {fileID: 11400000, guid: d148bf958e34bc54f9f8bdd8b7bb1027, type: 2}

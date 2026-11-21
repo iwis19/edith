@@ -18,8 +18,8 @@ EDITH is a hands-only Quest 3/3S mixed-reality companion that makes whatever you
 | --- | --- | --- | --- |
 | Look | Pinch empty space, drag a box around an object, let go | A snapshot card pinned where you took it: what it is, a fun fact you haven't heard for that kind of object, a rarity glow | No |
 | Collect | Close a fist on the snapshot and pull it in toward your chest | A memory: cropped image, name, fun fact, rarity, sources behind a flip | Yes |
-| Ask | Thumb tap on the side of the index finger, then speak, about anything | A spoken answer plus a card that follows your head, shows what was heard, and fades when the answer is over | No |
-| Scan | Palms-out pose, aimed at what's in front of you | Pins on the 2 or 3 most interesting things in sight, each with a short hook; pinch one to open it as a snapshot card | Only cards you collect from it |
+| Ask | Thumb tap on the side of the index finger, then speak, about anything | A spoken answer typed out in a two-line caption beside a small orb, which perches on the snapshot asked about or rests low in your view, shows what was heard, and fades when the answer is over | No |
+| Scan | Palms-out pose, aimed at what's in front of you | Pins on the 2 or 3 things in sight that make the most fun dares, each with a short dare to do on the spot; pinch one to open it as a snapshot card | Only cards you collect from it |
 | Remember | Open the Scrapbook from the wrist menu, or ask "what did I find today?" | Memories found by meaning, with when and where | Not applicable |
 
 ## Features
@@ -93,6 +93,7 @@ A curved panel at arm's length. Memories sit on pages grouped by topic, framed i
 The headset has no GPS, so the phone that runs the hotspot shares its position with the backend.
 
 - **Pairing:** the headset shows a 4-digit code and a short link; the person opens the page on the phone, types the code and taps Share location.
+- **Lock:** until a phone is paired, every feature stays off. If the phone disconnects later (the backend stops hearing its position), the headset locks every feature again and shows the pairing panel, and nothing works until the phone is paired once more.
 - **What it feeds:** the place and the nearest named sights go to the Scan, the Look's place context and Ask. With no fix, the Look's photo-based place guess is the fallback.
 - **Privacy:** the position is kept in memory only, for six hours, never written to the database, and never shown to anyone else.
 - There is no hand-written list of sights: a new place needs nothing from us.
@@ -106,10 +107,10 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 
 | Action | Gesture |
 | --- | --- |
-| Look | Pinch empty space, drag at least about 5 cm, let go; a shorter pinch is a tap |
-| Collect | Fist on the snapshot, pull toward the chest; open the hand first to let it float back |
-| Ask | Thumb tap on the side of the index finger; stops on silence |
-| Page or dismiss cards | Thumb swipe left or right |
+| Look | Pinch empty space with either hand, drag at least about 5 cm, let go; a shorter pinch is a tap |
+| Collect | Fist of either hand on the snapshot, pull toward the chest; open the hand first to let it float back. A sound that grows brighter and longer with the rarity plays as it goes in |
+| Ask | Thumb tap on the side of the index finger of either hand; stops on silence |
+| Page or dismiss cards | Thumb swipe left or right with either hand |
 | Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |
 | App menu | Turn the left wrist inward and poke with the right index |
 | Scrapbook | Thumb swipe to flip; pinch to open; grab to pull closer |
@@ -118,6 +119,8 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 **Rules**
 
 - Never use a pinch with the palm facing you: that is Quest's system menu gesture.
+- Every gesture works with either hand. One hand pinches at a time: the hand that pinches first owns the pinch until its tap or its box is done, and a pinch the other hand makes meanwhile is ignored until that hand lets go. The right hand wins a tie.
+- Each hand can carry its own card, so one hand can hold a card while the other pinches. A card one hand holds cannot be grabbed by the other.
 - Keep gestures in front of the chest and under a second long.
 - A grab only counts when the hand was clearly open within the last second before it closes into a fist, so a hand relaxing after a pinch never grabs.
 - Every gesture gets visual or audio feedback.
@@ -137,7 +140,7 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 | Feature | Agent | Model | Why |
 | --- | --- | --- | --- |
 | Look: name, fun fact, rarity, place guess | Card | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), streamed | Fastest option, needed for the 1.5 s first-words target. Step up to `gemini-3.8-flash` if rarity or fact quality is weak. |
-| Scan: pick 2 or 3 things with point, box and hook | Scan | Gemini 3.5 Flash (`gemini-3.5-flash`), structured JSON output | One image-in call that needs good spatial grounding for the boxes; fall back to Flash-Lite if pins miss the 2 s target. |
+| Scan: pick 2 or 3 things with point, box and hook | Scan | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), structured JSON output, with OpenAI `gpt-4o` asked as well after 2 s | One image-in call; Flash missed the 7 s scan budget on the headset. The first good answer of the two wins. |
 | Ask: spoken answer | Query | Gemini 3.8 Live, the default low-latency variant | Native speech in and out, silence detection, and the voice choices for EDITH's voice; confirm the exact ID in the Live API docs. |
 | Ask: web answers with sources | Query | Gemini with Google Search grounding | Returns the sources behind the card's flip with no separate search service. |
 | Welcome: intro, interests, practice Look | Welcome | Gemini 3.8 Live, with the Card model for the practice Look | Same voice session as Ask, so the voice picked on welcome carries over. |
@@ -154,7 +157,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 - [ ] Passthrough camera permission and frame capture
 - [ ] Pinch-and-drag frame and crop
 - [ ] Label, Collect by grab and pocket, memory card with flip and rarity reveal
-- [ ] Thumb-tap Ask, head-following answer card, swipe to dismiss
+- [ ] Thumb-tap Ask, answer orb that perches on the snapshot asked about, swipe to dismiss
 - [ ] Scan: palms-out pose, one front frame, pins with hooks placed by depth, pinch a pin to open its card, Ask aimed at the nearest pin or card
 - [ ] Wrist menu
 - [ ] Welcome: intro, interests, practice Look
@@ -165,7 +168,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 - [ ] FastAPI backend on Railway and Tiger Data Postgres with pgvector; API keys server-side only
 - [ ] Agent endpoints (Welcome, Card, Query, Scan) with streamed Card results and the 1.5 s first-words target
 - [ ] Vision call: label, card text, rarity tier, place guess
-- [ ] Scan: pick the 2 or 3 most interesting things in one frame with a point, a box and a hook each; no repeated hook per object in a session
+- [ ] Scan: pick the 2 or 3 things in one frame that make the most fun dares, with a point, a box and a dare each; no repeated dare per object in a session
 - [ ] EDITH's voice
 - [ ] Rarity tier and place guess from the card call; déjà vu matching from embeddings
 - [ ] Web-search answers with sources for Ask
@@ -183,7 +186,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 
 - [ ] **Gemini only or Gemini plus OpenAI fallback:** start Gemini only; add OpenAI for Card and Scan only if Gemini quality or uptime is a problem.
 - [ ] **Scroll mode and Spots:** in or out.
-- [ ] **Challenge mode for Scan:** an optional mode where EDITH builds a challenge from what a scan found.
+- [x] **Challenge mode for Scan:** no separate mode. Every pin's hook is a playful dare tied to that thing, doable right there in under a minute (decided Nov 21).
 - [ ] **Name:** EDITH for now; Magpie, Goose and Nosy are the backups.
 - [ ] **Sponsor API:** Tiger Data is the track we are going for; decide whether a second sponsor prize is worth chasing, and use each one somewhere visible.
 - [ ] **Team roles:** who owns the headset, backend and AI, and the Scrapbook.

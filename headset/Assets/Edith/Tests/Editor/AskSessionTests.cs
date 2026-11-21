@@ -209,9 +209,9 @@ namespace Edith.Tests
                 new Vector3(0.5f, 0f, 5f),
                 new Vector3(0f, 0f, -1f),
             };
-            Assert.AreEqual(1, AskGeometry.NearestToGaze(Vector3.zero, Vector3.forward, points));
-            Assert.AreEqual(2, AskGeometry.NearestToGaze(Vector3.zero, Vector3.back, points));
-            Assert.AreEqual(-1, AskGeometry.NearestToGaze(Vector3.zero, Vector3.forward, new List<Vector3>()));
+            Assert.AreEqual(1, AskGeometry.NearestToGaze(Vector3.zero, Vector3.forward, points, out _));
+            Assert.AreEqual(2, AskGeometry.NearestToGaze(Vector3.zero, Vector3.back, points, out _));
+            Assert.AreEqual(-1, AskGeometry.NearestToGaze(Vector3.zero, Vector3.forward, new List<Vector3>(), out _));
         }
 
         [Test]
@@ -219,11 +219,39 @@ namespace Edith.Tests
         {
             var eye = new Vector3(0f, 1.6f, 0f);
             Vector3 At(float degrees) => eye + Quaternion.Euler(0f, degrees, 0f) * Vector3.forward * 2f;
-            Assert.AreEqual(0, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(24f) }));
-            Assert.AreEqual(-1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(26f) }));
-            Assert.AreEqual(-1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(90f), At(180f) }),
+            Assert.AreEqual(0, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(24f) }, out _));
+            Assert.AreEqual(-1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(26f) }, out _));
+            Assert.AreEqual(-1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(90f), At(180f) }, out _),
                 "beside and behind");
-            Assert.AreEqual(1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(-60f), At(20f) }));
+            Assert.AreEqual(1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(-60f), At(20f) }, out _));
+        }
+
+        [Test]
+        public void The_nearest_point_reports_its_angle_from_the_line_of_sight()
+        {
+            var eye = new Vector3(0f, 1.6f, 0f);
+            Vector3 At(float degrees) => eye + Quaternion.Euler(0f, degrees, 0f) * Vector3.forward * 2f;
+            AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(-12f), At(7f) }, out var degrees);
+            Assert.AreEqual(7f, degrees, 0.01f);
+        }
+
+        [Test]
+        public void A_scan_pin_is_the_hint_only_when_it_is_nearer_the_gaze_than_the_photo()
+        {
+            Assert.IsTrue(AskGeometry.PinWins(true, 10f, true, 15f));
+            Assert.IsFalse(AskGeometry.PinWins(true, 15f, true, 10f));
+            Assert.IsTrue(AskGeometry.PinWins(true, 20f, false, 0f), "no photo");
+            Assert.IsFalse(AskGeometry.PinWins(false, 0f, true, 20f), "no pin");
+            Assert.IsFalse(AskGeometry.PinWins(false, 0f, false, 0f));
+        }
+
+        [Test]
+        public void The_session_request_carries_the_pin_or_nothing()
+        {
+            Assert.AreEqual("{}", AskHint.RequestBody(null));
+            Assert.AreEqual("{\"hint\":{\"name\":\"the \\\"Peace\\\" Tower\",\"hook\":\"Climb it.\"}}",
+                AskHint.RequestBody(new AskHint("the \"Peace\" Tower", "Climb it.")));
+            Assert.AreEqual("{\"hint\":{\"name\":\"a mug\",\"hook\":\"\"}}", AskHint.RequestBody(new AskHint("a mug", null)));
         }
 
         [Test]

@@ -6,41 +6,94 @@
 <meta name="referrer" content="no-referrer">
 <title>EDITH location</title>
 <style>
-  :root { color-scheme: dark; }
+  /* Quiet by design: near-black text, one grey for everything secondary, and the one accent on the main action. The
+     soft blue wash behind the frosted card is the only other colour. */
+  :root {
+    color-scheme: light;
+    --text: #111318;
+    --secondary: #6b7280;
+    --hairline: rgba(17, 19, 24, .08);
+    --accent: #1f4dff;
+    --accent-pressed: #1a3fd6;
+    --glass: rgba(255, 255, 255, .62);
+    --danger: #c42b3f;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 20px 16px 40px; background: #000; color: #fff; font: 20px/1.35 system-ui, sans-serif; }
-  h1 { margin: 0 0 12px; font-size: 28px; }
-  button { width: 100%; min-height: 96px; border: 0; border-radius: 16px; background: #ffd400; color: #000; font: 700 32px system-ui, sans-serif; }
-  button[disabled] { background: #3a3a3a; color: #bbb; }
-  .card { margin: 16px 0; padding: 16px; border: 2px solid #fff; border-radius: 12px; }
-  .label { color: #ffd400; font-size: 16px; text-transform: uppercase; letter-spacing: .06em; }
-  .place { font-size: 28px; font-weight: 700; word-break: break-word; }
-  .error { border-color: #ff6b6b; color: #ff9b9b; font-weight: 700; }
-  ul { margin: 8px 0 0; padding-left: 22px; }
-  li { margin: 4px 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh; padding: 48px 20px 40px; color: var(--text);
+    background:
+      radial-gradient(120% 60% at 50% 0%, #dcebff 0%, rgba(220, 235, 255, 0) 70%),
+      linear-gradient(180deg, #f4f8ff 0%, #fbfcfe 100%);
+    font: 17px/1.47 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 420px; margin: 0 auto; }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--secondary); }
+  h1 { margin: 6px 0 6px; font-size: 30px; line-height: 1.15; font-weight: 650; letter-spacing: -.025em; }
+  p { margin: 0; color: var(--secondary); }
+  .lead { margin-bottom: 28px; }
+  button {
+    width: 100%; height: 54px; border: 0; border-radius: 14px; background: var(--accent); color: #fff;
+    font-family: inherit; font-size: 17px; font-weight: 600; line-height: 1; letter-spacing: -.01em; cursor: pointer;
+    transition: background .15s, opacity .15s;
+  }
+  button:active { background: var(--accent-pressed); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  /* Disabled is how the page shows it is sharing: quiet, not greyed out. */
+  button[disabled] { background: var(--glass); color: var(--text); box-shadow: inset 0 0 0 1px var(--hairline); cursor: default; }
+  .card {
+    margin-top: 16px; padding: 4px 20px; border-radius: 20px;
+    background: var(--glass); border: 1px solid rgba(255, 255, 255, .8);
+    box-shadow: 0 1px 1px rgba(17, 19, 24, .03), 0 12px 32px rgba(31, 77, 255, .06);
+    -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  }
+  .row { padding: 14px 0; border-top: 1px solid var(--hairline); }
+  .row:first-child { border-top: 0; }
+  .label { font-size: 13px; color: var(--secondary); }
+  .place { margin-top: 2px; font-size: 20px; font-weight: 600; letter-spacing: -.015em; line-height: 1.3; word-break: break-word; }
+  #sent { margin-top: 2px; }
+  .error { padding: 14px 20px; color: var(--danger); font-size: 15px; }
   .hidden { display: none; }
-  #code { display: block; width: 100%; margin: 12px 0; padding: 12px 0; border: 3px solid #fff; border-radius: 16px; background: #000; color: #fff; text-align: center; font: 700 64px system-ui, sans-serif; letter-spacing: .3em; text-indent: .3em; }
-  #code:focus { border-color: #ffd400; outline: none; }
+  #code {
+    display: block; width: 100%; height: 76px; margin: 0 0 12px; border: 1px solid var(--hairline); border-radius: 16px;
+    background: var(--glass); color: var(--text); text-align: center;
+    font-family: inherit; font-size: 40px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: .5em; text-indent: .5em;
+    -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  #code::placeholder { color: rgba(17, 19, 24, .18); }
+  #code:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px rgba(31, 77, 255, .12); }
+  #hint { margin-top: 20px; font-size: 13px; text-align: center; }
 </style>
 </head>
 <body>
-<h1>EDITH location</h1>
-<form id="pair" class="hidden" autocomplete="off">
-  <p>Look in your headset for the code</p>
-  <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code from the headset" placeholder="----">
+<main>
+<div class="brand">EDITH</div>
+<form id="pair" autocomplete="off">
+  <h1>Connect your phone</h1>
+  <p class="lead" id="codeLabel">Enter the code shown in your headset.</p>
+  <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code from the headset" placeholder="0000">
   <button id="connect" type="submit">Connect</button>
 </form>
+<div id="shared" class="hidden">
+  <h1>Location</h1>
+  <p class="lead">EDITH uses it to name what you see.</p>
+</div>
 <button id="share" type="button" class="hidden">Share location</button>
 <div id="error" class="card error hidden" role="alert"></div>
 <div id="status" class="card hidden">
-  <div class="label">You're at</div>
-  <div id="place" class="place">Not shared yet</div>
-  <div class="label" style="margin-top:14px">Last sent</div>
-  <div id="sent">Never</div>
-  <div class="label" style="margin-top:14px">Nearby</div>
-  <ul id="sights"><li>Nothing yet</li></ul>
+  <div class="row">
+    <div class="label">You're at</div>
+    <div id="place" class="place">Not shared yet</div>
+  </div>
+  <div class="row">
+    <div class="label">Last sent</div>
+    <div id="sent">Never</div>
+  </div>
 </div>
-<p id="hint" class="hidden">Keep this page open and the screen on. The phone stops sharing when it locks.</p>
+<p id="hint" class="hidden">Keep this page open with the screen on.</p>
+</main>
 <script>
 (function () {
   "use strict";
@@ -66,9 +119,10 @@
 
   function showScreen() {
     var paired = !!token;
-    $("pair").classList.toggle("hidden", paired);
+    $("codeLabel").textContent = paired ? "Enter a new code" : "Enter the code shown in your headset.";
     $("share").classList.toggle("hidden", !paired);
     $("status").classList.toggle("hidden", !paired);
+    $("shared").classList.toggle("hidden", !paired);
     $("hint").classList.toggle("hidden", !paired);
     if (!paired) $("code").focus();
   }
@@ -115,11 +169,6 @@
 
   function render(summary) {
     $("place").textContent = summary.place || (summary.resolving ? "Finding where you are..." : "Place not found yet");
-    var list = $("sights");
-    list.textContent = "";
-    var names = summary.nearest || [];
-    if (!names.length) names = [summary.resolving ? "Looking..." : "Nothing named nearby yet"];
-    names.forEach(function (n) { var li = document.createElement("li"); li.textContent = n; list.appendChild(li); });
   }
 
   function send(position) {
@@ -187,7 +236,7 @@
     if (!navigator.geolocation) { showError("This browser has no location support."); return; }
     showError("");
     $("share").disabled = true;
-    $("share").textContent = "Sharing";
+    $("share").textContent = "Sharing location";
     holdWake();
     watchId = navigator.geolocation.watchPosition(onPosition, onGeoError,
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });

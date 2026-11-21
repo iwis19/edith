@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # Which provider writes the card. Without that provider's key the stub card agent answers instead.
     card_provider: Literal["openai", "gemini"] = "openai"
     # gpt-4o names objects more specifically than gpt-5.4-mini with fewer false facts, at about 0.6 s to the first
-    # name.
+    # name. OpenAI reportedly removes it from the API on 2027-01-14, so its replacement must be measured before then.
     openai_name_model: str = "gpt-4o"
     # gpt-5.4-mini's facts beat gpt-4o's in blind comparison, at the same length and speed.
     openai_fact_model: str = "gpt-5.4-mini"
@@ -46,8 +46,13 @@ class Settings(BaseSettings):
     gemini_card_model: str = "gemini-3.1-flash-lite"
     # Larger Gemini models reject "minimal" and think for seconds before writing, which is too slow for a Look.
     gemini_thinking_level: str = "minimal"
-    scan_model: str = "gemini-3.5-flash"
+    scan_model: str = "gemini-3.5-flash-lite"
     scan_thinking_level: str = "minimal"
+    # Asked as well when scan_model fails or has not answered by scan_backup_after_s; the first good answer wins.
+    # Needs OPENAI_API_KEY. 0 turns the backup off.
+    scan_backup_model: str = "gpt-4o"
+    # Flash-Lite usually answers within 2 s, so a reply still missing then is the slow case.
+    scan_backup_after_s: float = 2.0
     live_model: str = "gemini-3.8-live"
     live_voice: LiveVoice = "Kore"
     # Google Search grounding for Ask. A free-tier key refuses the Live session when the setup carries the tool.
@@ -55,6 +60,11 @@ class Settings(BaseSettings):
     embedding_model: str = "gemini-embedding-2"
     # The size of every stored embedding; it can change only before the first one is written.
     embedding_dimensions: int = 1536
+    # Two kinds of object count as one when their embeddings' cosine similarity is at least this.
+    kind_similarity: float = 0.8
+    # The embedding of a Look's kind is asked for beside the fact call and dropped when it takes longer, so it never
+    # delays the card; the kinds then match by a shared word.
+    embedding_timeout_s: float = 0.3
 
     stub_name_ms: int = 300
     stub_fact_ms: int = 700

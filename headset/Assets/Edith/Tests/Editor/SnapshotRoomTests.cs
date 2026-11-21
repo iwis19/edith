@@ -50,6 +50,19 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_drag_counts_as_drawing_until_it_hangs_a_snapshot_or_is_cancelled()
+        {
+            Assert.IsFalse(room.Drawing);
+            room.Preview(Box(0f));
+            Assert.IsTrue(room.Drawing);
+            room.Place(Box(0f));
+            Assert.IsFalse(room.Drawing);
+            room.Preview(Box(0.5f));
+            room.CancelPreview();
+            Assert.IsFalse(room.Drawing);
+        }
+
+        [Test]
         public void Dragging_over_a_snapshot_fades_it_and_dragging_off_brings_it_back()
         {
             var old = room.Place(Box(0f));

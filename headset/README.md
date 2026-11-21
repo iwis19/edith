@@ -33,12 +33,12 @@ The feature setups that `Configure` calls can also run on their own against an e
 | Setup | What it adds to `Main.unity` | Batch entry |
 | --- | --- | --- |
 | `DepthSetup` | The Depth API and the hand occluders | none, run by `Configure` |
-| `PinchSetup` | The right hand and the pinch input | none, run by `Configure` |
+| `PinchSetup` | Both hands and the pinch input | none, run by `Configure` |
 | `GrabSetup` | The fist grab | `Edith.Editor.GrabSetup.BatchAdd` |
 | `AskSetup` | Ask, and the microphone permission | `Edith.Editor.AskSetup.BatchAdd` |
 | `PairingSetup` | The phone pairing panel | `Edith.Editor.PairingSetup.BatchAdd` |
 | `LookSetup` | The headset camera and the Look controller | `Edith.Editor.LookSetup.BatchAdd` |
-| `ScanSetup` | The left hand and Scan | `Edith.Editor.ScanSetup.BatchAdd` |
+| `ScanSetup` | Scan | `Edith.Editor.ScanSetup.BatchAdd` |
 | `DiagnosticsSetup` | The status panel | `Edith.Editor.DiagnosticsSetup.BatchAdd` |
 
 Each setup needs the objects of the ones before it, in the order of the table, and throws an error that names the missing one. Only `ProjectSetup` has menu items.
@@ -109,11 +109,11 @@ The prefixes are `EDITH pinch`, `EDITH grab`, `EDITH look`, `EDITH ask`, `EDITH 
 
 ### Tune the fist grab from the log
 
-Each fist logs its curl when it closes and when it opens, and the open line adds the deepest curl of that fist:
+Each fist logs its hand and its curl when it closes and when it opens, and the open line adds the deepest curl of that fist:
 
 ```
-[EDITH grab] closed curl 1.08
-[EDITH grab] opened curl 1.52, deepest 0.97
+[EDITH grab] Right closed curl 1.08
+[EDITH grab] Right opened curl 1.52, deepest 0.97
 ```
 
 The curl is the mean fingertip-to-wrist over knuckle-to-wrist distance of the index, middle and ring fingers. It reads about 1.9 for an open hand and under 1.1 for a fist. Collect several lines from real hands, then adjust `closedCurl` and `openCurl` in `Assets/Edith/Runtime/Grab/GrabTuning.cs`. A fist that never reaches `closedCurl` shows a deepest curl above it. A hand that opens without crossing `openCurl` never logs an open line.
@@ -131,13 +131,13 @@ A diagnostics build puts a status panel in the headset. The panel is a small wor
 - the backend host, and whether its `/health` answers, checked every 45 seconds;
 - the last error, assert or exception line the log saw.
 
-Hold your left hand in a closed fist for one second to hide or show the panel. Open the hand before the next hold. The left hand is read only by Scan, which needs it open, and the pinch, grab and thumb gestures read the right hand, so the toggle collides with none of them.
+Hold both hands in closed fists for one second to hide or show the panel. Open a hand before the next hold. A fist that grabbed a card does not count, so carrying or pocketing a card never toggles the panel, and Scan needs both hands open.
 
 Build it with **EDITH** > **Build Diagnostics APK**, or `BatchBuildDiagnostics` as in [Build from a terminal](#build-from-a-terminal). The panel's code compiles only with the `EDITH_DIAGNOSTICS` define. In every other build, including `Builds/edith.apk`, the `Diagnostics` object in the scene destroys itself on start and no panel code is present. The text layout lives in `Assets/Edith/Runtime/Diagnostics/StatusText.cs` and is covered by EditMode tests.
 
 ## Record hands
 
-The recording build writes every right-hand frame to a file, one JSON line per frame, in the format the replay tests read. Build it with **EDITH** > **Build Recording APK**, install it, use the app, and pull the files:
+The recording build writes every frame of each hand to that hand's own file, `hands-right-<time>.jsonl` or `hands-left-<time>.jsonl`, one JSON line per frame, in the format the replay tests read. Build it with **EDITH** > **Build Recording APK**, install it, use the app, and pull the files:
 
 ```powershell
 .\Tools\pull-hand-recordings.ps1
@@ -149,15 +149,17 @@ The script copies `files/hands/*.jsonl` from the headset into `Recordings/`, whi
 
 Install the build, put the headset on, and allow the permission prompts (microphone, headset camera, spatial data).
 
-**Look.** Pinch your right thumb and index finger with the palm turned away from you, drag at least 5 cm to draw a box around an object, and let go. A snapshot with the photo hangs where you drew it, and the card text fills in once the backend answers. The log shows `[EDITH look] snapshot <id> hung with a <w>x<h> photo`. A pinch that lets go before 5 cm is a tap, and a tap in line with a snapshot clears it. A pinch with the palm toward your face is ignored and logs `reject PalmFacingUser`. In a diagnostics build, the panel shows each rejection (`TooSmall`, `TooNarrow`, `TooClose`, `Lost`).
+**Look.** Pinch the thumb and index finger of either hand with the palm turned away from you, drag at least 5 cm to draw a box around an object, and let go. A snapshot with the photo hangs where you drew it, and the card text fills in once the backend answers. The log shows `[EDITH look] snapshot <id> hung with a <w>x<h> photo`. A pinch that lets go before 5 cm is a tap, and a tap in line with a snapshot clears it. A pinch with the palm toward your face is ignored and logs `reject PalmFacingUser`. In a diagnostics build, the panel shows each rejection (`TooSmall`, `TooNarrow`, `TooClose`, `Lost`). One hand pinches at a time. While one hand's pinch is under way, up to the moment its tap lands or its box is confirmed, a pinch by the other hand is ignored until that hand lets go. When both hands pinch on the same frame, the right hand's pinch counts. The log names the hand: `[EDITH pinch] phase Pressed, Left hand`.
 
-**Collect.** Open your right hand, then close it into a fist on a snapshot, so your knuckles sit beside its photo. The log shows `[EDITH grab] Grabbed card <id>`. Pull the fist toward your chest. `Pocketed card <id>` means the memory was collected. Opening the hand early logs `Dropped`, and the card floats back.
+**Collect.** Open either hand, then close it into a fist on a snapshot, so your knuckles sit beside its photo. The log shows `[EDITH grab] Right Grabbed card <id>`, or `Left`. Pull the fist toward your chest. `Pocketed card <id>` means the memory was collected, and a sound plays at your fist. Opening the hand early logs `Dropped`, and the card floats back. Each hand carries its own card, so one hand can hold a card while the other pinches or grabs another. A card one hand holds cannot be grabbed by the other, and when both hands close on one card on the same frame the right hand takes it.
 
-**Ask.** Tap the side of your right index finger with your thumb. EDITH chimes and listens, then speaks the answer and shows it on a card. A thumb swipe left or right sends the current answer away. The log shows `[EDITH ask] <phase> -> <phase>` lines, and a failure names its problem (`NotConfigured`, `MicDenied`, `Unreachable`, `Refused`, `Dropped`, `TimedOut`, `NotHeard`).
+The pocket sound tells the rarity. Common is one soft note. Each tier above it adds a higher note, rings longer and sounds brighter, from 0.2 s for common to 0.95 s for mythic, and only mythic shimmers. A card that has no rarity yet sounds common. `Assets/Edith/Runtime/Look/RaritySounds.cs` holds the notes.
+
+**Ask.** Tap the side of the index finger of either hand with that hand's thumb. EDITH chimes and an orb appears low and to the left in your view, clear of every snapshot; while a snapshot is in the way it moves to the nearest clear spot. Look at a snapshot as you tap and the orb appears just above its photo, lined up with the photo's left edge, unless that would cover another snapshot, and the snapshot's photo goes with the question. EDITH listens, then speaks the answer and types it out beside the orb. Starting to draw a new box makes the orb vanish and drops the answer, the same as a swipe, and the next thumb tap brings it back. A thumb swipe left or right with either hand sends the current answer away. The log names the hand: `[EDITH gesture] Tap, Left hand`. The log shows `[EDITH ask] <phase> -> <phase>` lines, and a failure names its problem (`NotConfigured`, `MicDenied`, `Unreachable`, `Refused`, `Dropped`, `TimedOut`, `NotHeard`).
 
 **Scan.** Hold both hands up, open, with the palms facing away, for half a second. A ring between your palms fills and a chime plays. A pin with a short hook lands on each object the backend picked, and a higher chime means pins landed. A low tone and a line of text mean none did. A near miss logs `[EDITH scan] near: left ..., right ...` at most once a second, with the numbers to tune `ScanTuning` from.
 
-**Pairing.** On a fresh install with a backend, a panel with a four-digit code and a short address floats in front of you. Open the address on the phone that runs the hotspot, type the code, and tap **Share location**. The panel shows **Phone connected** and fades. The log shows `[EDITH pair]` lines. The panel also fades after three minutes unpaired, after repeated backend errors, or at once when the backend already keeps a phone position.
+**Pairing.** On a fresh install with a backend, a panel with a four-digit code and a short address floats in front of you, and nothing else responds: Look, Collect, Ask, Scan and the diagnostics panel stay off until the phone is paired. Open the address on the phone that runs the hotspot, type the code, and tap **Share location**. Once the backend confirms the phone, every feature turns on, and the panel shows **Phone connected** and fades. The log shows `[EDITH pair]` lines. Unpaired, the panel never times out: an expired code is replaced and backend errors are retried every 10 s. Only the code pairs a headset, even when the backend already keeps a phone position. The headset remembers the pairing: at a later launch everything stays off, with no panel, until one call confirms the backend still keeps the phone's position, and if it does not, the code shows at once. A backend it cannot reach at launch leaves the remembered pairing unlocked. After that it checks every 30 s that the backend still keeps the phone's position; after three misses in a row it locks again and shows a new code. A backend it cannot reach never locks it. In the Unity editor the gate is always open.
 
 ## Where things live
 

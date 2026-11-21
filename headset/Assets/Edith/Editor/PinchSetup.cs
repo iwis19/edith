@@ -8,12 +8,13 @@ using UnityEngine.SceneManagement;
 
 namespace Edith.Editor
 {
-    /// Right-hand tracking and pinch-and-drag in the scene. Every step converges, so running it again is safe.
+    /// Tracking of both hands and pinch-and-drag in the scene. Every step converges, so running it again is safe.
     public static class PinchSetup
     {
         const string OutlineMaterialPath = "Assets/Edith/Pinch/PinchOutline.mat";
         const string PinchObjectName = "Pinch";
         const string RightHandName = "HandRight";
+        const string LeftHandName = "HandLeft";
 
         public static void AddToScene(string scenePath)
         {
@@ -23,16 +24,20 @@ namespace Edith.Editor
 
             var rig = UnityEngine.Object.FindAnyObjectByType<OVRCameraRig>()
                 ?? throw new InvalidOperationException($"{scenePath} has no OVRCameraRig");
-            var hand = RightHand(rig);
 
             var pinch = Array.Find(scene.GetRootGameObjects(), go => go.name == PinchObjectName) ?? new GameObject(PinchObjectName);
-            var source = Ensure<RightHandSource>(pinch);
-            SetObject(source, "hand", hand);
-            SetObject(source, "skeleton", hand.GetComponent<OVRSkeleton>());
-            SetObject(source, "eye", rig.centerEyeAnchor);
+            var right = Ensure<RightHandSource>(pinch);
+            Wire(right, rig, Hand(rig.rightHandAnchor, OVRHand.Hand.HandRight, OVRSkeleton.SkeletonType.XRHandRight, RightHandName));
+            var left = Ensure<LeftHandSource>(pinch);
+            Wire(left, rig, Hand(rig.leftHandAnchor, OVRHand.Hand.HandLeft, OVRSkeleton.SkeletonType.XRHandLeft, LeftHandName));
+            // The Pinch object holds the only hand sources, so each hand has one reader.
+            foreach (var root in scene.GetRootGameObjects())
+                foreach (var stray in root.GetComponentsInChildren<HandSource>(true))
+                    if (stray != right && stray != left) UnityEngine.Object.DestroyImmediate(stray);
 
             var input = Ensure<PinchInput>(pinch);
-            SetObject(input, "hand", source);
+            SetObject(input, "right", right);
+            SetObject(input, "left", left);
 
             var line = Ensure<LineRenderer>(pinch);
             line.useWorldSpace = true;
@@ -48,19 +53,35 @@ namespace Edith.Editor
                 throw new InvalidOperationException($"Could not save {scenePath}");
         }
 
-        /// The right OVRHand already on the rig, or a new one with an OpenXR skeleton and no mesh.
-        static OVRHand RightHand(OVRCameraRig rig)
+        static void Wire(HandSource source, OVRCameraRig rig, OVRHand hand)
         {
-            foreach (var existing in rig.rightHandAnchor.GetComponentsInChildren<OVRHand>(true))
-                if (new SerializedObject(existing).FindProperty("HandType").intValue == (int)OVRHand.Hand.HandRight)
+            SetObject(source, "hand", hand);
+            SetObject(source, "skeleton", hand.GetComponent<OVRSkeleton>());
+            SetObject(source, "eye", rig.centerEyeAnchor);
+        }
+
+        /// The OVRHand of that side already under `anchor`, or a new one with an OpenXR skeleton and no mesh.
+        static OVRHand Hand(Transform anchor, OVRHand.Hand side, OVRSkeleton.SkeletonType skeleton, string name)
+        {
+            foreach (var existing in anchor.GetComponentsInChildren<OVRHand>(true))
+                if (new SerializedObject(existing).FindProperty("HandType").intValue == (int)side)
                     return existing;
 
-            var go = new GameObject(RightHandName);
-            go.transform.SetParent(rig.rightHandAnchor, false);
+            var go = new GameObject(name);
+            go.transform.SetParent(anchor, false);
             var hand = go.AddComponent<OVRHand>();
-            SetInt(hand, "HandType", (int)OVRHand.Hand.HandRight);
-            SetInt(go.AddComponent<OVRSkeleton>(), "_skeletonType", (int)OVRSkeleton.SkeletonType.XRHandRight);
+            SetInt(hand, "HandType", (int)side);
+            SetInt(go.AddComponent<OVRSkeleton>(), "_skeletonType", (int)skeleton);
             return hand;
+        }
+
+        /// The OVRHand a hand source on `host` reads.
+        internal static OVRHand HandOf<T>(GameObject host) where T : HandSource
+        {
+            var source = host.GetComponent<T>();
+            if (source == null) throw new InvalidOperationException($"{host.name} has no {typeof(T).Name}; run PinchSetup first");
+            return new SerializedObject(source).FindProperty("hand").objectReferenceValue as OVRHand
+                ?? throw new InvalidOperationException($"{typeof(T).Name} has no hand");
         }
 
         static Material OutlineMaterial()

@@ -11,16 +11,22 @@ namespace Edith.Scan
         public readonly float Away;
         /// dot(palm normal, straight down). 1 is a palm flat toward the floor.
         public readonly float Down;
+        /// dot(palm normal, where the head points). 1 is a palm facing the way the user looks.
+        public readonly float Along;
         public readonly float Curl;
 
-        public PalmRead(float away, float down, float curl)
+        public PalmRead(float away, float down, float along, float curl)
         {
             Away = away;
             Down = down;
+            Along = along;
             Curl = curl;
         }
 
-        public override string ToString() => $"away={Away:F2} down={Down:F2} curl={Curl:F2}";
+        /// A palm toward the floor is a hand typing or resting, unless it also faces where the user looks down.
+        public bool FloorFacing(ScanTuning tuning) => Down > tuning.palmDownMax && Along < tuning.palmAlongLookMin;
+
+        public override string ToString() => $"away={Away:F2} down={Down:F2} along={Along:F2} curl={Curl:F2}";
     }
 
     public readonly struct ScanPoseReading
@@ -46,7 +52,8 @@ namespace Edith.Scan
         }
     }
 
-    /// The Scan pose: both hands open, palms facing away from the user and not at the floor, held in front of them.
+    /// The Scan pose: both hands open, palms facing away from the user and not at the floor unless the user looks
+    /// down the same way, held in front of them.
     /// A hand counts only while HandFrame.Tracked, since joints read at low confidence can pass for an open palm.
     /// Fires once per hold. Deterministic in HandFrame.Time.
     public sealed class ScanPoseTracker
@@ -69,12 +76,11 @@ namespace Edith.Scan
 
             var leftPalm = Palm(left);
             var rightPalm = Palm(right);
-            // HandFrame.PalmNormal is flipped for a right hand, so on the left it points into the palm.
-            var leftRead = Read(left, leftPalm, -left.PalmNormal);
+            var leftRead = Read(left, leftPalm, left.PalmNormal);
             var rightRead = Read(right, rightPalm, right.PalmNormal);
             var ahead = Ahead(right, leftPalm) && Ahead(right, rightPalm);
             var posed = ahead && Mathf.Min(leftRead.Away, rightRead.Away) > tuning.palmAwayMin
-                              && Mathf.Max(leftRead.Down, rightRead.Down) <= tuning.palmDownMax
+                              && !leftRead.FloorFacing(tuning) && !rightRead.FloorFacing(tuning)
                               && Mathf.Min(leftRead.Curl, rightRead.Curl) > tuning.openCurl;
             var near = ahead && Mathf.Min(leftRead.Away, rightRead.Away) > tuning.nearPalmAway
                              && Mathf.Min(leftRead.Curl, rightRead.Curl) > tuning.nearCurl;
@@ -108,7 +114,8 @@ namespace Edith.Scan
         Vector3 Palm(in HandFrame hand) => Vector3.Lerp(hand.Wrist, hand.MiddleKnuckle, tuning.palmAlong);
 
         static PalmRead Read(in HandFrame hand, Vector3 palm, Vector3 normal) =>
-            new PalmRead(Vector3.Dot(normal, (palm - hand.EyePosition).normalized), Vector3.Dot(normal, Vector3.down), GrabTracker.Curl(hand));
+            new PalmRead(Vector3.Dot(normal, (palm - hand.EyePosition).normalized), Vector3.Dot(normal, Vector3.down),
+                Vector3.Dot(normal, hand.EyeRotation * Vector3.forward), GrabTracker.Curl(hand));
 
         bool Ahead(in HandFrame eye, Vector3 palm)
         {

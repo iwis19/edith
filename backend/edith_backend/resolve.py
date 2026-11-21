@@ -277,6 +277,9 @@ class HttpResolver:
                                                  timeout=SERVICE_TIMEOUT_S, headers={"User-Agent": USER_AGENT})
                 response.raise_for_status()
                 reply = response.json()
+                # A query that ran out of time or memory still answers 200, with a remark and few or no elements.
+                if isinstance(reply, dict) and reply.get("remark"):
+                    raise ValueError("Overpass reported a runtime error.")
                 return _Osm(overpass_sights(reply, lat, lon), containing_name(reply))
             except (httpx.HTTPError, ValueError) as exc:
                 last = exc

@@ -17,6 +17,10 @@ namespace Edith.Scan
         /// dot(palm normal, straight down) above this means the palm faces the floor. Hands typing or resting over
         /// a desk sit below the eye, so they pass palmAwayMin; their palms read 0.92 to 0.99 this way.
         public float palmDownMax = 0.7f;
+        /// A palm past palmDownMax still counts when dot(palm normal, where the head points) is above this: the user
+        /// looks down about 45 degrees or more and holds the palms out the same way. Hands on a keyboard the user
+        /// glances at read about 0.5 to 0.6.
+        public float palmAlongLookMin = 0.7f;
         /// Each palm must be at least this far in front of the eye along its forward axis. Palms-out holds measure
         /// 0.13 to 0.19 m.
         public float minAheadMeters = 0.08f;
@@ -48,5 +52,11 @@ namespace Edith.Scan
         /// An opened pin's card hangs at the nearer of this depth and this share of the way to the pin.
         public float cardDepthMeters = 0.45f;
         public float cardDepthShare = 0.8f;
+        /// Looking at a pin opens it: the pin must stay within this angle of where the head points for
+        /// gazeOpenSeconds while the head turns no faster than gazeStillDegreesPerSecond. The card hangs on the pin's
+        /// object. The headset does not track the eyes and shows no cursor, so this is wide.
+        public float gazeOpenDegrees = 8f;
+        public float gazeOpenSeconds = 0.8f;
+        public float gazeStillDegreesPerSecond = 20f;
     }
 }

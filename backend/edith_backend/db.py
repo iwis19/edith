@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import sys
 import time
+from array import array
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Protocol
@@ -31,6 +33,7 @@ class LookRecord:
     duration_ms: int
     kind: str | None = None
     place: str | None = None
+    photo_place: str | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,22 @@ def collection_date(collected_at: datetime | None, now: datetime) -> date:
     if collected_at is None:
         return now.astimezone(UTC).date()
     return min(collected_at, now).astimezone(collected_at.tzinfo).date()
+
+
+@dataclass(frozen=True)
+class ToldFact:
+    """A fact a profile was told, the kind of object it was about, and that kind's embedding when there was one.
+    `told_at` is epoch seconds."""
+    kind: str
+    fact: str
+    embedding: array | None
+    told_at: float
+
+
+# How many told facts per profile are kept, in memory and in the table.
+TOLD_FACTS_KEPT = 50
+# How far back the places photos showed are loaded at startup, the card agent's place window.
+PLACE_WINDOW_HOURS = 6
 
 
 class StoreUnavailable(Exception):
@@ -75,6 +94,16 @@ class Store(Protocol):
         """Saves the point of the memory's place unless one is already saved."""
         ...
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None: ...
+    async def load_told_facts(self, profile_id: UUID) -> list[ToldFact]:
+        """The profile's newest told facts, oldest first. Empty when there are none or the query failed."""
+        ...
+    async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
+        """Keeps the fact with its kind embedding. A fact told again only gets the new `told_at`. Never raises."""
+        ...
+    async def load_recent_places(self) -> list[tuple[UUID, str, float]]:
+        """(profile_id, place, epoch seconds) for each Look whose photo showed a place within the place window, oldest
+        first. Empty when there are none or the query failed."""
+        ...
 
 
 class DisabledStore:
@@ -106,6 +135,15 @@ class DisabledStore:
 
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None:
         raise StoreUnavailable("There is no database.")
+
+    async def load_told_facts(self, profile_id: UUID) -> list[ToldFact]:
+        return []
+
+    async def load_recent_places(self) -> list[tuple[UUID, str, float]]:
+        return []
+
+    async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
+        pass
 
 
 class PostgresStore:
@@ -156,12 +194,13 @@ class PostgresStore:
                 )
                 await conn.execute(
                     """insert into looks (id, profile_id, client_look_id, source, captured_at, width, height, status,
-                           name, confidence, fact, rarity, duration_ms, kind, place)
-                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                           name, confidence, fact, rarity, duration_ms, kind, place, photo_place)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         record.look_ref, record.profile_id, record.client_look_id, record.source, record.captured_at,
                         record.width, record.height, record.status, record.name, record.confidence, record.fact,
                         record.rarity, record.duration_ms, record.kind, record.place,
+                        record.photo_place,
                     ),
                 )
         except Exception:
@@ -245,6 +284,63 @@ class PostgresStore:
             log.exception("failed to read memory %s", memory_id)
             raise StoreUnavailable("The memory could not be read.") from exc
         return bytes(row[0]) if row else None
+
+    async def load_told_facts(self, profile_id: UUID) -> list[ToldFact]:
+        try:
+            async with self._pool.connection(timeout=5) as conn:
+                cursor = await conn.execute(
+                    """select kind, fact, kind_embedding::text, extract(epoch from told_at) from told_facts
+                       where profile_id = %s order by told_at desc, id desc limit %s""",
+                    (profile_id, TOLD_FACTS_KEPT),
+                )
+                rows = await cursor.fetchall()
+        except Exception:
+            log.exception("failed to load told facts")
+            return []
+        return [ToldFact(kind, fact, _parse_vector(vector), float(at)) for kind, fact, vector, at in reversed(rows)]
+
+    async def load_recent_places(self) -> list[tuple[UUID, str, float]]:
+        try:
+            async with self._pool.connection(timeout=30) as conn:
+                cursor = await conn.execute(
+                    """select profile_id, photo_place, extract(epoch from created_at) from looks
+                       where photo_place is not null and created_at > now() - make_interval(hours => %s)
+                       order by created_at, id""",
+                    (PLACE_WINDOW_HOURS,),
+                )
+                rows = await cursor.fetchall()
+        except Exception:
+            log.exception("failed to load recent places")
+            return []
+        return [(profile_id, place, float(at)) for profile_id, place, at in rows]
+
+    async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                await conn.execute(
+                    "insert into profiles (id) values (%s) on conflict (id) do nothing", (profile_id,)
+                )
+                await conn.execute(
+                    """insert into told_facts (profile_id, kind, kind_embedding, fact, told_at)
+                       values (%s, %s, %s::vector, %s, to_timestamp(%s))
+                       on conflict (profile_id, fact) do update set told_at = excluded.told_at""",
+                    (profile_id, told.kind, _vector_text(told.embedding), told.fact, told.told_at),
+                )
+                await conn.execute(
+                    """delete from told_facts where profile_id = %s and id not in
+                       (select id from told_facts where profile_id = %s order by told_at desc, id desc limit %s)""",
+                    (profile_id, profile_id, TOLD_FACTS_KEPT),
+                )
+        except Exception:
+            log.exception("failed to save a told fact")
+
+
+def _vector_text(embedding: array | None) -> str | None:
+    return None if embedding is None else "[" + ",".join(map(repr, embedding)) + "]"
+
+
+def _parse_vector(text: str | None) -> array | None:
+    return None if text is None else array("f", json.loads(text))
 
 
 def make_store(database_url: str | None, max_size: int) -> Store:

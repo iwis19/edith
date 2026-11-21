@@ -22,6 +22,8 @@ namespace Edith.Ask
         const int PrebufferMilliseconds = 120;
         const float ReopenDelaySeconds = 1f;
         const float SpeakerCheckSeconds = 1f;
+        // Speech RMS sits around 0.1 to 0.3, so it is scaled up before clamping.
+        const float LevelGain = 3f;
 
         AudioSource speaker;
         AudioSource cues;
@@ -32,6 +34,7 @@ namespace Edith.Ask
         bool speakerOpen;
         float speakerCheckAt;
         volatile int access;
+        readonly float[] levelSamples = new float[256];
 
         /// Answer speech waiting to play.
         public PcmRing Speech { get; } = new PcmRing(SpeakerRate * SpeechSeconds, SpeakerRate * PrebufferMilliseconds / 1000);
@@ -40,6 +43,9 @@ namespace Edith.Ask
         public string OutputState =>
             $"output {AudioSettings.outputSampleRate} Hz, speaker volume {speaker.volume:F2} mute {speaker.mute} " +
             $"playing {speaker.isPlaying}, listener pause {AudioListener.pause} volume {AudioListener.volume:F2}";
+
+        /// How loud the answer speaker is over its last few milliseconds of output, from 0 to 1.
+        public float Level { get; private set; }
 
         public MicAccess Access => (MicAccess)access;
         public bool MicRunning => mic != null;
@@ -170,6 +176,15 @@ namespace Edith.Ask
             var now = Time.realtimeSinceStartup;
             if (reopenAt >= 0f && now >= reopenAt) Reopen();
             else if (speakerOpen && now >= speakerCheckAt) CheckSpeaker(now);
+            Level = speakerOpen ? ReadLevel() : 0f;
+        }
+
+        float ReadLevel()
+        {
+            speaker.GetOutputData(levelSamples, 0);
+            var sum = 0f;
+            foreach (var sample in levelSamples) sum += sample * sample;
+            return Mathf.Clamp01(Mathf.Sqrt(sum / levelSamples.Length) * LevelGain);
         }
 
         void CheckSpeaker(float now)

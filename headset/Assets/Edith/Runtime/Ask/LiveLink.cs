@@ -11,12 +11,12 @@ using UnityEngine;
 
 namespace Edith.Ask
 {
-    public enum LiveEventKind { Ready, Audio, InputText, OutputText, TurnComplete, Interrupted, Closed, Failed }
+    public enum LiveEventKind { Ready, Audio, InputText, OutputText, Sources, TurnComplete, Interrupted, Closed, Failed }
 
     public readonly struct LiveEvent
     {
         public readonly LiveEventKind Kind;
-        /// The new piece of transcript, for InputText and OutputText.
+        /// The new piece of transcript, for InputText and OutputText; the source names one per line, for Sources.
         public readonly string Text;
         /// Why, for Failed.
         public readonly AskProblem Problem;
@@ -66,11 +66,13 @@ namespace Edith.Ask
         }
 
         /// Starts minting and connecting at once and returns without waiting.
-        public static LiveLink Open(string backendUrl, string deviceToken, string profileId, PcmRing speech, int chunkSamples)
+        public static LiveLink Open(string backendUrl, string deviceToken, string profileId, AskHint? hint, PcmRing speech,
+            int chunkSamples)
         {
             var link = new LiveLink(speech, chunkSamples);
             var token = link.cancel.Token;
-            Task.Run(() => link.Run(backendUrl, deviceToken, profileId, token));
+            var requestBody = AskHint.RequestBody(hint);
+            Task.Run(() => link.Run(backendUrl, deviceToken, profileId, requestBody, token));
             return link;
         }
 
@@ -119,13 +121,13 @@ namespace Edith.Ask
             if (!cancel.IsCancellationRequested) events.Enqueue(e);
         }
 
-        async Task Run(string backendUrl, string deviceToken, string profileId, CancellationToken token)
+        async Task Run(string backendUrl, string deviceToken, string profileId, string requestBody, CancellationToken token)
         {
             var socket = new ClientWebSocket();
             var ready = false;
             try
             {
-                var grant = await Mint(backendUrl, deviceToken, profileId, token).ConfigureAwait(false);
+                var grant = await Mint(backendUrl, deviceToken, profileId, requestBody, token).ConfigureAwait(false);
                 Debug.Log($"[EDITH ask] backend minted a {grant.Model} session in {clock.ElapsedMilliseconds} ms");
                 try
                 {
@@ -164,11 +166,12 @@ namespace Edith.Ask
             }
         }
 
-        static async Task<AskGrant> Mint(string backendUrl, string deviceToken, string profileId, CancellationToken token)
+        static async Task<AskGrant> Mint(string backendUrl, string deviceToken, string profileId, string requestBody,
+            CancellationToken token)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, backendUrl + "/ask/session")
             {
-                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+                Content = new StringContent(requestBody, Encoding.UTF8, "application/json"),
             };
             if (!string.IsNullOrEmpty(deviceToken)) request.Headers.Add("X-Edith-Token", deviceToken);
             request.Headers.Add("X-Edith-Profile", profileId);
@@ -231,6 +234,7 @@ namespace Edith.Ask
                 Post(new LiveEvent(LiveEventKind.Audio));
             }
             if (message.OutputText.Length > 0) Post(new LiveEvent(LiveEventKind.OutputText, message.OutputText));
+            if (message.Sources.Count > 0) Post(new LiveEvent(LiveEventKind.Sources, string.Join("\n", message.Sources)));
             if (message.Interrupted)
             {
                 speech.Drop();

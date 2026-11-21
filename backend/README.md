@@ -7,7 +7,7 @@ A FastAPI service that holds every AI call, the search and the memory, so API ke
 Each Look makes two model calls:
 
 1. The naming call streams the name, a confidence, the kind of object, a place guess and the rarity tier. The `name` event goes out as soon as the confidence arrives.
-2. The fact call starts at that moment, told the name, and writes one fun fact of about 30 words. A fact that repeats one already told to the profile is rewritten once, and dropped if it repeats again.
+2. The fact call starts at that moment, told the name, and writes one fun fact of about 30 words. A fact that repeats one already told to the profile is rewritten once, told every fact already told for the Look's kind. If the rewrite repeats too, the card shows the fact for that kind told longest ago and counts it as told again, so a card with a fact never goes out without one.
 
 `CARD_PROVIDER` picks who writes both calls:
 
@@ -25,9 +25,48 @@ Gemini Flash-Lite models measured on the Card agent's own prompts, with 5 headse
 
 The card shows the fact, so name plus fact is the time that counts. On the same photos `openai` gave the final name in about 0.6 to 1.3 s and the fact by about 1.6 to 2.5 s.
 
-When the phone has shared a position within the last 30 minutes (see [Phone location](#phone-location)), the naming call is also told the place and the nearest named sights, in place of the recent photos' places. The Look's `kind` and `place` are recorded with it and copied into its memory, with the phone's place preferred over the photo's guess. They are not sent in the stream.
+When the phone has shared a position within the last 30 minutes (see [Phone location](#phone-location)), the naming call is also told the place and the nearest named sights, beside the recent photos' places. The Look's `kind`, `place` and `photo_place` (the place the photo itself showed) are recorded with it and copied into its memory, with the phone's place preferred over the photo's guess. They are not sent in the stream.
 
-Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The facts told and the places seen are kept per profile in process memory: places for 6 h, and both are lost on restart.
+Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The places photos showed are kept per profile for 6 h. With a database they are loaded back from `looks.photo_place` at startup, so they survive a restart. The last 50 facts told to each profile are kept in memory too, and also in the `told_facts` table when there is a database, so they survive a restart.
+
+### Model trade-offs
+
+Measured on 68 photos, one run each, so differences of about 3 are noise. Names were graded blind against labels from a separate labeller, and shown facts were checked by a web-searching model. Times are medians.
+
+**Naming call**
+
+| Model | Specific | Generic | Wrong | First word |
+| --- | --- | --- | --- | --- |
+| `gpt-4o` | 23 | 34 | 11 | 0.63 s |
+| `gpt-5.4-mini`, one long card prompt | 9 | 50 | 9 | 0.65 s |
+| Gemini Flash-Lite | 23 | 29 | 14 | 1.2 to 1.6 s |
+
+- `gpt-4o` names as many objects specifically as Gemini Flash-Lite, with fewer wrong names. Its wrong names are mostly near misses, such as a neighbouring model of the same product or a too-narrow guess.
+- `gpt-5.4-mini` names few objects wrongly only because it names most of them generically. Asked plainly, without the long card prompt, it named some objects specifically that the long prompt left generic, so its generic names come from the prompt as much as the model.
+- Gemini Flash-Lite's wrong names are invented specifics, such as a made-up title, where OpenAI's wrong names are more often the wrong object. It is about twice as slow to the first word, and the free tier allows 15 requests a minute.
+- Neither provider's confidence separates right names from wrong ones.
+
+**Fact call**
+
+| Model | Beats the other on a blind judge | Median length | Median time | Shown facts false |
+| --- | --- | --- | --- | --- |
+| `gpt-5.4-mini`, effort none | 42 to 26 | 30 words | 1.82 s | similar to `gpt-4o` |
+| `gpt-4o` | 26 to 42 | 29 words | 1.90 s | similar to `gpt-5.4-mini` |
+
+- Written in one call with the name and passed through a second-model check, `gpt-4o`'s shown facts had 3 of 68 false, against 10 of 65 for `gpt-5.4-mini`. As a separate call told the name, the two have a similar share of stretched details, and `gpt-5.4-mini` costs less per Look.
+- A web check of `gpt-4o`'s separate-call facts found about half embellished and about 1 in 17 invented. The push for specific details causes this, so a fact is a fun fact, not a checked one.
+- Gemini Flash-Lite's facts arrive at a median of 2.4 to 3.0 s, with 12 of 59 false, against 2.1 s for OpenAI in a single call.
+- Larger Gemini models think for seconds before writing, which is too slow for a Look.
+
+`gpt-4o` is reported to leave the OpenAI API on 2027-01-14, with `gpt-6-luna` named as its replacement. Measure the replacement on the same photos before then, and set it with `OPENAI_NAME_MODEL`.
+
+**Two calls rather than one**
+
+- Separate calls let each job use the model that suits it: `gpt-4o` names, `gpt-5.4-mini` writes the fact. The fact call carries its own prompt, the facts already told to the profile and the repeat check. The cost is a second request per Look.
+- The fact call starts only once the name is final, at about 0.76 s. Started blind beside the naming call, it picked a different object in the crop on 16 of 68 photos, so the fact described a different object from the name. Told the name, it did so on none. The cost is the fact arriving after the name, not with it.
+- A failed fact call never costs the card its name or rarity; the card goes out without a fact.
+
+The tests in `tests/test_card_model.py` check the parsing, the repeat check and the call ordering against fake writers, so they pass without a key and say nothing about the quality or speed of any model. To measure a setup, set `CARD_PROVIDER`, the key and the model settings, run the backend, and send the same photos through `tools.stream_check`, which prints when the name, fact and rarity events arrive.
 
 ## API
 
@@ -120,18 +159,26 @@ The model is also told three things when they exist: the phone's place and up to
 
 Mints a Gemini Live session for one spoken question. The headset opens the websocket and talks to Gemini directly, so no audio passes through the backend and the API key never leaves it.
 
-The body is optional JSON. `{"voice": "Kore"}` picks the voice for this session; omit it, or send no body, for `LIVE_VOICE`. Any voice Gemini Live does not list is refused with 422 `invalid_request`.
+The body is optional JSON. `{"voice": "Kore"}` picks the voice for this session; omit it, or send no body, for `LIVE_VOICE`. Any voice Gemini Live does not list is refused with 422 `invalid_request`. `{"hint": {"name": "...", "hook": "..."}}` names the Scan pin nearest the person's line of sight, and the persona then takes "this" and "it" to mean that pin (name at most 200 characters, hook at most 300).
 
 The response is `{"url", "setup", "model"}`:
 
 - `url`: the Live websocket address with a single-use token. The token opens one session, and that session must send its first message within about a minute.
-- `setup`: the JSON text the headset sends as its first message. It sets the model, spoken English, the voice, transcription of both sides (so the card can show the spoken answer) and EDITH's persona. With `LIVE_SEARCH=true` it adds Google Search.
+- `setup`: the JSON text the headset sends as its first message. It sets the model, spoken English, the voice, transcription of both sides (so the card can show the spoken answer) and EDITH's persona. With `LIVE_SEARCH=true` it adds the `googleSearch` tool and a persona line that limits searching to questions that need current or factual web information. The headset reads the sources from `serverContent.groundingMetadata.groundingChunks[].web` and shows up to three site names under the answer.
 - `model`: the Live model ID.
 
 | Status | `error.code` | Meaning |
 | --- | --- | --- |
 | 503 | `ask_unavailable` | `GEMINI_API_KEY` is not set |
 | 502 | `ask_failed` | Gemini refused to mint a token |
+
+To time a spoken-question turn with search on and off (five runs each, a weather question and a plain one), run in `backend/` with `GEMINI_API_KEY` set:
+
+```
+uv run python -m tools.search_latency --mode both --runs 5
+```
+
+It sends each question as realtime text and prints the milliseconds to the first answer audio, the end of the turn, and whether grounding came back.
 
 ### Phone location
 
@@ -140,7 +187,7 @@ The headset has no GPS, so the phone that runs its hotspot pairs with the backen
 The headset pairs like this:
 
 1. `POST /pair` returns a 4-digit code and the address to open on the phone.
-2. The person opens that address on the phone, types the code and taps Share location.
+2. The person opens that address on the phone, types the code and taps Share location. A phone that is already paired shows the code box under "Enter a new code"; claiming a code replaces the phone's stored token.
 3. The headset polls `GET /pair/{code}` until `paired` is `true`.
 4. The phone page sends its position to `POST /location` about every 10 s, or after moving 25 m.
 
@@ -148,7 +195,7 @@ A position becomes a place name and named sights through OpenStreetMap: Nominati
 
 A memory's `point` comes from a Nominatim search (`/search`, `limit=1`) for the memory's `place` text, run in the background after `/collect` has answered. The phone's position is never part of it and is never written to the database. Searches share the reverse lookups' one-a-second limit and `User-Agent`, and each normalised place is searched once per process, including when nothing was found. A failed search leaves `point` null and is retried by a later `/collect` of the same Look.
 
-The Look and Ask prompts use a position only while its latest fix is at most 30 min old. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights, and `describe_place` turns them into prompt text. The Scan agent uses both.
+The Look and Ask prompts use a position only while its latest fix is at most 30 min old (`FRESH_S`). That outlasts `PHONE_SILENT_S`: a person who stopped somewhere is still there minutes later. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights, and `describe_place` turns them into prompt text. The Scan agent uses both.
 
 #### `POST /pair`
 
@@ -182,7 +229,7 @@ Needs `X-Edith-Phone` with the phone token, and no other headers. The body, at m
 
 #### `GET /location`
 
-Needs the device token and profile headers. Returns the same summary as `POST /location` when a position is kept for the profile, so the headset can skip pairing, else 404 `no_location`.
+Needs the device token and profile headers. Returns the same summary as `POST /location` while the phone's latest fix is at most 30 s old (`PHONE_SILENT_S`), so the headset can skip pairing, else 404 `no_location`. The phone page re-sends every 10 s, so a phone that closed the page reads as gone after three missed re-sends, and the headset, which checks every 30 s and locks after three misses, locks about 1.5 min later. A backend the headset cannot reach never locks it.
 
 ## Set up
 
@@ -210,15 +257,26 @@ Ask settings:
 | --- | --- | --- |
 | `LIVE_MODEL` | `gemini-3.8-live` | The Gemini Live model Ask talks to |
 | `LIVE_VOICE` | `Kore` | The prebuilt Live voice. Gemini silently falls back to its default for a name it does not know, so the backend accepts only listed names |
-| `LIVE_SEARCH` | `false` | Adds Google Search to the session. A free-tier key refuses the session with it on |
+| `LIVE_SEARCH` | `false` | Adds Google Search to the session. A free-tier key refuses the session with it on. Off until `tools/search_latency.py` shows the time to first audio stays acceptable |
 
 Scan settings:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `SCAN_MODEL` | `gemini-3.5-flash` | The Gemini model that picks what to pin |
+| `SCAN_MODEL` | `gemini-3.5-flash-lite` | The Gemini model that picks what to pin |
+| `SCAN_BACKUP_MODEL` | `gpt-4o` | The OpenAI model asked as well when the Gemini call fails or is slow; needs `OPENAI_API_KEY` |
+| `SCAN_BACKUP_AFTER_S` | `2` | How long the Gemini call runs alone before the backup is asked too; 0 turns the backup off |
 | `SCAN_THINKING_LEVEL` | `minimal` | The model's thinking level; more thinking makes pins later |
 | `SCAN_TIMEOUT_S` | `7` | The time one scan may take. The headset waits 8 s |
+
+Kind matching settings:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `EMBEDDING_MODEL` | `gemini-embedding-2` | The Gemini model that embeds a Look's kind of object, so "mug" and "coffee cup" count as one kind. Needs `GEMINI_API_KEY`; without it kinds match by a shared word |
+| `EMBEDDING_DIMENSIONS` | `1536` | The embedding size. It must equal the `vector(1536)` columns in the migrations |
+| `KIND_SIMILARITY` | `0.8` | The cosine similarity at which two kinds count as one |
+| `EMBEDDING_TIMEOUT_S` | `0.3` | The time the embedding call may take. It starts after the name has gone out and runs beside the fact call, and a call that runs over is dropped, so the kinds match by a shared word for that Look |
 
 Phone location settings:
 
@@ -265,7 +323,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 
 1. Create a Railway service from this repository with the root directory set to `backend`. Railway builds the `Dockerfile`.
 2. Set `DATABASE_URL`, `DEVICE_TOKEN` and the key for `CARD_PROVIDER` (`OPENAI_API_KEY` by default, or `GEMINI_API_KEY` with `CARD_PROVIDER=gemini`) on the service. The image sets `PUBLIC_SERVER=1`, so the app refuses to start without `DEVICE_TOKEN`.
-3. Keep one replica: the facts told, the places seen, the scan hooks and the phone's location are held in process memory.
+3. Keep one replica: the scan hooks and the phone's location are held in process memory, and each replica keeps its own copy of the places seen.
 
 ## Layout
 
@@ -273,7 +331,8 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/agents/ask.py`: the Ask persona prompt, the token request and the session setup.
 - `edith_backend/agents/card.py`: the `CardAgent` protocol, the stub, and `make_card_agent`, which picks the agent from `CARD_PROVIDER`.
 - `edith_backend/agents/card_model.py`: the two-call Card agent, its line parser, and the fact and place histories.
-- `edith_backend/agents/scan.py`: the Scan agent with its prompt, the repair of the model's picks, the Gemini call and the hook memory.
+- `edith_backend/agents/embeddings.py`: the Gemini embedding client for kinds of object, and cosine similarity.
+- `edith_backend/agents/scan.py`: the Scan agent with its prompt, the repair of the model's picks, the Gemini call with its OpenAI backup, and the hook memory.
 - `edith_backend/agents/writers.py`: the OpenAI and Gemini streaming writers.
 - `edith_backend/events.py`: the stream's event types, the Look metadata and the details recorded but not streamed.
 - `edith_backend/pairing.py`: pairing codes with their throttle, and the signed phone tokens.
@@ -281,5 +340,6 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/resolve.py`: Nominatim (reverse and place search) and Overpass lookups with the cache and the rate limit.
 - `edith_backend/static/phone.html`: the page the phone opens.
 - `edith_backend/db.py`: the pooled Postgres store, or a no-op store with no database.
-- `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills.
+- `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills and the `told_facts` table that keeps the facts told to each profile, with the embedding of their kind. `memories.embedding` is not written.
 - `tools/stream_check.py`: prints the arrival time of each event of one Look.
+- `tools/rarity_eval.py`: compares the naming prompt's rarity tiers at a git ref with the working tree's on a folder of cropped Look photos.

@@ -8,7 +8,8 @@ import pytest
 from pydantic import SecretStr
 
 from edith_backend.agents.scan import (
-    MAX_PICKS, GeminiScanner, ScanAgent, ScanParseError, has_banned_opener, make_scan_agent, parse_picks, repair_pick,
+    MAX_PICKS, BackedUpScanModel, GeminiScanner, OpenAIScanner, ScanAgent, ScanParseError, has_banned_opener,
+    make_scan_agent, parse_openai, parse_picks, repair_pick,
 )
 from edith_backend.app import create_app
 from edith_backend.db import Memory, StoreUnavailable
@@ -356,3 +357,108 @@ async def test_gemini_scanner_raises_on_http_errors_blocks_and_empty_replies():
     blocked = {"promptFeedback": {"blockReason": "SAFETY"}}
     with pytest.raises(RuntimeError, match="blocked"):
         await gemini_scanner(lambda r: httpx.Response(200, json=blocked)).pick("S", None, b"")
+
+
+class TimedModel:
+    """Answers `picks` after `delay` seconds, or raises `error`, and counts its calls and cancellations."""
+
+    def __init__(self, picks=(), delay: float = 0, error: Exception | None = None) -> None:
+        self.picks, self.delay, self.error = list(picks), delay, error
+        self.calls = self.cancelled = 0
+
+    async def pick(self, system, context, image):
+        self.calls += 1
+        try:
+            await asyncio.sleep(self.delay)
+        except asyncio.CancelledError:
+            self.cancelled += 1
+            raise
+        if self.error:
+            raise self.error
+        return self.picks
+
+
+async def test_a_quick_first_model_is_not_backed_up():
+    first, backup = TimedModel([pick("first")]), TimedModel([pick("backup")])
+    assert [p.name for p in await BackedUpScanModel(first, backup, 0.2).pick("s", None, b"")] == ["first"]
+    assert backup.calls == 0
+
+
+async def test_a_slow_first_model_is_raced_by_the_backup_and_cancelled():
+    first, backup = TimedModel([pick("first")], delay=5), TimedModel([pick("backup")], delay=0.05)
+    assert [p.name for p in await BackedUpScanModel(first, backup, 0.05).pick("s", None, b"")] == ["backup"]
+    assert first.cancelled == 1
+
+
+async def test_a_slow_first_model_still_wins_when_it_answers_before_the_backup():
+    first, backup = TimedModel([pick("first")], delay=0.1), TimedModel([pick("backup")], delay=5)
+    assert [p.name for p in await BackedUpScanModel(first, backup, 0.05).pick("s", None, b"")] == ["first"]
+    assert backup.cancelled == 1
+
+
+async def test_a_failing_first_model_asks_the_backup_at_once():
+    first, backup = TimedModel(error=RuntimeError("503")), TimedModel([pick("backup")])
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    assert [p.name for p in await BackedUpScanModel(first, backup, 5).pick("s", None, b"")] == ["backup"]
+    assert loop.time() - started < 1
+
+
+async def test_when_both_models_fail_the_backups_error_is_raised():
+    first, backup = TimedModel(error=RuntimeError("first")), TimedModel(error=ValueError("backup"))
+    with pytest.raises(ValueError, match="backup"):
+        await BackedUpScanModel(first, backup, 0.05).pick("s", None, b"")
+
+
+def test_the_openai_key_adds_the_backup(settings, store):
+    settings.gemini_api_key = SecretStr("k")
+    assert not isinstance(make_scan_agent(settings, store)._model, BackedUpScanModel)
+    settings.openai_api_key = SecretStr("k")
+    assert isinstance(make_scan_agent(settings, store)._model, BackedUpScanModel)
+    settings.scan_backup_after_s = 0
+    assert not isinstance(make_scan_agent(settings, store)._model, BackedUpScanModel)
+
+
+def test_openai_picks_are_fractions_with_the_point_kept_in_its_box():
+    text = json.dumps({"picks": [
+        {"name": "a red door", "hook": "Count its panels.", "box": {"x0": 0.6, "y0": 0.2, "x1": 0.4, "y1": 0.5},
+         "point": {"x": 0.9, "y": 0.3}},
+        {"name": "no box", "hook": "Skipped.", "point": {"x": 0.5, "y": 0.5}},
+    ]})
+    (door,) = parse_openai(text)
+    assert door.box == (0.4, 0.2, 0.6, 0.5)
+    assert door.point == (0.6, 0.3)
+
+
+class FakeCompletions:
+    def __init__(self, content: str | None, refusal: str | None = None) -> None:
+        self.content, self.refusal, self.kwargs = content, refusal, None
+
+    async def create(self, **kwargs):
+        self.kwargs = kwargs
+        message = type("M", (), {"content": self.content, "refusal": self.refusal})()
+        return type("R", (), {"choices": [type("C", (), {"message": message})()]})()
+
+
+def openai_scanner(completions: FakeCompletions) -> OpenAIScanner:
+    client = type("Client", (), {"chat": type("Chat", (), {"completions": completions})()})()
+    return OpenAIScanner(client, "gpt-test")
+
+
+async def test_openai_scanner_asks_for_strict_json_with_the_image_and_context():
+    completions = FakeCompletions(json.dumps({"picks": [
+        {"name": "a lamp", "hook": "Find its switch.", "box": {"x0": 0.1, "y0": 0.1, "x1": 0.3, "y1": 0.4},
+         "point": {"x": 0.2, "y": 0.2}}]}))
+    picks = await openai_scanner(completions).pick("system", "context", b"jpeg")
+    assert [p.name for p in picks] == ["a lamp"]
+    kwargs = completions.kwargs
+    assert kwargs["model"] == "gpt-test"
+    assert kwargs["response_format"]["json_schema"]["strict"] is True
+    system, context, user = kwargs["messages"]
+    assert "fractions" in system["content"] and context["content"] == "context"
+    assert user["content"][0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+async def test_openai_scanner_raises_on_a_refusal():
+    with pytest.raises(RuntimeError, match="refused"):
+        await openai_scanner(FakeCompletions(None, refusal="no")).pick("system", None, b"jpeg")
