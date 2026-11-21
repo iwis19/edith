@@ -69,14 +69,38 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_card_shows_the_name_over_the_fact_like_a_snapshot_and_no_badge_place_or_day()
+        public void A_card_shows_only_the_fact_like_a_snapshot_with_no_name_badge_place_or_day()
         {
             var photo = Photo(8, 8);
             view.Show(Memories(1), 0f, _ => photo);
             var names = Middle.GetComponentsInChildren<RectTransform>(true).Select(part => part.name).ToArray();
-            foreach (var gone in new[] { "BadgeBox", "Badge", "Place", "Day" }) CollectionAssert.DoesNotContain(names, gone);
+            foreach (var gone in new[] { "Title", "BadgeBox", "Badge", "Place", "Day" }) CollectionAssert.DoesNotContain(names, gone);
             var texts = Middle.GetComponentsInChildren<Text>(true).Select(text => text.text).Where(text => text != "").ToArray();
-            CollectionAssert.AreEqual(new[] { "Thing 0", "Fact 0." }, texts);
+            CollectionAssert.AreEqual(new[] { "Fact 0." }, texts);
+        }
+
+        [Test]
+        public void A_memory_photo_is_given_a_copy_with_room_for_round_corners_at_its_own_size()
+        {
+            var photo = new Texture2D(160, 90, TextureFormat.RGB24, false);
+            textures.Add(photo);
+            var rounded = MemoryCard.Rounded(photo);
+            textures.Add(rounded);
+            Assert.AreNotSame(photo, rounded);
+            Assert.AreEqual(TextureFormat.RGBA32, rounded.format, "with an alpha channel for the cut corners");
+            Assert.AreEqual(new Vector2Int(160, 90), new Vector2Int(rounded.width, rounded.height));
+        }
+
+        [Test]
+        public void The_divider_under_the_photo_is_a_dashed_line_across_its_width()
+        {
+            view.Show(Memories(1), 0f, _ => Photo(16, 9));
+            var dashes = Part(Middle, "Divider").GetComponentsInChildren<Image>(false);
+            Assert.That(dashes.Length, Is.GreaterThan(10));
+            Assert.That(dashes.Select(dash => dash.rectTransform.sizeDelta.x).Distinct().Count(), Is.EqualTo(1), "every dash the same length");
+            var xs = dashes.Select(dash => dash.rectTransform.anchoredPosition.x).OrderBy(x => x).ToArray();
+            Assert.That(xs[1] - xs[0], Is.GreaterThan(dashes[0].rectTransform.sizeDelta.x), "with gaps between them");
+            Assert.AreEqual(0f, xs.First() + xs.Last(), 1e-3f, "centred under the photo");
         }
 
         [Test]

@@ -406,7 +406,16 @@ namespace Edith.Scrapbook
                 var jpeg = await client.Image(id, opened.Token);
                 if (this == null || opened.IsCancellationRequested) return;
                 var photo = new Texture2D(2, 2, TextureFormat.RGB24, false);
-                if (photo.LoadImage(jpeg)) photos.Put(id, photo);
+                if (photo.LoadImage(jpeg))
+                {
+                    var rounded = MemoryCard.Rounded(photo);
+                    if (rounded != null)
+                    {
+                        Destroy(photo);
+                        photo = rounded;
+                    }
+                    photos.Put(id, photo);
+                }
                 else
                 {
                     Destroy(photo);

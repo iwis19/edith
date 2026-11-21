@@ -37,7 +37,7 @@ The feature setups that `Configure` calls can also run on their own against an e
 | `GrabSetup` | The fist grab | `Edith.Editor.GrabSetup.BatchAdd` |
 | `AskSetup` | Ask, and the microphone permission | `Edith.Editor.AskSetup.BatchAdd` |
 | `PairingSetup` | The phone pairing panel | `Edith.Editor.PairingSetup.BatchAdd` |
-| `WelcomeSetup` | The first-launch welcome: interests and voice, pairing, practice Look | `Edith.Editor.WelcomeSetup.BatchAdd` |
+| `WelcomeSetup` | The first-launch welcome: interests and voice, then pairing | `Edith.Editor.WelcomeSetup.BatchAdd` |
 | `LookSetup` | The headset camera and the Look controller | `Edith.Editor.LookSetup.BatchAdd` |
 | `ScanSetup` | Scan | `Edith.Editor.ScanSetup.BatchAdd` |
 | `DiagnosticsSetup` | The status panel | `Edith.Editor.DiagnosticsSetup.BatchAdd` |

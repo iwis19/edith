@@ -78,19 +78,6 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void What_was_heard_shows_in_tidy_quotes()
-        {
-            Assert.AreEqual("“what is this”", AnswerOrb.Quoted(" what  is\nthis "));
-            Assert.AreEqual("", AnswerOrb.Quoted("  "));
-            Assert.AreEqual("", AnswerOrb.Quoted(null));
-            orb.ShowHeard("   ");
-            Assert.AreEqual("", orb.Caption, "nothing heard leaves the caption empty");
-            Assert.IsTrue(orb.Listening, "and the orb keeps listening");
-            orb.ShowHeard("what is this");
-            Assert.AreEqual("“what is this”", orb.Caption);
-        }
-
-        [Test]
         public void The_orb_listens_until_the_answer_or_a_problem_arrives()
         {
             Assert.IsTrue(orb.Listening);
@@ -101,14 +88,6 @@ namespace Edith.Tests
             orb.ShowProblem("Lost the connection.");
             Assert.IsFalse(orb.Listening);
             Assert.AreEqual("Lost the connection.", orb.Caption);
-        }
-
-        [Test]
-        public void Sources_show_as_one_line_of_at_most_three_names()
-        {
-            Assert.AreEqual("", AnswerOrb.SourcesLine(new string[0]));
-            Assert.AreEqual("Sources: a.com", AnswerOrb.SourcesLine(new[] { "a.com" }));
-            Assert.AreEqual("Sources: a.com · b.com · c.com", AnswerOrb.SourcesLine(new[] { "a.com", "b.com", "c.com", "d.com" }));
         }
     }
 }

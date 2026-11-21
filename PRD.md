@@ -26,7 +26,7 @@ EDITH is a hands-only Quest 3/3S mixed-reality companion that makes whatever you
 
 ### Welcome
 
-A short guided start on first launch: EDITH introduces itself, you pick or say a few interests (menu, typing or voice), and it walks you through one practice Look. It also includes pairing the phone for location.
+A short guided start on first launch: EDITH introduces itself, you pick or say a few interests (menu, typing or voice), and then it pairs your phone for location.
 
 ### Look result
 

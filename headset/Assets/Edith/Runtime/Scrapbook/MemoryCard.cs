@@ -4,8 +4,8 @@ using UnityEngine.UI;
 
 namespace Edith.Scrapbook
 {
-    /// One card of the deck, drawn like a snapshot's card: the photo at its own shape, a thin border in the rarity's
-    /// colour, and the fun fact under it in the same colour. The name stands in when there is no fact. A memory's
+    /// One card of the deck, drawn like a snapshot's card: the photo at its own shape in glass outlined in the rarity's
+    /// colour, and the fun fact under it. The name stands in when there is no fact. A memory's
     /// text is already typed out. Also draws the Scrapbook's notices, which are text with no photo.
     public sealed class MemoryCard
     {
@@ -79,19 +79,28 @@ namespace Edith.Scrapbook
             fitted = true;
             photo.texture = texture;
             photo.color = texture == null ? EmptyPhoto : Color.white;
-            var size = Room;
-            if (texture != null && texture.width > 0 && texture.height > 0)
-            {
-                var shape = texture.width / (float)texture.height;
-                size = shape > Room.x / Room.y ? new Vector2(Room.x, Room.x / shape) : new Vector2(Room.y * shape, Room.y);
-                if (size.x < MinPhotoMm) size = new Vector2(MinPhotoMm, MinPhotoMm / shape);
-                if (size.y > MaxPhotoMm) size = new Vector2(MaxPhotoMm * shape, MaxPhotoMm);
-            }
+            var size = ShownSize(texture);
             photo.rectTransform.sizeDelta = size;
             // The bottom edge stays where the room's is, so a taller photo grows upward and its fact never moves down
             // onto the rarity chips.
             photo.rectTransform.anchoredPosition = new Vector2(0f, (size.y - Room.y) * 0.5f);
             view.Fit(size);
+        }
+
+        /// A copy of `texture` with its corners cut round to sit inside the card's frame, as a snapshot's photo is,
+        /// or null when it can't be read.
+        public static Texture2D Rounded(Texture2D texture) =>
+            Snapshot.Rounded(texture, CardView.PhotoRadiusMm(ScrapbookPlacement.CardAhead) / ShownSize(texture).x);
+
+        /// The photo's size on the card, in millimetres: `texture` at its own shape, as large as fits the room.
+        static Vector2 ShownSize(Texture texture)
+        {
+            if (texture == null || texture.width <= 0 || texture.height <= 0) return Room;
+            var shape = texture.width / (float)texture.height;
+            var size = shape > Room.x / Room.y ? new Vector2(Room.x, Room.x / shape) : new Vector2(Room.y * shape, Room.y);
+            if (size.x < MinPhotoMm) size = new Vector2(MinPhotoMm, MinPhotoMm / shape);
+            if (size.y > MaxPhotoMm) size = new Vector2(MaxPhotoMm * shape, MaxPhotoMm);
+            return size;
         }
 
         /// `pose` is in the frame of the card's parent. `fade` scales the whole card's opacity.
