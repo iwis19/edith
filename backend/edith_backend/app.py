@@ -228,7 +228,13 @@ async def _stream(
             if event is None:
                 break
             line = stamp(event)
+            # The first name event, pending or not, is when the card's first words appear.
             marks.setdefault(event.type, event.t_ms)
+            if isinstance(event, Name) and event.pending:
+                yield line
+                continue
+            if isinstance(event, Name):
+                marks["name_final"] = event.t_ms
             seen[event.type] = event
             yield line
     except (GeneratorExit, asyncio.CancelledError):
@@ -252,8 +258,8 @@ async def _stream(
     _recording.add(task)
     task.add_done_callback(_recording.discard)
     last = stamp(final)
-    log.info("look %s accepted %s name %s fact %s %s %s", meta.look_id, marks.get("accepted", "-"),
-             marks.get("name", "-"), marks.get("fact", "-"), final.type, final.t_ms)
+    log.info("look %s accepted %s name %s final %s fact %s %s %s", meta.look_id, marks.get("accepted", "-"),
+             marks.get("name", "-"), marks.get("name_final", "-"), marks.get("fact", "-"), final.type, final.t_ms)
     yield last
 
 

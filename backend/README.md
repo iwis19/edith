@@ -43,7 +43,7 @@ The response is newline-delimited JSON (`application/x-ndjson`), one event per l
 | Event | Fields |
 | --- | --- |
 | `accepted` | `look_id`, `look_ref` (the backend's ID for this Look) |
-| `name` | `name`, `confidence` |
+| `name` | `name`, `confidence`, `pending`: while `true`, `name` is the text written so far and `confidence` is 0; the final name follows with `pending: false` |
 | `fact` | `text`, `sources` (`title`, `url`) |
 | `rarity` | `tier`: `common`, `uncommon`, `rare`, `epic`, `legendary` or `mythic` |
 | `done` | none |
