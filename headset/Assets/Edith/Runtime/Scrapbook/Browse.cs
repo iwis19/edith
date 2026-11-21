@@ -7,7 +7,7 @@ namespace Edith.Scrapbook
     /// A way to reach the past. Each lens has a tab on the lens bar, in this order, and its own row of chips under it.
     public enum Lens { Places, Rarity }
 
-    public enum ChipKind { Tab, Tier, City, Globe, Spot }
+    public enum ChipKind { Tab, Tier, City, World, Spot }
 
     /// One thing on the lens bar a pinch can choose. Only the field of its Kind is set.
     public readonly struct Chip
@@ -43,16 +43,16 @@ namespace Edith.Scrapbook
             new Chip(ChipKind.Tier, $"{tier} {count}", selected, enabled: count > 0, tier: tier);
         public static Chip Of(City city) => new Chip(ChipKind.City, Counted(city), false, city: city);
         public static Chip Of(Spot spot, bool selected) => new Chip(ChipKind.Spot, Counted(spot), selected, spot: spot);
-        public static Chip Globe() => new Chip(ChipKind.Globe, "Globe", false);
+        public static Chip World() => new Chip(ChipKind.World, "World", false);
 
         static string Counted(Place place) =>
             $"{(place.Label.Length > LabelLength ? place.Label.Substring(0, LabelLength - 1).TrimEnd() + "…" : place.Label)} {place.Count}";
     }
 
     /// What the Scrapbook is showing of the collected memories: every memory newest first, the lens in use, and what
-    /// that lens narrows them to. The Rarity lens narrows to a tier. The Places lens is at the globe, showing every
-    /// memory, or dived into a city, showing that city's memories or those of one spot in it. A narrowing belongs to
-    /// its lens, so leaving the lens clears it.
+    /// that lens narrows them to. The Rarity lens narrows to a tier. The Places lens is at the world map, showing
+    /// every memory, or zoomed to a city, showing that city's memories or those of one spot in it. With a single
+    /// city it is always at that city. A narrowing belongs to its lens, so leaving the lens clears it.
     public sealed class Browse
     {
         /// The most city chips, or spot chips, shown at once. The rest are reached by their pins.
@@ -72,6 +72,7 @@ namespace Edith.Scrapbook
                 if (memory.Tier is Rarity tier) counts[(int)tier]++;
             Atlas = new Atlas(all);
             Lens = Atlas.Cities.Count > 0 ? Lens.Places : Lens.Rarity;
+            City = Home;
             Refresh();
         }
 
@@ -82,7 +83,7 @@ namespace Edith.Scrapbook
         /// Null shows every memory.
         public Rarity? Filter { get; private set; }
 
-        /// The city the Places lens has dived into, or null at the globe.
+        /// The city the Places lens is zoomed to, or null at the world map.
         public City City { get; private set; }
 
         /// The spot of City the deck is narrowed to, or null.
@@ -99,7 +100,7 @@ namespace Edith.Scrapbook
             if (lens == Lens) return;
             Lens = lens;
             Filter = null;
-            City = null;
+            City = Home;
             Spot = null;
             Refresh();
         }
@@ -111,8 +112,8 @@ namespace Edith.Scrapbook
             Refresh();
         }
 
-        /// Dives the Places lens into `city`, showing its memories.
-        public void Dive(City city)
+        /// Zooms the Places lens to `city`, showing its memories.
+        public void ZoomIn(City city)
         {
             SetLens(Lens.Places);
             City = city;
@@ -120,15 +121,16 @@ namespace Edith.Scrapbook
             Refresh();
         }
 
-        /// Returns the Places lens to the globe, showing every memory.
-        public void Surface()
+        /// Returns the Places lens to the world map, showing every memory. With a single city there is no world map and
+        /// it stays at that city.
+        public void ZoomOut()
         {
-            City = null;
+            City = Home;
             Spot = null;
             Refresh();
         }
 
-        /// Narrows the city dived into to `spot`. Choosing the spot already in use shows the whole city again.
+        /// Narrows the city zoomed to to `spot`. Choosing the spot already in use shows the whole city again.
         public void ToggleSpot(Spot spot)
         {
             if (City == null) return;
@@ -151,8 +153,8 @@ namespace Edith.Scrapbook
             foreach (Lens lens in Enum.GetValues(typeof(Lens))) into.Add(Chip.Tab(lens, lens == Lens));
         }
 
-        /// The chips under the tabs. Places: at the globe one chip per city, and in a city "Globe" and one chip per
-        /// spot. Rarity: one chip per tier, rarest last, whether or not it has a memory.
+        /// The chips under the tabs. Places: at the world map one chip per city, and in a city "World", when there is
+        /// more than one city, and one chip per spot. Rarity: one chip per tier, rarest last, whether or not it has a memory.
         public void Chips(List<Chip> into)
         {
             into.Clear();
@@ -162,7 +164,7 @@ namespace Edith.Scrapbook
                     for (var i = 0; i < Atlas.Cities.Count && i < PlaceChips; i++) into.Add(Chip.Of(Atlas.Cities[i]));
                     break;
                 case Lens.Places:
-                    into.Add(Chip.Globe());
+                    if (Atlas.Cities.Count > 1) into.Add(Chip.World());
                     for (var i = 0; i < City.Spots.Count && i < PlaceChips; i++) into.Add(Chip.Of(City.Spots[i], City.Spots[i] == Spot));
                     break;
                 case Lens.Rarity:
@@ -170,6 +172,9 @@ namespace Edith.Scrapbook
                     break;
             }
         }
+
+        /// The city a lone city's lens rests at, else null.
+        City Home => Atlas.Cities.Count == 1 ? Atlas.Cities[0] : null;
 
         void Refresh()
         {

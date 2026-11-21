@@ -86,9 +86,9 @@ The hook is not a fact: it is why the thing is worth a look, or something to do 
 
 ### Scrapbook
 
-A deck of memory cards, placed 0.7 m in front of where you look when it opens, at eye level and fixed there in the room. The middle card is full size and is a snapshot's card: the photo in a rarity-coloured border with the fun fact under it. Two smaller cards fade back on each side. Thumb swipe or a sideways pinch-drag scrolls, and a pinch on a side card brings it to the middle. A pinch chooses at the point where it was pressed unless it moves 6 cm or more sideways. A bar under the deck reaches the past by place or by rarity (a chip per tier with its count). Places is where the Scrapbook opens once a memory has a place: a small globe under the bar with a pin per city, which a pinch-drag spins. A pinch on a city's pin, or on its chip, dives into a round street map of that city with a pin per spot, and a pinch on a spot narrows the deck to what was found there. The maps are OpenStreetMap's. Voice search lights up matching cards, using embeddings over labels and facts.
+A deck of memory cards, placed 0.7 m in front of where you look when it opens, at eye level and fixed there in the room. The middle card is full size and is a snapshot's card: the photo in a rarity-coloured border with the fun fact under it. Two smaller cards fade back on each side. Thumb swipe or a sideways pinch-drag scrolls, and a pinch on a side card brings it to the middle. A pinch chooses at the point where it was pressed unless it moves 6 cm or more sideways. A bar under the deck reaches the past by place or by rarity (a chip per tier with its count). Places is where the Scrapbook opens once a memory has a place: one flat map panel under the bar, with no dragging. With several cities it opens on a map of all of them with a pin per city, and a pinch on a city's pin, or on its chip, zooms in to that city's street map with a pin per spot. With one city it opens on that city. A pinch on a spot narrows the deck to what was found there, and the World chip zooms back out. The maps are OpenStreetMap's. Voice search lights up matching cards, using embeddings over labels and facts.
 
-A memory keeps only what its card shows: the photo, name, fun fact, tier, place, the local date it was collected (no time of day), the place's centre point for the globe, and the search embedding. Your own position is never stored.
+A memory keeps only what its card shows: the photo, name, fun fact, tier, place, the local date it was collected (no time of day), the place's centre point for the map, and the search embedding. Your own position is never stored.
 
 ### Where you are: the phone's location
 
@@ -180,7 +180,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 **Scrapbook and visuals**
 
 - [x] Scrapbook deck: rarity frames, time and rarity lenses, open-book gesture
-- [ ] Scrapbook: places globe that dives into a city, voice search
+- [ ] Scrapbook: places map that zooms into a city, voice search
 - [ ] Spots globe with pins and labelled seeded sample data (only if Spots ships)
 - [ ] A sound per rarity tier on collect
 - [ ] UI design pass across the headset app. Target feel: liquid glass.

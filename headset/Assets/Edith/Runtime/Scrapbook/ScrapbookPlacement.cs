@@ -24,15 +24,13 @@ namespace Edith.Scrapbook
         public static readonly Vector3 BarCentre = Below(0.66f, 13f);
         public const float BarRowGap = 0.021f * BarScale;
 
-        public static readonly Vector3 GlobeCentre = Below(0.75f, 24f);
-        public const float GlobeRadius = 0.09f;
-        /// Pins, labels and captions on the globe and the map are 1.2 times what they were at the size of a 0.085 m globe
-        /// or a 0.30 m map.
-        public const float MapDetailScale = 1.2f;
-
-        public static readonly Vector3 MapCentre = Below(0.80f, 26f);
-        public const float MapWidth = 0.34f;
-        /// The map leans back this far from upright.
-        public const float MapLean = 45f;
+        /// The map panel faces the eye and leans back from that by MapLean. It shows the full width of a square map
+        /// image and the share of its height that makes it MapHeight tall.
+        public static readonly Vector3 MapCentre = Below(0.80f, 23f);
+        public const float MapWidth = 0.30f;
+        public const float MapVisibleShare = 0.6f;
+        public const float MapHeight = MapWidth * MapVisibleShare;
+        public const float MapLean = 10f;
+        public static Quaternion MapRotation => Quaternion.LookRotation(MapCentre, Vector3.up) * Quaternion.Euler(MapLean, 0f, 0f);
     }
 }

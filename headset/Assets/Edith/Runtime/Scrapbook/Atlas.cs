@@ -19,27 +19,18 @@ namespace Edith.Scrapbook
         {
             Label = label;
             Memories = memories;
-            Centre = Mean(memories);
+            Centre = GeoPoint.Mean(Points(memories));
             foreach (var memory in memories)
                 if (memory.Tier is Rarity tier && (Best == null || tier > Best)) Best = tier;
         }
 
         public int Count => Memories.Count;
 
-        static GeoPoint Mean(IReadOnlyList<Memory> memories)
+        static List<GeoPoint> Points(IReadOnlyList<Memory> memories)
         {
-            var first = memories[0].Point.Value;
-            double lat = 0, east = 0;
-            foreach (var memory in memories)
-            {
-                var point = memory.Point.Value;
-                lat += point.Lat;
-                // Measured from the first point the short way round, so a group across longitude 180 averages there.
-                var d = point.Lon - first.Lon;
-                east += d > 180 ? d - 360 : d < -180 ? d + 360 : d;
-            }
-            var lon = first.Lon + east / memories.Count;
-            return new GeoPoint(lat / memories.Count, lon > 180 ? lon - 360 : lon < -180 ? lon + 360 : lon);
+            var points = new List<GeoPoint>(memories.Count);
+            foreach (var memory in memories) points.Add(memory.Point.Value);
+            return points;
         }
     }
 
@@ -52,27 +43,18 @@ namespace Edith.Scrapbook
     /// Memories collected in one town. Its label is the town's part of their place.
     public sealed class City : Place
     {
-        /// The share of the map image's half width that spots are kept within.
-        const double FitShare = 0.8;
-
         /// Newest first, by each spot's newest memory.
         public readonly IReadOnlyList<Spot> Spots;
-        /// The centre of the city's street map: GET /map/area centres its image on the rounded point.
-        public readonly GeoPoint MapCentre;
-        /// The tile zoom of the city's street map.
-        public readonly int Zoom;
+        /// The city's street map, framed to hold every spot.
+        public readonly MapFrame Frame;
 
         public City(string label, IReadOnlyList<Memory> memories, IReadOnlyList<Spot> spots) : base(label, memories)
         {
             Spots = spots;
-            MapCentre = Centre.Rounded();
             var points = new List<GeoPoint>(spots.Count);
             foreach (var spot in spots) points.Add(spot.Centre);
-            Zoom = MercatorMath.ZoomToFit(MapCentre, points, FitShare * MercatorMath.ImagePixels / 2);
+            Frame = MapFrame.Fit(Centre, points, MercatorMath.MinCityZoom, MercatorMath.MaxCityZoom);
         }
-
-        /// Where `spot` is on the city's street map image, x right and y down from its top left corner.
-        public UnityEngine.Vector2 OnMap(Spot spot) => MercatorMath.OnImage(spot.Centre, MapCentre, Zoom);
     }
 
     /// The memories that have a point, grouped by where they were collected.
@@ -86,6 +68,8 @@ namespace Edith.Scrapbook
 
         /// Newest first, by each city's newest memory.
         public readonly IReadOnlyList<City> Cities;
+        /// The map of every city at once, or default when there is none.
+        public readonly MapFrame World;
 
         public Atlas(IReadOnlyList<Memory> newestFirst)
         {
@@ -101,6 +85,10 @@ namespace Edith.Scrapbook
                 cities.Add(new City(Part(town, true), town, spots));
             }
             Cities = cities;
+            if (cities.Count == 0) return;
+            var centres = new List<GeoPoint>(cities.Count);
+            foreach (var city in cities) centres.Add(city.Centre);
+            World = MapFrame.Fit(GeoPoint.Mean(centres), centres, MercatorMath.MinWorldZoom, MercatorMath.MaxWorldZoom);
         }
 
         /// The part of the newest named place among `memories` that names a town or a spot.

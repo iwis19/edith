@@ -47,22 +47,5 @@ namespace Edith.Tests
             Assert.IsTrue(intent.Move(Pressed));
             Assert.AreEqual(0.09f, intent.Sideways, 1e-5f);
         }
-    
-        [Test]
-        public void A_pinch_on_the_globe_spins_it_up_and_down_as_well_as_sideways()
-        {
-            Assert.IsTrue(PinchIntent.ForGlobe(Pressed).Move(Pressed + new Vector3(0f, 0.03f, 0f)), "up");
-            Assert.IsTrue(PinchIntent.ForGlobe(Pressed).Move(Pressed + new Vector3(0f, -0.03f, 0f)), "down");
-            Assert.IsTrue(PinchIntent.ForGlobe(Pressed).Move(Pressed + new Vector3(0.03f, 0f, 0f)), "sideways");
-            Assert.IsTrue(PinchIntent.ForGlobe(Pressed).Move(Pressed + new Vector3(0.02f, 0.02f, 0f)), "diagonally");
-        }
-
-        [Test]
-        public void A_pinch_on_the_globe_that_barely_moves_still_chooses_a_pin()
-        {
-            var intent = PinchIntent.ForGlobe(Pressed);
-            Assert.IsFalse(intent.Move(Pressed + new Vector3(0.01f, 0.015f, 0.12f)));
-            Assert.IsFalse(intent.Scrubbing);
-        }
     }
 }

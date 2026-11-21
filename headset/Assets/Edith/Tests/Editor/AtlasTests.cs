@@ -147,16 +147,16 @@ namespace Edith.Tests
         public void The_street_map_is_centred_on_the_city_centre_rounded_to_four_places()
         {
             var city = new Atlas(new[] { Made(1, 21, WesternPlace, Western) }).Cities.Single();
-            Assert.AreEqual(43.0054, city.MapCentre.Lat, 1e-12);
-            Assert.AreEqual(-81.2748, city.MapCentre.Lon, 1e-12);
+            Assert.AreEqual(43.0054, city.Frame.Centre.Lat, 1e-12);
+            Assert.AreEqual(-81.2748, city.Frame.Centre.Lon, 1e-12);
         }
 
         [Test]
         public void A_spot_is_pinned_against_the_rounded_centre_of_the_street_map()
         {
             var city = new Atlas(new[] { Made(1, 21, WesternPlace, Western) }).Cities.Single();
-            Assert.AreEqual(16, city.Zoom);
-            var pin = city.OnMap(city.Spots[0]);
+            Assert.AreEqual(16, city.Frame.Zoom);
+            var pin = city.Frame.OnImage(city.Spots[0].Centre);
             Assert.AreEqual(512f, pin.x, 0.01f);
             // The spot is 0.00002° north of the rounded centre, which is 1.27 pixels at zoom 16.
             Assert.AreEqual(510.73f, pin.y, 0.05f);
@@ -167,9 +167,73 @@ namespace Edith.Tests
         {
             var london = Travels().Cities[1];
             // The spots are 2.8 km apart and the centre is a quarter of the way along, 2.1 km from the far one.
-            Assert.AreEqual(14, london.Zoom);
+            Assert.AreEqual(14, london.Frame.Zoom);
             foreach (var spot in london.Spots)
-                Assert.That((london.OnMap(spot) - new UnityEngine.Vector2(512f, 512f)).magnitude, Is.LessThan(0.8f * 512f), spot.Label);
+            {
+                var at = london.Frame.OnImage(spot.Centre) - new UnityEngine.Vector2(512f, 512f);
+                Assert.That(Math.Abs(at.x), Is.LessThan(0.8f * 512f), spot.Label);
+                Assert.That(Math.Abs(at.y), Is.LessThan(0.8f * 512f * ScrapbookPlacement.MapVisibleShare), spot.Label);
+            }
+        }
+
+        static readonly GeoPoint Sydney = new GeoPoint(-33.8688, 151.2093), Tokyo = new GeoPoint(35.6762, 139.6503),
+            Lagos = new GeoPoint(6.5244, 3.3792), Lima = new GeoPoint(-12.0464, -77.0428), Oslo = new GeoPoint(59.9139, 10.7522);
+
+        static Atlas Across(params GeoPoint[] points) =>
+            new Atlas(points.Select((point, i) => Made(i + 1, 1 + i, $"Spot {i}, Town {i}, Region", point)).ToArray());
+
+        [Test]
+        public void The_world_map_is_centred_on_the_rounded_mean_of_the_city_centres()
+        {
+            var atlas = Travels();
+            var london = atlas.Cities[1].Centre;
+            var mean = new GeoPoint((atlas.Cities[0].Centre.Lat + london.Lat) / 2, (atlas.Cities[0].Centre.Lon + london.Lon) / 2);
+            Assert.AreEqual(Math.Round(mean.Lat, 4), atlas.World.Centre.Lat, 1e-12);
+            Assert.AreEqual(Math.Round(mean.Lon, 4), atlas.World.Centre.Lon, 1e-12);
+        }
+
+        [Test]
+        public void The_world_map_shows_every_city_inside_the_visible_crop_at_a_zoom_from_2_to_12()
+        {
+            foreach (var cities in new[] { new[] { Sydney, Oslo }, new[] { Tokyo, Lagos, Lima }, new[] { Oslo, Lagos, Tokyo } })
+            {
+                var atlas = Across(cities);
+                Assert.That(atlas.World.Zoom, Is.InRange(MercatorMath.MinWorldZoom, MercatorMath.MaxWorldZoom));
+                foreach (var city in atlas.Cities)
+                {
+                    var at = atlas.World.OnImage(city.Centre) - new UnityEngine.Vector2(512f, 512f);
+                    var margin = MapFrame.Margin;
+                    Assert.That(Math.Abs(at.x), Is.LessThanOrEqualTo(512f * margin), $"{city.Label} across, zoom {atlas.World.Zoom}");
+                    Assert.That(Math.Abs(at.y), Is.LessThanOrEqualTo(512f * ScrapbookPlacement.MapVisibleShare * margin), $"{city.Label} down, zoom {atlas.World.Zoom}");
+                }
+            }
+        }
+
+        [Test]
+        public void Cities_spread_too_far_for_any_zoom_get_the_widest_map()
+        {
+            Assert.AreEqual(MercatorMath.MinWorldZoom, Across(Sydney, Tokyo, Lagos, Lima, Oslo).World.Zoom);
+        }
+
+        [Test]
+        public void The_world_map_zooms_in_as_far_as_the_cities_allow()
+        {
+            var atlas = Across(Tokyo, Oslo);
+            var closer = new MapFrame(atlas.World.Centre, atlas.World.Zoom + 1);
+            var fits = atlas.Cities.All(city =>
+            {
+                var at = closer.OnImage(city.Centre) - new UnityEngine.Vector2(512f, 512f);
+                return Math.Abs(at.x) <= 512f * MapFrame.Margin && Math.Abs(at.y) <= 512f * ScrapbookPlacement.MapVisibleShare * MapFrame.Margin;
+            });
+            Assert.IsFalse(fits, "one zoom closer, a city falls outside");
+        }
+
+        [Test]
+        public void Cities_either_side_of_the_date_line_are_framed_together()
+        {
+            var atlas = Across(new GeoPoint(-17.7, 178.0), new GeoPoint(-13.8, -171.8));
+            foreach (var city in atlas.Cities)
+                Assert.That(Math.Abs(atlas.World.OnImage(city.Centre).x - 512f), Is.LessThan(512f), city.Label);
         }
     }
 }
