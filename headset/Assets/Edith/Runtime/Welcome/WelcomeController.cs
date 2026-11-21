@@ -35,7 +35,7 @@ namespace Edith.Welcome
         // The screen is laid out in 1280 by 820 design units. 2500 units to the metre makes it 51 cm wide, held 0.55 m
         // out, which fills about 50 degrees of view.
         const float UnitsPerMetre = 2500f;
-        const float Ahead = 0.55f, FollowRate = 6f, FadeSeconds = 0.35f;
+        const float Ahead = 0.55f, FollowRate = 20f, FadeSeconds = 0.35f;
         const float ScreenWidth = 1280f, ScreenHeight = 820f;
         // The pairing pane, in design units, and where it is held: 0.45 m out and 6 cm below the line of sight, as
         // PhonePairing holds its panel, and a tenth wider than that panel's 15 cm.
@@ -44,7 +44,6 @@ namespace Edith.Welcome
         const float TapMargin = 10f;
         const float TypeCharsPerSecond = 55f;
         const float ResumeOverlapSeconds = 0.15f;
-        const float RecentreDegrees = 30f, SettledDegrees = 1f;
 
         sealed class Target
         {
@@ -86,7 +85,7 @@ namespace Edith.Welcome
         // What EDITH was last told to say and when, so a line cut off by an audio reset can start again.
         VoiceStyle? saying;
         float sayingFrom, sayingUntil;
-        bool resaying, recentring;
+        bool resaying;
 
         void Start()
         {
@@ -127,16 +126,11 @@ namespace Edith.Welcome
         void LateUpdate()
         {
             if (!open || group.alpha <= 0f) return;
-            // Held still in the room, as Quest's own panels are: text that trails the head every frame is redrawn at a
-            // new sub-pixel offset each frame and reads as blur. It glides back only once it is well out of view.
-            var rest = Rest();
-            var off = Vector3.Angle(transform.position - eye.position, rest - eye.position);
-            if (!recentring && off > RecentreDegrees) recentring = true;
-            if (!recentring) return;
+            // Close behind the head, with only enough smoothing to hide head tremor: 20 a second covers 63% of the gap
+            // in 50 ms.
             var follow = 1f - Mathf.Exp(-FollowRate * Time.deltaTime);
-            var position = Vector3.Lerp(transform.position, rest, follow);
+            var position = Vector3.Lerp(transform.position, Rest(), follow);
             transform.SetPositionAndRotation(position, Quaternion.Slerp(transform.rotation, Facing(position), follow));
-            if (off < SettledDegrees) recentring = false;
         }
 
         // ---- flow
@@ -473,7 +467,7 @@ namespace Edith.Welcome
             card.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Accent, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.3f));
             var left = PairPane.x + 30f;
             var width = PairPane.width - 60f;
-            Label(stepTwo, "Title", semibold, 46, Theme.Ice, TextAnchor.MiddleCenter, left, PairPane.y + 40f, width, 64f).text = "Pair your phone";
+            Label(stepTwo, "Title", semibold, 46, Theme.Ice, TextAnchor.MiddleCenter, left, PairPane.y + 40f, width, 64f).text = "Turn on location!";
             link = Label(stepTwo, "Link", semibold, 36, Theme.Accent, TextAnchor.MiddleCenter, left, PairPane.y + 135f, width, 52f);
             link.horizontalOverflow = HorizontalWrapMode.Overflow;
             const float digitWidth = 120f;
@@ -566,6 +560,7 @@ namespace Edith.Welcome
             }
         }
 
-        Quaternion Facing(Vector3 position) => Quaternion.LookRotation(position - eye.position, Vector3.up);
+        // Upright to the head, as the Ask orb is, so the panel rolls with it instead of looking tilted.
+        Quaternion Facing(Vector3 position) => Quaternion.LookRotation(position - eye.position, eye.up);
     }
 }
