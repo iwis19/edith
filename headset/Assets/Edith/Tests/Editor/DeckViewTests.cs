@@ -80,6 +80,18 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_memory_photo_is_given_a_copy_with_room_for_round_corners_at_its_own_size()
+        {
+            var photo = new Texture2D(160, 90, TextureFormat.RGB24, false);
+            textures.Add(photo);
+            var rounded = MemoryCard.Rounded(photo);
+            textures.Add(rounded);
+            Assert.AreNotSame(photo, rounded);
+            Assert.AreEqual(TextureFormat.RGBA32, rounded.format, "with an alpha channel for the cut corners");
+            Assert.AreEqual(new Vector2Int(160, 90), new Vector2Int(rounded.width, rounded.height));
+        }
+
+        [Test]
         public void The_divider_under_the_photo_is_a_dashed_line_across_its_width()
         {
             view.Show(Memories(1), 0f, _ => Photo(16, 9));
