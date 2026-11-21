@@ -7,11 +7,10 @@ using UnityEngine.UI;
 
 namespace Edith.Pairing
 {
-    /// At launch, when the backend keeps no phone position for this headset, floats a 4-digit code and a short link in
-    /// front of the person. They open the link on the phone that runs the hotspot, type the code and tap Share
-    /// location. The timers and states live in PairingFlow, which this drives and draws. The panel fades out when the
-    /// phone connects, after three minutes unpaired, or after repeated backend errors, and does not come back until
-    /// the next launch.
+    /// Until a phone is paired, floats a 4-digit code and a short link in front of the person and keeps PairingGate
+    /// closed. They open the link on the phone that runs the hotspot, type the code and tap Share location. The timers
+    /// and states live in PairingFlow, which this drives and draws. The panel fades out once the backend confirms the
+    /// phone, and comes back, closing the gate again, if the backend loses the phone's position.
     public sealed class PhonePairing : MonoBehaviour
     {
         [SerializeField] Transform eye;
@@ -31,9 +30,10 @@ namespace Edith.Pairing
 
         PairingFlow flow;
         PairingClient client;
+        Canvas canvas;
         CanvasGroup group;
         Text title, line, address, andType, code;
-        PairPhase shown = PairPhase.Hidden;
+        PairPhase? shown;
         readonly CancellationTokenSource lifetime = new CancellationTokenSource();
 
         /// The pairing state, or null when the build has no backend and the panel never started.
@@ -41,15 +41,20 @@ namespace Edith.Pairing
 
         void Start()
         {
+            Build();
             var settings = BackendSettings.Load();
             if (settings == null)
             {
+                // Nothing can pair, so the gate stays as the headset last left it.
+                title.text = "No EDITH server";
+                line.text = "This build has no backend address.";
+                group.alpha = PairingGate.Open ? 0f : 1f;
+                canvas.enabled = !PairingGate.Open;
                 enabled = false;
                 return;
             }
             client = new PairingClient(settings.Url, settings.DeviceToken, BackendSettings.ProfileId);
-            Build();
-            flow = new PairingFlow(Time.realtimeSinceStartup);
+            flow = new PairingFlow(PairingGate.Current.Paired, Time.realtimeSinceStartup);
         }
 
         void Update()
@@ -57,12 +62,8 @@ namespace Edith.Pairing
             if (flow == null) return;
             var call = flow.Next(Time.realtimeSinceStartup);
             if (call != PairCall.None) _ = Run(call);
+            PairingGate.Current.Paired = !flow.Locked;
             Draw();
-            if (flow.Phase == PairPhase.Hidden && group.alpha <= 0f)
-            {
-                enabled = false;
-                gameObject.SetActive(false);
-            }
         }
 
         void LateUpdate()
@@ -115,9 +116,15 @@ namespace Edith.Pairing
             if (flow.Phase != shown)
             {
                 shown = flow.Phase;
-                Debug.Log($"[EDITH pair] {shown}" + (shown == PairPhase.Hidden ? $" ({flow.HideReason})" : ""));
+                Debug.Log($"[EDITH pair] {shown}, gate {(flow.Locked ? "closed" : "open")}");
             }
-            if (flow.Phase == PairPhase.Showing)
+            if (flow.Phase == PairPhase.Checking || flow.Phase == PairPhase.Requesting)
+            {
+                title.text = "Pair your phone";
+                line.text = flow.Failures > 0 ? "Can't reach the EDITH server. Trying again." : "Getting a code...";
+                address.text = andType.text = code.text = "";
+            }
+            else if (flow.Phase == PairPhase.Showing)
             {
                 title.text = "Share your location";
                 line.text = "On the phone running your hotspot, open";
@@ -133,14 +140,16 @@ namespace Edith.Pairing
             }
             var target = flow.Visible ? 1f : 0f;
             group.alpha = Mathf.MoveTowards(group.alpha, target, Time.deltaTime / FadeSeconds);
+            canvas.enabled = group.alpha > 0f;
         }
 
         void Build()
         {
-            var canvas = gameObject.AddComponent<Canvas>();
+            canvas = gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             group = gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0f;
+            canvas.enabled = false;
             group.interactable = false;
             group.blocksRaycasts = false;
             var root = (RectTransform)transform;

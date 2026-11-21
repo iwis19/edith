@@ -1,4 +1,5 @@
 using System;
+using Edith.Pairing;
 using UnityEngine;
 
 namespace Edith.Ask
@@ -18,6 +19,7 @@ namespace Edith.Ask
 
         void OnGesture(OVRHand.MicrogestureType type)
         {
+            if (!PairingGate.Open) return;
             ThumbGesture gesture;
             switch (type)
             {

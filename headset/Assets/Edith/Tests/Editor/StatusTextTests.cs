@@ -21,8 +21,7 @@ namespace Edith.Tests
             Tally = tally,
             Camera = CameraStatus.Streaming,
             HasPairing = true,
-            Pairing = PairPhase.Hidden,
-            PairingHidden = PairHideReason.HasLocation,
+            Pairing = PairPhase.Paired,
             BackendHost = "192.168.0.7:8000",
             Backend = new BackendHealth(BackendReach.Up, "85 ms", 88f),
             Now = now,
@@ -79,19 +78,15 @@ namespace Edith.Tests
             Assert.That(text, Does.Contain("error    none"));
         }
 
-        [TestCase(PairPhase.Checking, PairHideReason.None, "checking for a kept location")]
-        [TestCase(PairPhase.Requesting, PairHideReason.None, "requesting a code")]
-        [TestCase(PairPhase.Showing, PairHideReason.None, "code on screen")]
-        [TestCase(PairPhase.Connected, PairHideReason.None, "phone connected")]
-        [TestCase(PairPhase.Hidden, PairHideReason.HasLocation, "location kept")]
-        [TestCase(PairPhase.Hidden, PairHideReason.Done, "paired")]
-        [TestCase(PairPhase.Hidden, PairHideReason.TimedOut, "not paired, timed out")]
-        [TestCase(PairPhase.Hidden, PairHideReason.Errors, "not paired, backend errors")]
-        public void Pairing_reads_as_one_phrase(PairPhase phase, PairHideReason hidden, string expected)
+        [TestCase(PairPhase.Checking, "checking for a kept location")]
+        [TestCase(PairPhase.Requesting, "requesting a code")]
+        [TestCase(PairPhase.Showing, "code on screen")]
+        [TestCase(PairPhase.Connected, "phone connected")]
+        [TestCase(PairPhase.Paired, "paired")]
+        public void Pairing_reads_as_one_phrase(PairPhase phase, string expected)
         {
             var view = View(new StatusTally());
             view.Pairing = phase;
-            view.PairingHidden = hidden;
 
             Assert.That(StatusText.Format(view), Does.Contain("phone    " + expected));
         }
