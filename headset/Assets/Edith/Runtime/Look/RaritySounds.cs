@@ -22,6 +22,7 @@ namespace Edith.Look
         /// card is. Used when a card reveals its rarity and again when it is pocketed.
         public static void Play(Rarity? tier, Vector3 point)
         {
+            if (!Application.isPlaying) return;
             var clip = For(tier);
             if (clip == null) return;
             var voice = new GameObject("EDITH rarity sound").AddComponent<AudioSource>();
