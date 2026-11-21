@@ -24,7 +24,7 @@ namespace Edith.Scan
             internal float Fade, Target = 1f;
             internal Image Gaze, Pulse, Glow;
             internal RectTransform Bead;
-            internal float Age, Look, Phase;
+            internal float Age, Look, Phase, Wait;
         }
 
         // 1 canvas unit is half a millimetre at ReferenceMeters.
@@ -73,10 +73,11 @@ namespace Edith.Scan
             this.material = material;
         }
 
-        /// A pin at `at`: a glass bead that lands with a ripple. Hand it to Remove to fade it out.
-        public Mark AddPin(Vector3 at)
+        /// A pin at `at`: a glass bead that lands with a ripple after `wait` seconds, when the scan's ping reaches it.
+        /// Hand it to Remove to fade it out.
+        public Mark AddPin(Vector3 at, float wait = 0f)
         {
-            var pin = new Mark { At = at, Phase = UnityEngine.Random.value * 6f };
+            var pin = new Mark { At = at, Phase = UnityEngine.Random.value * 6f, Wait = wait };
             var root = NewCanvas("ScanPin", pin);
             pin.Pulse = Disc(root, thinRing, Ice, BeadSize);
             pin.Glow = Disc(root, glow, new Color(Ice.r, Ice.g, Ice.b, 0.35f), BeadSize * 2.6f);
@@ -182,6 +183,12 @@ namespace Edith.Scan
             for (var i = pins.Count - 1; i >= 0; i--)
             {
                 var pin = pins[i];
+                if (pin.Wait > 0f && pin.Target > 0f)
+                {
+                    pin.Wait -= Time.deltaTime;
+                    Step(pin, 0f, eye, 1f);
+                    continue;
+                }
                 Step(pin, step, eye, 1f);
                 Ripple(pin);
                 Breathe(pin);
