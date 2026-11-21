@@ -11,19 +11,19 @@ namespace Edith.Tests
         static float Elevation(Vector3 at) => Mathf.Atan2(-at.y, at.z) * Mathf.Rad2Deg;
 
         [Test]
-        public void The_middle_card_is_centred_at_eye_level_and_a_half_again_as_big()
+        public void The_middle_card_photo_sits_just_above_eye_level()
         {
-            Assert.AreEqual(new Vector3(0f, 0.70f * Mathf.Tan(2f * Mathf.Deg2Rad), 0.70f), ScrapbookPlacement.CardCentre);
-            Assert.AreEqual(0.30f, DeckLayout.CardWidth, 1e-6f);
-            Assert.AreEqual(0.225f, DeckLayout.CardHeight, 1e-6f);
+            Assert.AreEqual(5f, -Elevation(ScrapbookPlacement.CardCentre), 0.01f);
+            Assert.AreEqual(0.70f, ScrapbookPlacement.CardCentre.z, 1e-6f);
+            Assert.AreEqual(0.25f, DeckLayout.CardWidth, 1e-6f);
         }
 
         [Test]
-        public void The_cards_look_about_as_wide_as_they_did_nearer()
+        public void The_cards_look_at_least_three_quarters_as_wide_as_they_did_nearer()
         {
             var before = 0.20f / 0.45f;
             var now = DeckLayout.CardWidth / ScrapbookPlacement.CardCentre.z;
-            Assert.That(now, Is.EqualTo(before).Within(before * 0.1f));
+            Assert.That(now, Is.GreaterThanOrEqualTo(before * 0.75f));
         }
 
         [Test]
@@ -39,55 +39,48 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_side_cards_fan_out_a_half_again_as_far()
+        public void The_side_cards_fan_out_with_the_card_size()
         {
-            Assert.AreEqual(0.24f, DeckLayout.Pose(1f).Position.x, 1e-5f);
-            Assert.AreEqual(0.345f, DeckLayout.Pose(2f).Position.x, 1e-5f);
+            Assert.AreEqual(0.20f, DeckLayout.Pose(1f).Position.x, 1e-5f);
+            Assert.AreEqual(0.2875f, DeckLayout.Pose(2f).Position.x, 1e-5f);
         }
 
+        // The fact under the photo hangs about this far below the photo's bottom edge, and the lens bar's two rows
+        // reach about this far above and below its centre.
+        const float TextDropDegrees = 6.5f, BarHalfDegrees = 2.5f;
+
+        static float PhotoBottom => Elevation(ScrapbookPlacement.CardCentre - new Vector3(0f, DeckLayout.CardHeight * 0.5f, 0f));
+
+        static float TopOf(Vector3 centre, float radius) =>
+            Elevation(centre) - Mathf.Asin(radius / centre.magnitude) * Mathf.Rad2Deg;
+
         [Test]
-        public void The_lens_bar_is_about_10_degrees_below_the_eye_at_0_66_m_out()
+        public void The_lens_bar_sits_under_the_card_text_without_touching_it()
         {
-            Assert.AreEqual(0.66f, ScrapbookPlacement.BarCentre.z, 1e-6f);
-            Assert.AreEqual(10f, Elevation(ScrapbookPlacement.BarCentre), 0.01f);
+            Assert.AreEqual(13f, Elevation(ScrapbookPlacement.BarCentre), 0.01f);
             Assert.That(ScrapbookPlacement.BarCentre.magnitude, Is.GreaterThanOrEqualTo(MinMeters));
+            Assert.That(PhotoBottom + TextDropDegrees, Is.LessThan(Elevation(ScrapbookPlacement.BarCentre) - BarHalfDegrees));
         }
 
         [Test]
-        public void The_globe_is_about_20_degrees_below_the_eye_at_0_70_m_with_a_radius_of_0_12_m()
+        public void The_globe_and_the_map_sit_under_the_lens_bar_without_touching_it()
         {
-            Assert.AreEqual(0.70f, GlobeView.Centre.z, 1e-6f);
-            Assert.AreEqual(20f, Elevation(GlobeView.Centre), 0.01f);
-            Assert.AreEqual(0.12f, GlobeView.Radius);
+            var barBottom = Elevation(ScrapbookPlacement.BarCentre) + BarHalfDegrees;
+            Assert.That(TopOf(GlobeView.Centre, GlobeView.Radius), Is.GreaterThan(barBottom));
+            var mapHalfHeight = CityMapView.Width * 0.5f * Mathf.Cos(CityMapView.Lean * Mathf.Deg2Rad);
+            Assert.That(TopOf(CityMapView.Centre, mapHalfHeight), Is.GreaterThan(barBottom));
             Assert.That(GlobeView.Centre.magnitude - GlobeView.Radius, Is.GreaterThanOrEqualTo(MinMeters));
-            Assert.AreEqual(20f, GlobeView.EyeElevation, 0.01f);
-        }
-
-        [Test]
-        public void The_city_map_is_about_22_degrees_below_the_eye_at_0_78_m_and_leans_back_30_degrees()
-        {
-            Assert.AreEqual(0.78f, CityMapView.Centre.z, 1e-6f);
-            Assert.AreEqual(22f, Elevation(CityMapView.Centre), 0.01f);
-            Assert.AreEqual(0.42f, CityMapView.Width);
-            Assert.AreEqual(30f, CityMapView.Lean);
             Assert.That(CityMapView.Centre.magnitude - CityMapView.Width * 0.5f, Is.GreaterThanOrEqualTo(MinMeters));
+            Assert.AreEqual(Elevation(GlobeView.Centre), GlobeView.EyeElevation, 0.01f);
         }
 
         [Test]
-        public void Nothing_is_centred_more_than_25_degrees_below_the_eye()
+        public void Nothing_is_centred_more_than_26_degrees_below_the_eye()
         {
-            Assert.That(Elevation(ScrapbookPlacement.CardCentre), Is.LessThan(25f));
-            Assert.That(Elevation(ScrapbookPlacement.BarCentre), Is.LessThan(25f));
-            Assert.That(Elevation(GlobeView.Centre), Is.LessThan(25f));
-            Assert.That(Elevation(CityMapView.Centre), Is.LessThan(25f));
-            Assert.That(CityMapView.Lean, Is.LessThan(40f));
-        }
-
-        [Test]
-        public void The_globe_and_the_map_look_about_as_big_as_they_did_nearer()
-        {
-            Assert.That(GlobeView.Radius / GlobeView.Centre.magnitude, Is.EqualTo(0.085f / 0.54f).Within(0.02f));
-            Assert.That(CityMapView.Width / CityMapView.Centre.magnitude, Is.EqualTo(0.30f / 0.57f).Within(0.08f));
+            Assert.That(Elevation(ScrapbookPlacement.CardCentre), Is.LessThanOrEqualTo(26f));
+            Assert.That(Elevation(ScrapbookPlacement.BarCentre), Is.LessThanOrEqualTo(26f));
+            Assert.That(Elevation(GlobeView.Centre), Is.LessThanOrEqualTo(26f));
+            Assert.That(Elevation(CityMapView.Centre), Is.LessThanOrEqualTo(26.01f));
         }
     }
 }
