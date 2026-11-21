@@ -37,9 +37,12 @@ The feature setups that `Configure` calls can also run on their own against an e
 | `GrabSetup` | The fist grab | `Edith.Editor.GrabSetup.BatchAdd` |
 | `AskSetup` | Ask, and the microphone permission | `Edith.Editor.AskSetup.BatchAdd` |
 | `PairingSetup` | The phone pairing panel | `Edith.Editor.PairingSetup.BatchAdd` |
+| `WelcomeSetup` | The first-launch welcome: interests and voice, pairing, practice Look | `Edith.Editor.WelcomeSetup.BatchAdd` |
 | `LookSetup` | The headset camera and the Look controller | `Edith.Editor.LookSetup.BatchAdd` |
 | `ScanSetup` | Scan | `Edith.Editor.ScanSetup.BatchAdd` |
 | `DiagnosticsSetup` | The status panel | `Edith.Editor.DiagnosticsSetup.BatchAdd` |
+
+`WelcomeSetup` also adds **EDITH** > **Reset Welcome**, which makes the welcome run again at the next launch. The look of the headset UI (glass panels, Jost type, the pixel-art EDITH) comes from `Assets/Resources/EdithUI` and `Assets/Edith/Runtime/UI/Theme.cs`.
 
 Each setup needs the objects of the ones before it, in the order of the table, and throws an error that names the missing one. Only `ProjectSetup` has menu items.
 

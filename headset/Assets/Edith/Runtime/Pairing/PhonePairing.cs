@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Edith.Backend;
+using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -20,26 +21,47 @@ namespace Edith.Pairing
         // Four canvas units per millimetre, which makes the panel 15 cm wide. Held 0.45 m out it looks as large as a
         // 30 cm panel at 0.9 m did, and sits well in front of real surfaces so they cannot hide it.
         const float UnitsPerMetre = 4000f;
-        static readonly Vector2 Size = new Vector2(600f, 380f);
+        static readonly Vector2 Size = new Vector2(600f, 400f);
         const float Ahead = 0.45f, Below = 0.06f, FollowRate = 8f;
         const float FadeSeconds = 0.3f;
         const float CallSeconds = 8f;
-        const int CornerRadius = 36;
-        static readonly Color Backing = new Color(0.04f, 0.05f, 0.07f, 0.8f);
-        static readonly Color White = new Color(0.97f, 0.97f, 0.99f);
-        static readonly Color Muted = new Color(0.82f, 0.84f, 0.88f);
+        const float PanelRadius = 40f;
+        static readonly Vector2 DigitSize = new Vector2(92f, 112f);
+        const float DigitGap = 18f;
 
         PairingFlow flow;
         PairingClient client;
         Canvas canvas;
         CanvasGroup group;
-        Text title, line, address, andType, code;
-        Sprite rounded;
+        Text title, line, address, andType;
+        readonly Text[] digits = new Text[4];
+        readonly Glass[] boxes = new Glass[4];
         PairPhase? shown;
         readonly CancellationTokenSource lifetime = new CancellationTokenSource();
 
         /// The pairing state, or null when the build has no backend and the panel never started.
         public PairingFlow Flow => flow;
+
+        /// While true the panel stays hidden because the welcome is showing the same pairing as its second step. The
+        /// gate and the flow run on regardless.
+        public bool Suppressed { get; set; }
+
+        /// The place the backend resolved from the phone's position, or null when it has none yet or cannot be reached.
+        public async Task<string> PlaceAsync()
+        {
+            if (client == null) return null;
+            try
+            {
+                using var cancel = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+                cancel.CancelAfter(TimeSpan.FromSeconds(CallSeconds));
+                return await client.PlaceAsync(cancel.Token);
+            }
+            catch (Exception e)
+            {
+                Debug.Log($"[EDITH pair] place lookup failed: {e.GetBaseException().Message}");
+                return null;
+            }
+        }
 
         void Start()
         {
@@ -94,7 +116,7 @@ namespace Edith.Pairing
                         var issued = await client.RequestCodeAsync(cancel.Token);
                         if (this == null) return;
                         Debug.Log($"[EDITH pair] code issued, good for {issued.expires_in_s} s");
-                        flow.OnCode(issued.code, issued.phone_url, Time.realtimeSinceStartup);
+                        flow.OnCode(issued.code, issued.phone_url, Time.realtimeSinceStartup, issued.expires_in_s > 0 ? issued.expires_in_s : 600f);
                         break;
                     case PairCall.PollStatus:
                         var status = await client.StatusAsync(flow.Code, cancel.Token);
@@ -124,7 +146,8 @@ namespace Edith.Pairing
             {
                 title.text = "Pair your phone";
                 line.text = flow.Failures > 0 ? "Can't reach the EDITH server. Trying again." : "Getting a code...";
-                address.text = andType.text = code.text = "";
+                address.text = andType.text = "";
+                ShowCode(null);
             }
             else if (flow.Phase == PairPhase.Showing)
             {
@@ -132,15 +155,16 @@ namespace Edith.Pairing
                 line.text = "On the phone running your hotspot, open";
                 address.text = PairingText.TypedAddress(flow.PhoneUrl);
                 andType.text = "and type";
-                code.text = PairingText.Spaced(flow.Code);
+                ShowCode(flow.Code);
             }
             else if (flow.Phase == PairPhase.Connected)
             {
                 title.text = "Phone connected";
                 line.text = "EDITH knows where you are.";
-                address.text = andType.text = code.text = "";
+                address.text = andType.text = "";
+                ShowCode(null);
             }
-            var target = flow.Visible ? 1f : 0f;
+            var target = flow.Visible && !Suppressed ? 1f : 0f;
             group.alpha = Mathf.MoveTowards(group.alpha, target, Time.deltaTime / FadeSeconds);
             canvas.enabled = group.alpha > 0f;
         }
@@ -158,40 +182,45 @@ namespace Edith.Pairing
             root.sizeDelta = Size;
             root.localScale = Vector3.one / UnitsPerMetre;
 
-            rounded = RoundedRect();
-            var backing = new GameObject("Backing", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-            backing.sprite = rounded;
-            backing.type = Image.Type.Sliced;
-            backing.color = Backing;
-            backing.raycastTarget = false;
-            backing.material = material;
-            Place(backing.rectTransform, root, Size, Vector2.zero);
-
+            var glass = Glass.Build(root, "Backing", Size, PanelRadius, material);
+            var semibold = Theme.SemiBold(font);
+            var regular = Theme.Regular(font);
             var width = Size.x - 40f;
-            title = Label("Title", root, 40, FontStyle.Bold, White, new Vector2(width, 56f), new Vector2(0f, 142f));
-            line = Label("Line", root, 26, FontStyle.Normal, Muted, new Vector2(width, 40f), new Vector2(0f, 88f));
-            address = Label("Address", root, 34, FontStyle.Bold, White, new Vector2(width, 48f), new Vector2(0f, 40f));
-            andType = Label("AndType", root, 26, FontStyle.Normal, Muted, new Vector2(width, 40f), new Vector2(0f, -4f));
-            code = Label("Code", root, 120, FontStyle.Bold, White, new Vector2(width, 150f), new Vector2(0f, -100f));
+            title = Label("Title", root, semibold, 42, Theme.Ice, new Vector2(width, 56f), new Vector2(0f, 150f));
+            line = Label("Line", root, regular, 27, Theme.Muted, new Vector2(width, 40f), new Vector2(0f, 98f));
+            address = Label("Address", root, semibold, 36, Theme.Cyan, new Vector2(width, 48f), new Vector2(0f, 50f));
+            andType = Label("AndType", root, regular, 27, Theme.Muted, new Vector2(width, 40f), new Vector2(0f, 8f));
+            for (var i = 0; i < 4; i++)
+            {
+                var x = (i - 1.5f) * (DigitSize.x + DigitGap);
+                boxes[i] = Glass.Build(root, "Digit", DigitSize, 22f, material);
+                boxes[i].Rect.anchoredPosition = new Vector2(x, -85f);
+                digits[i] = Label("DigitText", boxes[i].Rect, semibold, 76, Theme.Ice, DigitSize, Vector2.zero);
+            }
+            ShowCode(null);
 
             var rest = Rest();
             transform.SetPositionAndRotation(rest, Facing(rest));
         }
 
-        Text Label(string name, RectTransform parent, int size, FontStyle style, Color color, Vector2 box, Vector2 position)
+        Text Label(string name, RectTransform parent, Font face, int size, Color color, Vector2 box, Vector2 position)
         {
-            var text = new GameObject(name, typeof(RectTransform), typeof(Text)).GetComponent<Text>();
-            text.font = font;
-            text.fontSize = size;
-            text.fontStyle = style;
-            text.color = color;
-            text.alignment = TextAnchor.MiddleCenter;
+            var text = Theme.Label(parent, name, face, size, color, TextAnchor.MiddleCenter, material);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-            text.material = material;
             Place(text.rectTransform, parent, box, position);
             return text;
+        }
+
+        /// The four digit boxes: the code's digits when there is one, empty and dim otherwise.
+        void ShowCode(string code)
+        {
+            for (var i = 0; i < 4; i++)
+            {
+                var digit = code != null && i < code.Length;
+                digits[i].text = digit ? code[i].ToString() : "";
+                boxes[i].SetLook(digit ? Theme.ChipFill : new Color(0.04f, 0.2f, 0.22f, 0.2f), new Color(1f, 1f, 1f, 0.1f),
+                    digit ? Theme.Cyan : new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f), Color.clear);
+            }
         }
 
         static void Place(RectTransform rect, RectTransform parent, Vector2 size, Vector2 position)
@@ -199,29 +228,6 @@ namespace Edith.Pairing
             rect.SetParent(parent, false);
             rect.sizeDelta = size;
             rect.anchoredPosition = position;
-        }
-
-        /// A white rounded square with a soft edge, cut into nine slices so any size keeps its corners.
-        static Sprite RoundedRect()
-        {
-            const int size = CornerRadius * 2 + 4;
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear };
-            var pixels = new Color32[size * size];
-            var centre = (size - 1) * 0.5f;
-            var straight = centre - CornerRadius;
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-            {
-                var dx = Mathf.Max(Mathf.Abs(x - centre) - straight, 0f);
-                var dy = Mathf.Max(Mathf.Abs(y - centre) - straight, 0f);
-                var alpha = Mathf.Clamp01(CornerRadius - Mathf.Sqrt(dx * dx + dy * dy) + 0.5f);
-                pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
-            }
-            texture.SetPixels32(pixels);
-            texture.Apply();
-            // 100 pixels per unit matches the canvas's reference, so the sliced border is drawn at its pixel size.
-            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0,
-                SpriteMeshType.FullRect, new Vector4(CornerRadius, CornerRadius, CornerRadius, CornerRadius));
         }
 
         /// Below the line of sight rather than straight down, so looking up or down carries the panel with it.
@@ -234,9 +240,6 @@ namespace Edith.Pairing
         {
             lifetime.Cancel();
             lifetime.Dispose();
-            if (rounded == null) return;
-            Destroy(rounded.texture);
-            Destroy(rounded);
         }
     }
 }

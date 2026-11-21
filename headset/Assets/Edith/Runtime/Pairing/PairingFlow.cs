@@ -40,6 +40,9 @@ namespace Edith.Pairing
         public string Code { get; private set; }
         public string PhoneUrl { get; private set; }
 
+        /// The clock time the shown code runs out, or 0 when no code is up.
+        public float CodeExpiresAt { get; private set; }
+
         /// Backend calls that failed in a row.
         public int Failures { get; private set; }
 
@@ -85,9 +88,10 @@ namespace Edith.Pairing
             nextCallAt = now;
         }
 
-        public void OnCode(string code, string phoneUrl, float now)
+        public void OnCode(string code, string phoneUrl, float now, float expiresInSeconds = 600f)
         {
             if (!Answer(PairPhase.Requesting)) return;
+            CodeExpiresAt = now + expiresInSeconds;
             Code = code;
             PhoneUrl = phoneUrl;
             Phase = PairPhase.Showing;
