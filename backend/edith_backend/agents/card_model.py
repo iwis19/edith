@@ -112,6 +112,12 @@ class LineParser:
             self._unlabelled += 1
             yield FIELDS[self._unlabelled - 1], text
 
+    def partial_name(self) -> str:
+        """The text so far of a labelled NAME line still being written, else "". Unlabelled lines are left out: a
+        refusal's sentence would show on the card before the Look fails."""
+        labelled = self._parse(self._buffer)
+        return labelled[1] if labelled and labelled[0] == "NAME" else ""
+
     @property
     def lone_sentence(self) -> bool:
         """True when the whole reply was one unlabelled line, which is how a refusal comes back."""
@@ -251,7 +257,7 @@ class CardModelAgent:
         fact_task: asyncio.Task[str] | None = None
         try:
             async for event in self._name(image, profile_id, fields):
-                if isinstance(event, Name):
+                if isinstance(event, Name) and not event.pending:
                     fact_task = asyncio.create_task(self._write_fact(image, profile_id, meta, event.name))
                 yield event
             if fact_task is None:
@@ -289,11 +295,16 @@ class CardModelAgent:
         parser = LineParser()
         named = rated = False
 
+        shown = ""
+
         def updates() -> Iterator[CardEvent]:
-            nonlocal named, rated
+            nonlocal named, rated, shown
             if not named and "NAME" in fields and "CONFIDENCE" in fields:
                 named = True
                 yield Name(name=fields["NAME"], confidence=parse_confidence(fields["CONFIDENCE"]))
+            elif not named and (text := fields.get("NAME") or parser.partial_name()) and text != shown:
+                shown = text
+                yield Name(name=text, confidence=0.0, pending=True)
             if named and not rated and "RARITY" in fields:
                 rated = True
                 if tier := parse_tier(fields["RARITY"]):
