@@ -310,7 +310,9 @@ class CardModelAgent:
                     and text != shown:
                 shown = text
                 yield Name(name=text, confidence=0.0, pending=True)
-            if named and not rated and "RARITY" in fields:
+            # The tier goes out as soon as its line arrives, even before a late final name, but never from an
+            # unlabelled reply that has not yet shown it is an answer.
+            if not rated and "RARITY" in fields and (named or parser.labelled):
                 rated = True
                 if tier := parse_tier(fields["RARITY"]):
                     yield RarityEvent(tier=tier)
