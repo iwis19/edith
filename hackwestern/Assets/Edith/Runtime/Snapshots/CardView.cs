@@ -35,7 +35,6 @@ namespace Edith.Snapshots
             return view;
         }
 
-        /// Draws what `card` knows now.
         public void Show(LookCard card)
         {
             var looking = card.Phase == LookPhase.Looking;

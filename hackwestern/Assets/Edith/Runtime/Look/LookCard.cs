@@ -53,7 +53,6 @@ namespace Edith.Look
             }
         }
 
-        /// Types the fact out as `seconds` pass.
         public void Advance(float seconds) => Fact.Advance(seconds);
     }
 }

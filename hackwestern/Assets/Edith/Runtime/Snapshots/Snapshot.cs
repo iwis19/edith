@@ -96,7 +96,6 @@ namespace Edith.Snapshots
             enabled = true;
         }
 
-        /// Updates the card with one event from the backend.
         public void Apply(in LookEvent e)
         {
             Card.Apply(e);
