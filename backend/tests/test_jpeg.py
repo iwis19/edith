@@ -20,4 +20,5 @@ def test_a_huffman_table_is_not_a_frame():
 def test_truncated_or_headerless_data_has_no_size():
     assert jpeg_size(make_jpeg()[:-12]) is None
     assert jpeg_size(b"\xff\xd8\xff\xd9") is None
+    assert jpeg_size(make_jpeg(0, 480)) is None
     assert not is_jpeg(b"GIF89a")

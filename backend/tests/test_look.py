@@ -32,6 +32,7 @@ async def test_a_look_streams_the_card_then_done_and_records_it(client, store):
     [record] = store.records
     assert record.look_ref.hex == events[0]["look_ref"]
     assert record.profile_id == uuid.UUID(PROFILE)
+    assert (record.width, record.height) == (640, 480)
     assert (record.status, record.name, record.fact, record.rarity) == (
         "done", events[1]["name"], events[2]["text"], events[3]["tier"])
     assert record.fact_sources == events[2]["sources"]
@@ -40,7 +41,7 @@ async def test_a_look_streams_the_card_then_done_and_records_it(client, store):
 async def test_with_a_device_token_only_requests_carrying_it_are_served(settings, store):
     settings.device_token = SecretStr("s3cret")
     async with client_for(create_app(settings, store=store)) as c:
-        for token in (None, "wrong"):
+        for token in (None, "wrong", "café".encode()):
             headers = HEADERS | ({"X-Edith-Token": token} if token else {})
             response = await c.post("/look", files=look_files(), headers=headers)
             assert response.status_code == 401
@@ -71,12 +72,13 @@ async def test_the_profile_header_must_be_a_uuid(client, headers):
         ({"image": ("crop.jpg", make_jpeg(), "image/jpeg")}, 422, "invalid_meta"),
         (look_files(meta="{not json"), 422, "invalid_meta"),
         (look_files(meta=meta_json(source="lasso")), 422, "invalid_meta"),
-        (look_files(meta=meta_json(width=0)), 422, "invalid_meta"),
+        (look_files(image=make_jpeg(0, 0)), 422, "invalid_image"),
         ({"meta": (None, meta_json())}, 422, "missing_image"),
         (look_files(image=b"\x89PNG\r\n\x1a\n"), 422, "invalid_image"),
         (look_files(image=b"\xff\xd8\xff\xd9"), 422, "invalid_image"),
         (look_files(image=make_jpeg(1025, 300)), 422, "image_dimensions"),
-        (look_files(image=make_jpeg() + b"\x00" * (2 * 1024 * 1024)), 413, "image_too_large"),
+        (look_files(image=make_jpeg() + b"\x00" * (2 * 1024 * 1024 + 1000)), 413, "image_too_large"),
+        (look_files(image=make_jpeg() + b"\x00" * (2 * 1024 * 1024 + 100 * 1024)), 413, "body_too_large"),
     ],
 )
 async def test_bad_requests_are_refused_before_streaming(client, store, files, status, code):

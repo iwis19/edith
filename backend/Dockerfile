@@ -6,6 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_COMPILE_BYTECODE=1 UV_LINK_M
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY edith_backend ./edith_backend
+RUN useradd --system --no-create-home --uid 10001 edith
+USER edith
 
 ENV PATH="/app/.venv/bin:$PATH" PUBLIC_SERVER=1
 EXPOSE 8000

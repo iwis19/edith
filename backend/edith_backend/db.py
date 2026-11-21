@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -10,6 +11,8 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 log = logging.getLogger("edith.db")
+
+_STATUS_TTL_S = 5.0
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,9 @@ class PostgresStore:
             # prepare_threshold=None keeps the pool usable behind a transaction-mode pooler URL.
             kwargs={"connect_timeout": 5, "prepare_threshold": None},
         )
+        self._status_lock = asyncio.Lock()
+        self._status = "unreachable"
+        self._status_at = float("-inf")
 
     async def open(self) -> None:
         if sys.platform == "win32" and isinstance(asyncio.get_running_loop(), asyncio.ProactorEventLoop):
@@ -74,13 +80,19 @@ class PostgresStore:
         await self._pool.close()
 
     async def status(self) -> str:
-        try:
-            async with self._pool.connection(timeout=5) as conn:
-                await conn.execute("select 1")
-            return "connected"
-        except Exception:
-            log.exception("database health check failed")
-            return "unreachable"
+        # /health is unauthenticated, so the answer is cached: a flood of checks shares one query every few seconds
+        # instead of taking pool connections away from Looks.
+        async with self._status_lock:
+            if time.monotonic() - self._status_at > _STATUS_TTL_S:
+                try:
+                    async with self._pool.connection(timeout=5) as conn:
+                        await conn.execute("select 1")
+                    self._status = "connected"
+                except Exception:
+                    log.exception("database health check failed")
+                    self._status = "unreachable"
+                self._status_at = time.monotonic()
+            return self._status
 
     async def record_look(self, record: LookRecord) -> None:
         try:

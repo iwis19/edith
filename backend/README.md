@@ -20,7 +20,7 @@ Returns `{"status": "ok", "version": "...", "db": "connected" | "unreachable" | 
 A multipart form with two fields:
 
 - `image`: the cropped JPEG, at most 2 MB and 1024 px on its longest side.
-- `meta`: JSON `{"look_id": int, "source": "pinch" | "scan", "captured_at": ISO 8601, "width": int, "height": int}`.
+- `meta`: JSON `{"look_id": int, "source": "pinch" | "scan", "captured_at": ISO 8601}`. The image size is read from the JPEG itself.
 
 The response is newline-delimited JSON (`application/x-ndjson`), one event per line, each with `t_ms` since the request arrived:
 
@@ -33,7 +33,7 @@ The response is newline-delimited JSON (`application/x-ndjson`), one event per l
 | `done` | none |
 | `error` | `code` (`timeout` or `agent_failed`), `message` |
 
-The stream always ends with `done` or `error`. A bad request is refused before streaming with an HTTP error and `{"error": {"code", "message"}}`. Each finished Look is written to the `looks` table.
+The stream always ends with `done` or `error`. A bad request is refused before streaming with an HTTP error and `{"error": {"code", "message"}}`. The token and the body size (the image cap plus 64 KB for the form) are checked before any of the body is read. Each finished Look is written to the `looks` table.
 
 ## Set up
 

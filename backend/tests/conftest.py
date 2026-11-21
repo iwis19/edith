@@ -27,7 +27,7 @@ def make_jpeg(width: int = 640, height: int = 480, sof: int = 0xC0) -> bytes:
 
 
 def meta_json(**overrides) -> str:
-    meta = {"look_id": 7, "source": "pinch", "captured_at": "2026-11-21T10:00:00Z", "width": 640, "height": 480}
+    meta = {"look_id": 7, "source": "pinch", "captured_at": "2026-11-21T10:00:00Z"}
     meta.update(overrides)
     return json.dumps(meta)
 

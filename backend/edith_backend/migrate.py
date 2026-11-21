@@ -10,11 +10,16 @@ import psycopg
 from .config import Settings
 
 MIGRATIONS = Path(__file__).resolve().parent / "migrations"
+# Any fixed key works; it only has to be the same for every run.
+_LOCK_KEY = 0x6564697468
 
 
 def migrate(url: str) -> list[str]:
     applied: list[str] = []
     with psycopg.connect(url, autocommit=True) as conn:
+        # Two runs at once (two deploys starting together) would both see a file as new; the lock makes them take
+        # turns, and it is released when the connection closes.
+        conn.execute("select pg_advisory_lock(%s)", (_LOCK_KEY,))
         conn.execute(
             "create table if not exists schema_migrations"
             " (version text primary key, applied_at timestamptz not null default now())"

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 Rarity = Literal["common", "uncommon", "rare", "epic", "legendary", "mythic"]
 
@@ -10,8 +10,6 @@ class LookMeta(BaseModel):
     look_id: int
     source: Literal["pinch", "scan"]
     captured_at: datetime
-    width: int = Field(gt=0)
-    height: int = Field(gt=0)
 
 
 class Source(BaseModel):
