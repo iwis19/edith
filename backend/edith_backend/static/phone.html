@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>EDITH location</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 16px 40px; background: #000; color: #fff; font: 20px/1.35 system-ui, sans-serif; }
+  h1 { margin: 0 0 12px; font-size: 28px; }
+  button { width: 100%; min-height: 96px; border: 0; border-radius: 16px; background: #ffd400; color: #000; font: 700 32px system-ui, sans-serif; }
+  button[disabled] { background: #3a3a3a; color: #bbb; }
+  .card { margin: 16px 0; padding: 16px; border: 2px solid #fff; border-radius: 12px; }
+  .label { color: #ffd400; font-size: 16px; text-transform: uppercase; letter-spacing: .06em; }
+  .place { font-size: 28px; font-weight: 700; word-break: break-word; }
+  .error { border-color: #ff6b6b; color: #ff9b9b; font-weight: 700; }
+  ul { margin: 8px 0 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .hidden { display: none; }
+  #code { display: block; width: 100%; margin: 12px 0; padding: 12px 0; border: 3px solid #fff; border-radius: 16px; background: #000; color: #fff; text-align: center; font: 700 64px system-ui, sans-serif; letter-spacing: .3em; text-indent: .3em; }
+  #code:focus { border-color: #ffd400; outline: none; }
+</style>
+</head>
+<body>
+<h1>EDITH location</h1>
+<form id="pair" class="hidden" autocomplete="off">
+  <p>Look in your headset for the code</p>
+  <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code from the headset" placeholder="----">
+  <button id="connect" type="submit">Connect</button>
+</form>
+<button id="share" type="button" class="hidden">Share location</button>
+<div id="error" class="card error hidden" role="alert"></div>
+<div id="status" class="card hidden">
+  <div class="label">You're at</div>
+  <div id="place" class="place">Not shared yet</div>
+  <div class="label" style="margin-top:14px">Last sent</div>
+  <div id="sent">Never</div>
+  <div class="label" style="margin-top:14px">Nearby</div>
+  <ul id="sights"><li>Nothing yet</li></ul>
+</div>
+<p id="hint" class="hidden">Keep this page open and the screen on. The phone stops sharing when it locks.</p>
+<script>
+(function () {
+  "use strict";
+  var SEND_EVERY_MS = 10000, SEND_AFTER_METRES = 25;
+  var $ = function (id) { return document.getElementById(id); };
+  var TOKEN_KEY = "edith.phone";
+  var token = null, watchId = null, wakeLock = null;
+  var last = { lat: null, lon: null, at: 0 }, latest = null, sending = false, pairing = false;
+
+  function load() {
+    try {
+      token = localStorage.getItem(TOKEN_KEY);
+    } catch (e) {}
+    showScreen();
+  }
+
+  function saveToken(value) {
+    token = value;
+    try {
+      if (value) localStorage.setItem(TOKEN_KEY, value); else localStorage.removeItem(TOKEN_KEY);
+    } catch (e) {}
+  }
+
+  function showScreen() {
+    var paired = !!token;
+    $("pair").classList.toggle("hidden", paired);
+    $("share").classList.toggle("hidden", !paired);
+    $("status").classList.toggle("hidden", !paired);
+    $("hint").classList.toggle("hidden", !paired);
+    if (!paired) $("code").focus();
+  }
+
+  function claim() {
+    var code = $("code").value.replace(/\D/g, "");
+    if (pairing) return;
+    if (code.length !== 4) { showError("Type the 4 digits shown in the headset."); return; }
+    pairing = true;
+    $("connect").disabled = true;
+    fetch("/pair/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code })
+    }).then(function (res) {
+      if (res.status === 404) throw new Error("That code did not work. Look at the headset for the current code.");
+      if (res.status === 429) throw new Error("Too many wrong codes. Wait ten minutes, then try again.");
+      if (!res.ok) throw new Error("The backend refused the code (" + res.status + ").");
+      return res.json();
+    }).then(function (reply) {
+      saveToken(reply.phone_token);
+      $("code").value = "";
+      showError("");
+      showScreen();
+    }).catch(function (err) {
+      showError(err instanceof TypeError ? "Cannot reach the backend. Check the phone's connection." : err.message);
+      $("code").value = "";
+      $("code").focus();
+    }).finally(function () { pairing = false; $("connect").disabled = false; });
+  }
+
+  function showError(text) {
+    var box = $("error");
+    box.textContent = text;
+    box.classList.toggle("hidden", !text);
+  }
+
+  function metres(lat1, lon1, lat2, lon2) {
+    var r = Math.PI / 180, dLat = (lat2 - lat1) * r, dLon = (lon2 - lon1) * r;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 12742000 * Math.asin(Math.sqrt(a));
+  }
+
+  function render(summary) {
+    $("place").textContent = summary.place || (summary.resolving ? "Finding where you are..." : "Place not found yet");
+    var list = $("sights");
+    list.textContent = "";
+    var names = summary.nearest || [];
+    if (!names.length) names = [summary.resolving ? "Looking..." : "Nothing named nearby yet"];
+    names.forEach(function (n) { var li = document.createElement("li"); li.textContent = n; list.appendChild(li); });
+  }
+
+  function send(position) {
+    if (sending || !token) return;
+    sending = true;
+    var c = position.coords;
+    var body = {
+      lat: c.latitude, lon: c.longitude,
+      accuracy_m: Math.min(Math.max(c.accuracy || 0, 0), 5000),
+      taken_at: new Date(position.timestamp).toISOString()
+    };
+    fetch("/location", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Edith-Phone": token },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      if (res.status === 401) { unpair(); throw new Error("This phone needs a new code. Look in your headset."); }
+      if (!res.ok) throw new Error("The backend refused the position (" + res.status + ").");
+      return res.json();
+    }).then(function (summary) {
+      last = { lat: body.lat, lon: body.lon, at: Date.now() };
+      $("sent").textContent = new Date().toLocaleTimeString() + ", accurate to " + Math.round(c.accuracy) + " m";
+      showError("");
+      render(summary);
+    }).catch(function (err) {
+      showError(err instanceof TypeError ? "Cannot reach the backend. Check the phone's connection." : err.message);
+    }).finally(function () { sending = false; });
+  }
+
+  function onPosition(position) {
+    latest = position;
+    var now = Date.now();
+    var moved = last.lat === null ? Infinity :
+      metres(last.lat, last.lon, position.coords.latitude, position.coords.longitude);
+    if (now - last.at >= SEND_EVERY_MS || moved >= SEND_AFTER_METRES) send(position);
+  }
+
+  function onGeoError(err) {
+    if (err.code === 1) showError("Location permission was denied. Allow location for this site in the phone's settings, then tap Share location.");
+    else if (err.code === 2) showError("The phone could not find its position. Go outside or check that location is on.");
+    else showError("Finding the position took too long. It will keep trying.");
+    if (err.code === 1) stop();
+  }
+
+  function holdWake() {
+    if (!("wakeLock" in navigator)) return;
+    navigator.wakeLock.request("screen").then(function (lock) { wakeLock = lock; }).catch(function () {});
+  }
+
+  function stop() {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    $("share").disabled = false;
+    $("share").textContent = "Share location";
+  }
+
+  function unpair() {
+    stop();
+    saveToken(null);
+    showScreen();
+  }
+
+  function start() {
+    if (!token) { showScreen(); return; }
+    if (!navigator.geolocation) { showError("This browser has no location support."); return; }
+    showError("");
+    $("share").disabled = true;
+    $("share").textContent = "Sharing";
+    holdWake();
+    watchId = navigator.geolocation.watchPosition(onPosition, onGeoError,
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  }
+
+  // A tick re-sends the newest position when the phone is standing still and watchPosition stays quiet.
+  setInterval(function () {
+    if (watchId !== null && latest && Date.now() - last.at >= SEND_EVERY_MS) send(latest);
+  }, 2000);
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && watchId !== null) holdWake();
+  });
+
+  $("share").addEventListener("click", start);
+  $("pair").addEventListener("submit", function (e) { e.preventDefault(); claim(); });
+  $("code").addEventListener("input", function () {
+    this.value = this.value.replace(/\D/g, "").slice(0, 4);
+    if (this.value.length === 4) claim();
+  });
+  load();
+})();
+</script>
+</body>
+</html>

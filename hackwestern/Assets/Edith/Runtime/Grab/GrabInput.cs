@@ -17,6 +17,7 @@ namespace Edith.Grab
         readonly List<(int id, SightBox box)> targets = new List<(int id, SightBox box)>();
         GrabTracker tracker;
         GrabPhase loggedPhase;
+        bool loggedClosed;
 
         /// Adds `owner`'s cards to the ones a fist can grab, from the next frame on.
         public void Register(IGrabTargets owner)
@@ -41,8 +42,19 @@ namespace Edith.Grab
                 owners[i].AddGrabTargets(targets);
             var reading = tracker.Step(hand.Read(), targets);
             Claimed = reading.Claimed;
+            LogCurl();
             Log(reading);
             Stepped?.Invoke(reading);
+        }
+
+        // Every close and open logs its curl, and an open the deepest curl of that fist, so GrabTuning can be set from real hands.
+        void LogCurl()
+        {
+            if (tracker.IsClosed == loggedClosed) return;
+            loggedClosed = tracker.IsClosed;
+            Debug.Log(loggedClosed
+                ? $"[EDITH grab] closed curl {tracker.LastCurl:F2}"
+                : $"[EDITH grab] opened curl {tracker.LastCurl:F2}, deepest {tracker.DeepestCurl:F2}");
         }
 
         void Log(in GrabReading reading)

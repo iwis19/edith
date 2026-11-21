@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 
 Rarity = Literal["common", "uncommon", "rare", "epic", "legendary", "mythic"]
 
@@ -10,6 +11,32 @@ class LookMeta(BaseModel):
     look_id: int
     source: Literal["pinch", "scan"]
     captured_at: datetime
+
+
+class CollectMeta(BaseModel):
+    look_ref: UUID
+    collected_at: AwareDatetime | None = None
+
+
+class ScanMeta(BaseModel):
+    captured_at: datetime
+    # Made by the headset once per launch. Hooks are remembered for one session at a time.
+    session: UUID
+
+
+class ScanPick(BaseModel):
+    """One thing worth a look. Coordinates are fractions of the upright image: origin top-left, y down."""
+
+    name: str
+    hook: str
+    point: tuple[float, float]
+    box: tuple[float, float, float, float]
+
+
+class ScanReply(BaseModel):
+    scan_ref: str
+    ms: int
+    picks: list[ScanPick]
 
 
 class Source(BaseModel):
@@ -57,5 +84,14 @@ class ErrorEvent(_Event):
     message: str
 
 
-CardEvent = Name | Fact | RarityEvent
-LookEvent = Accepted | CardEvent | Done | ErrorEvent
+class LookDetails(BaseModel):
+    """What the Card agent learned about the Look that the headset does not need: it is recorded with the Look and never
+    sent down the stream."""
+
+    kind: str
+    place: str | None = None
+
+
+StreamedEvent = Name | Fact | RarityEvent
+CardEvent = StreamedEvent | LookDetails
+LookEvent = Accepted | StreamedEvent | Done | ErrorEvent

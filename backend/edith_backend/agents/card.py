@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Protocol
 from uuid import UUID
 
@@ -10,6 +10,7 @@ from openai import AsyncOpenAI
 
 from ..config import Settings
 from ..events import CardEvent, Fact, LookMeta, Name, RarityEvent, Source
+from ..location import Whereabouts
 from .card_model import CardModelAgent
 from .writers import GeminiWriter, OpenAIWriter
 
@@ -60,20 +61,23 @@ class StubCardAgent:
         yield RarityEvent(tier=tier)
 
 
-def make_card_agent(settings: Settings) -> CardAgent:
+def make_card_agent(
+    settings: Settings, whereabouts: Callable[[UUID], Whereabouts | None] = lambda _: None
+) -> CardAgent:
     """The writers come from card_provider. Without that provider's key the stub answers, so the pipe works with no
-    keys at all."""
+    keys at all. `whereabouts` gives the phone's place for a profile."""
     if settings.card_provider == "openai" and settings.openai_api_key:
         client = AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value(),
                              timeout=settings.look_timeout_s, max_retries=1)
         return CardModelAgent(
             name_writer=OpenAIWriter(client, settings.openai_name_model),
             fact_writer=OpenAIWriter(client, settings.openai_fact_model, settings.openai_fact_reasoning_effort),
+            whereabouts=whereabouts,
         )
     if settings.card_provider == "gemini" and settings.gemini_api_key:
         writer = GeminiWriter(httpx.AsyncClient(timeout=settings.look_timeout_s),
                               settings.gemini_api_key.get_secret_value(), settings.gemini_card_model,
                               settings.gemini_thinking_level)
-        return CardModelAgent(name_writer=writer, fact_writer=writer)
+        return CardModelAgent(name_writer=writer, fact_writer=writer, whereabouts=whereabouts)
     log.warning("no %s key, so Looks get canned stub cards", settings.card_provider)
     return StubCardAgent(settings)

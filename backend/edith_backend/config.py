@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     device_token: SecretStr | None = None
     # Set by the Dockerfile: a public backend must not start without device_token.
     public_server: bool = False
+    # The address the headset's pairing panel tells people to open on their phone. Empty uses this backend's own /phone,
+    # which on a hosted domain can be too long to type, so it can be set to a short link that redirects there.
+    phone_link: str = ""
 
     # Which provider writes the card. Without that provider's key the stub card agent answers instead.
     card_provider: Literal["openai", "gemini"] = "openai"
@@ -44,6 +47,7 @@ class Settings(BaseSettings):
     # Larger Gemini models reject "minimal" and think for seconds before writing, which is too slow for a Look.
     gemini_thinking_level: str = "minimal"
     scan_model: str = "gemini-3.5-flash"
+    scan_thinking_level: str = "minimal"
     live_model: str = "gemini-3.8-live"
     live_voice: LiveVoice = "Kore"
     # Google Search grounding for Ask. A free-tier key refuses the Live session when the setup carries the tool.
@@ -58,5 +62,9 @@ class Settings(BaseSettings):
 
     max_image_bytes: int = 2 * 1024 * 1024
     max_image_side: int = 1024
+    # A Scan sends the whole camera frame, 1280x960, where a Look sends a crop.
+    scan_max_image_side: int = 1280
     look_timeout_s: float = 20.0
+    # The headset gives a scan 8 s, so the backend answers with its own error first.
+    scan_timeout_s: float = 7.0
     db_pool_max: int = 5

@@ -2,13 +2,14 @@ import asyncio
 import json
 import sys
 import uuid
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 
 from edith_backend.app import create_app
 from edith_backend.config import Settings
-from edith_backend.db import LookRecord
+from edith_backend.db import LookRecord, Memory
 
 def pytest_asyncio_loop_factories(config, item):
     # psycopg's async mode cannot run on Windows' default proactor loop.
@@ -35,6 +36,7 @@ def meta_json(**overrides) -> str:
 class RecordingStore:
     def __init__(self) -> None:
         self.records: list[LookRecord] = []
+        self.memories: dict[int, tuple[Memory, uuid.UUID, bytes]] = {}
 
     async def open(self) -> None:
         pass
@@ -47,6 +49,29 @@ class RecordingStore:
 
     async def record_look(self, record: LookRecord) -> None:
         self.records.append(record)
+
+    async def collect(self, profile_id, look_ref, image, collected_at=None):
+        for memory, owner, _ in self.memories.values():
+            if memory.look_ref == look_ref and owner == profile_id:
+                return memory.id
+        record = next((r for r in self.records if r.look_ref == look_ref and r.profile_id == profile_id), None)
+        if record is None or record.status != "done" or record.name is None:
+            return None
+        memory = Memory(
+            id=len(self.memories) + 1, look_ref=look_ref, name=record.name, kind=record.kind, fact=record.fact,
+            sources=record.fact_sources, rarity=record.rarity, place=record.place,
+            created_at=min(collected_at or datetime.now(UTC), datetime.now(UTC)),
+        )
+        self.memories[memory.id] = (memory, profile_id, image)
+        return memory.id
+
+    async def list_memories(self, profile_id, limit):
+        mine = [m for m, owner, _ in self.memories.values() if owner == profile_id]
+        return sorted(mine, key=lambda m: m.id, reverse=True)[:limit]
+
+    async def memory_image(self, profile_id, memory_id):
+        entry = self.memories.get(memory_id)
+        return entry[2] if entry and entry[1] == profile_id else None
 
 
 @pytest.fixture

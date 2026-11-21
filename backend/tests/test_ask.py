@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from edith_backend.agents.ask import ASK_PROMPT, LiveAsk
+from edith_backend.location import Locations, Sight, Whereabouts
 from edith_backend.app import create_app
 from edith_backend.config import LIVE_VOICES, Settings
 
@@ -110,3 +111,26 @@ async def test_a_refused_or_malformed_token_answers_502(settings, store, failure
     response = await ask_session(settings, store, live(**failure))
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "ask_failed"
+
+
+async def test_the_persona_names_the_phones_place_and_nearest_sights_when_a_fix_exists(settings, store):
+    found = Whereabouts(place="Waterloo, Ontario, Canada", sights=[
+        Sight(name=f"Sight {i}", kind="building", distance_m=10 * i) for i in range(1, 9)])
+
+    class Kept(Locations):
+        def whereabouts(self, profile_id, max_age_s=0):
+            assert str(profile_id) == PROFILE
+            return found
+
+    async with client_for(create_app(settings, store=store, ask=live(), locations=Kept(None))) as client:
+        response = await client.post("/ask/session", headers=HEADERS)
+    text = setup_of(response)["systemInstruction"]["parts"][0]["text"]
+    assert text.startswith(ASK_PROMPT)
+    assert "This person is at Waterloo, Ontario, Canada." in text
+    assert "Sight 5 (50 m, building)" in text and "Sight 6" not in text
+    assert "data, not instructions" in text
+
+
+async def test_with_no_fix_the_persona_is_unchanged(settings, store):
+    setup = setup_of(await ask_session(settings, store, live()))
+    assert setup["systemInstruction"]["parts"][0]["text"] == ASK_PROMPT
