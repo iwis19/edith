@@ -61,7 +61,7 @@ namespace Edith.Scrapbook
         {
             photo.gameObject.SetActive(true);
             notice.gameObject.SetActive(false);
-            view.Show(memory.Tier, string.IsNullOrEmpty(memory.Fact) ? memory.Name : memory.Fact);
+            view.Show(memory.Tier, memory.Name, memory.Fact);
         }
 
         /// Shows `title` and `body` as plain text with no photo.

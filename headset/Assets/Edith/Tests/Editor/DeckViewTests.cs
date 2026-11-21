@@ -69,14 +69,14 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_card_has_no_badge_place_name_or_day()
+        public void A_card_shows_the_name_over_the_fact_like_a_snapshot_and_no_badge_place_or_day()
         {
             var photo = Photo(8, 8);
             view.Show(Memories(1), 0f, _ => photo);
             var names = Middle.GetComponentsInChildren<RectTransform>(true).Select(part => part.name).ToArray();
-            foreach (var gone in new[] { "BadgeBox", "Badge", "Place", "Day", "Name" }) CollectionAssert.DoesNotContain(names, gone);
+            foreach (var gone in new[] { "BadgeBox", "Badge", "Place", "Day" }) CollectionAssert.DoesNotContain(names, gone);
             var texts = Middle.GetComponentsInChildren<Text>(true).Select(text => text.text).Where(text => text != "").ToArray();
-            CollectionAssert.AreEqual(new[] { "Fact 0." }, texts);
+            CollectionAssert.AreEqual(new[] { "Thing 0", "Fact 0." }, texts);
         }
 
         [Test]
