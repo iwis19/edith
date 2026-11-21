@@ -44,7 +44,6 @@ namespace Edith.Scan
         [SerializeField] Font font;
         [SerializeField] Material material;
         [SerializeField] ScanTuning tuning = new ScanTuning();
-        [SerializeField, Range(1, 100)] int jpegQuality = 85;
 
         // A pin sits this far in front of the surface it was measured on, so the surface does not occlude it.
         const float LiftMeters = 0.04f;
@@ -179,7 +178,7 @@ namespace Edith.Scan
             try
             {
                 var capturedAt = DateTime.UtcNow;
-                var frame = await ScanCapture.CaptureAsync(cameraAccess, jpegQuality);
+                var frame = await headsetCamera.CaptureFullAsync();
                 if (this == null) return;
                 Debug.Log($"[EDITH scan] {id} captured {frame.Size.x}x{frame.Size.y}, {frame.Jpeg.Length / 1024} KB, {Ms()} ms in");
                 if (environmentRaycast != null)

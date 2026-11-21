@@ -30,7 +30,7 @@ namespace Edith.Look
         LookClient(int lookId) => this.lookId = lookId;
 
         /// Starts sending `jpeg` to the backend this build was set up with and returns without waiting.
-        public static LookClient Send(int lookId, byte[] jpeg, DateTime capturedAtUtc)
+        public static LookClient Send(int lookId, LookSource source, byte[] jpeg, DateTime capturedAtUtc)
         {
             var settings = BackendSettings.Load();
             if (settings == null)
@@ -39,14 +39,14 @@ namespace Edith.Look
                 unset.Fail("not_configured");
                 return unset;
             }
-            return Send(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, lookId, jpeg, capturedAtUtc, LookTimeouts.Default);
+            return Send(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, lookId, source, jpeg, capturedAtUtc, LookTimeouts.Default);
         }
 
-        public static LookClient Send(string url, string deviceToken, string profileId, int lookId, byte[] jpeg,
+        public static LookClient Send(string url, string deviceToken, string profileId, int lookId, LookSource source, byte[] jpeg,
             DateTime capturedAtUtc, LookTimeouts timeouts)
         {
             var client = new LookClient(lookId);
-            var meta = LookMeta.Json(lookId, capturedAtUtc);
+            var meta = LookMeta.Json(lookId, source, capturedAtUtc);
             Task.Run(() => client.Run(url, deviceToken, profileId, jpeg, meta, timeouts));
             return client;
         }

@@ -103,7 +103,7 @@ namespace Edith.Tests
         }
 
         static LookClient Send(FakeBackend backend, LookTimeouts? timeouts = null) =>
-            LookClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", 42, Jpeg, Captured, timeouts ?? Quick);
+            LookClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", 42, LookSource.Pinch, Jpeg, Captured, timeouts ?? Quick);
 
         static List<LookEvent> Collect(LookClient client, float seconds = 10f)
         {
@@ -280,7 +280,7 @@ namespace Edith.Tests
             probe.Start();
             var port = ((IPEndPoint)probe.LocalEndpoint).Port;
             probe.Stop();
-            var client = LookClient.Send($"http://127.0.0.1:{port}", "", "p", 1, Jpeg, Captured, new LookTimeouts(5f, 5f, 20f));
+            var client = LookClient.Send($"http://127.0.0.1:{port}", "", "p", 1, LookSource.Pinch, Jpeg, Captured, new LookTimeouts(5f, 5f, 20f));
             var events = Collect(client, 20f);
             Assert.AreEqual(1, events.Count);
             Assert.AreEqual("network", events[0].Code);

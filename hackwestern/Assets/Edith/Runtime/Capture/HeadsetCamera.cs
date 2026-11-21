@@ -14,19 +14,22 @@ namespace Edith.Capture
 {
     public enum CameraStatus { Idle, Unsupported, Requesting, PermissionDenied, Starting, Streaming }
 
-    /// A region of the headset camera's image, as a JPEG.
+    /// The headset camera's image, or a region of it, as a JPEG.
     public readonly struct CameraFrame
     {
         public readonly byte[] Jpeg;
         public readonly Vector2Int Size;
         /// When the camera took the image, in UTC.
         public readonly DateTime CapturedAt;
+        /// Where the camera was for this image.
+        public readonly Pose CameraPose;
 
-        public CameraFrame(byte[] jpeg, Vector2Int size, DateTime capturedAt)
+        public CameraFrame(byte[] jpeg, Vector2Int size, DateTime capturedAt, Pose cameraPose)
         {
             Jpeg = jpeg;
             Size = size;
             CapturedAt = capturedAt;
+            CameraPose = cameraPose;
         }
     }
 
@@ -44,8 +47,8 @@ namespace Edith.Capture
         }
     }
 
-    /// Streams the headset's left passthrough camera once the user allows it, and hands out JPEG crops of it, scaled
-    /// to at most CropSize.MaxSide on the longer side.
+    /// Streams the headset's left passthrough camera once the user allows it, and hands out JPEGs of it: whole
+    /// images, or crops scaled to at most CropSize.MaxSide on the longer side.
     public sealed class HeadsetCamera : MonoBehaviour
     {
         public const string HeadsetCameraPermission = "horizonos.permission.HEADSET_CAMERA";
@@ -109,7 +112,19 @@ namespace Edith.Capture
             var pose = cameraAccess.GetCameraPose();
             var texture = cameraAccess.GetTexture();
             var pixels = RegionPixels(region, pose, new Vector2Int(texture.width, texture.height));
-            return Readback(texture, pixels, cameraAccess.Timestamp);
+            return Readback(texture, pixels, CropSize.MaxSide, cameraAccess.Timestamp, pose);
+        }
+
+        /// Reads back the whole latest image at full size. Throws InvalidOperationException when the camera is not
+        /// Streaming.
+        public Task<CameraFrame> CaptureFullAsync()
+        {
+            if (Status != CameraStatus.Streaming)
+                throw new InvalidOperationException($"Camera is {Status}, not Streaming.");
+
+            var texture = cameraAccess.GetTexture();
+            return Readback(texture, new RectInt(0, 0, texture.width, texture.height), Mathf.Max(texture.width, texture.height),
+                cameraAccess.Timestamp, cameraAccess.GetCameraPose());
         }
 
         RectInt RegionPixels(WorldQuad quad, Pose pose, Vector2Int image)
@@ -127,10 +142,11 @@ namespace Edith.Capture
                    ?? throw new InvalidOperationException("Crop frame is mostly or wholly outside the camera image.");
         }
 
-        /// The GPU scales the region down while it copies it out, so only the fitted size crosses to the CPU.
-        Task<CameraFrame> Readback(Texture texture, RectInt pixels, DateTime capturedAt)
+        /// The GPU scales the region down while it copies it out, so only the fitted size crosses to the CPU, and the
+        /// JPEG is encoded on a worker thread so a full image does not stall the frame.
+        Task<CameraFrame> Readback(Texture texture, RectInt pixels, int maxSide, DateTime capturedAt, Pose pose)
         {
-            var size = CropSize.FitLongSide(pixels.width, pixels.height, CropSize.MaxSide);
+            var size = CropSize.FitLongSide(pixels.width, pixels.height, maxSide);
             var scaled = RenderTexture.GetTemporary(size.x, size.y, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             Graphics.Blit(texture, scaled,
                 new Vector2(pixels.width / (float)texture.width, pixels.height / (float)texture.height),
@@ -146,18 +162,21 @@ namespace Edith.Capture
                     return;
                 }
 
-                try
+                var rgba = request.GetData<byte>().ToArray();
+                var read = new Vector2Int(request.width, request.height);
+                var quality = jpegQuality;
+                Task.Run(() =>
                 {
-                    var encoded = ImageConversion.EncodeNativeArrayToJPG(
-                        request.GetData<byte>(), GraphicsFormat.R8G8B8A8_UNorm, (uint)request.width, (uint)request.height, 0, jpegQuality);
-                    var jpeg = encoded.ToArray();
-                    encoded.Dispose();
-                    completion.SetResult(new CameraFrame(jpeg, new Vector2Int(request.width, request.height), capturedAt));
-                }
-                catch (Exception e)
-                {
-                    completion.SetException(e);
-                }
+                    try
+                    {
+                        var jpeg = ImageConversion.EncodeArrayToJPG(rgba, GraphicsFormat.R8G8B8A8_UNorm, (uint)read.x, (uint)read.y, 0, quality);
+                        completion.SetResult(new CameraFrame(jpeg, read, capturedAt, pose));
+                    }
+                    catch (Exception e)
+                    {
+                        completion.SetException(e);
+                    }
+                });
             });
             return completion.Task;
         }
