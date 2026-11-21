@@ -86,6 +86,19 @@ namespace Edith.Scrapbook
         {
             chip = default;
             degrees = float.MaxValue;
+            // A pinch squarely on a pill belongs to it, a dimmed one included, so the slack around a neighbour never
+            // takes a pinch aimed at a tier with nothing in it.
+            foreach (var row in new[] { tabs, chips })
+                for (var i = 0; i < row.Shown; i++)
+                {
+                    var pill = row.Pills[i];
+                    var rect = pill.Backing.rectTransform;
+                    if (!SightLine.Hits(eye, through, rect.position, rect.rotation, rect.sizeDelta * rect.lossyScale.x, 0f)) continue;
+                    if (!pill.Chip.Enabled) return false;
+                    chip = pill.Chip;
+                    degrees = SightLine.Offset(eye, through, rect.position);
+                    return true;
+                }
             var found = false;
             foreach (var row in new[] { tabs, chips })
                 for (var i = 0; i < row.Shown; i++)
