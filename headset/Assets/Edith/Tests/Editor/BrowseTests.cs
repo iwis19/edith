@@ -89,13 +89,15 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void Choosing_all_shows_everything()
+        public void Choosing_the_selected_chip_again_clears_it_and_every_chip_is_unselected()
         {
             var browse = Six();
             browse.SetLens(Lens.Rarity);
             browse.ToggleFilter(Rarity.Mythic);
-            browse.ToggleFilter(null);
+            Assert.IsTrue(Chips(browse)[5].Selected);
+            browse.ToggleFilter(Rarity.Mythic);
             Assert.AreEqual(6, browse.Visible.Count);
+            Assert.IsFalse(Chips(browse).Any(chip => chip.Selected));
         }
 
         [Test]
@@ -146,7 +148,7 @@ namespace Edith.Tests
         {
             var chips = Chips(Six(), Day(18));
             CollectionAssert.AreEqual(new[] { "11/21", "11/20", "11/18", "11/12" }, Labels(chips));
-            CollectionAssert.AreEqual(new[] { false, false, true, false }, chips.Select(chip => chip.Selected).ToArray());
+            CollectionAssert.AreEqual(new[] { false, false, true, false, false, false }, chips.Select(chip => chip.Selected).ToArray());
             Assert.AreEqual(ChipKind.Date, chips[2].Kind);
             Assert.AreEqual(Day(18), chips[2].Date);
         }
@@ -161,14 +163,14 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_rarity_lens_offers_all_and_each_tier_that_has_a_memory()
+        public void The_rarity_lens_offers_every_tier_in_order_and_only_those_with_a_memory_are_enabled()
         {
             var browse = Six();
             browse.SetLens(Lens.Rarity);
             var chips = Chips(browse);
-            CollectionAssert.AreEqual(new[] { "All 6", "Common 2", "Rare 2", "Mythic 1" }, Labels(chips));
-            Assert.IsTrue(chips[0].Selected);
-            Assert.AreEqual(ChipKind.AllTiers, chips[0].Kind);
+            CollectionAssert.AreEqual(new[] { "Common 2", "Uncommon 0", "Rare 2", "Epic 0", "Legendary 0", "Mythic 1" }, Labels(chips));
+            CollectionAssert.AreEqual(new[] { true, false, true, false, false, true }, chips.Select(chip => chip.Enabled).ToArray());
+            Assert.IsTrue(chips.All(chip => chip.Kind == ChipKind.Tier && !chip.Selected));
             Assert.AreEqual(Rarity.Rare, chips[2].Tier);
         }
 
@@ -179,7 +181,7 @@ namespace Edith.Tests
             browse.SetLens(Lens.Rarity);
             browse.ToggleFilter(Rarity.Rare);
             var chips = Chips(browse);
-            CollectionAssert.AreEqual(new[] { false, false, true, false }, chips.Select(chip => chip.Selected).ToArray());
+            CollectionAssert.AreEqual(new[] { false, false, true, false, false, false }, chips.Select(chip => chip.Selected).ToArray());
         }
 
         [Test]

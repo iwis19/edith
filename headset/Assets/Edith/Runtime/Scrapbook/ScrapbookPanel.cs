@@ -13,8 +13,8 @@ namespace Edith.Scrapbook
 {
     /// The Scrapbook: the collected memories as a deck of cards to scroll through. The wrist button opens it in
     /// front of the user, where it stays put in the room, and closes it. A thumb swipe moves one card, a sideways
-    /// pinch-drag scrubs, and a quick pinch on a side card brings it to the middle. The lens bar under the deck jumps
-    /// to a day, narrows the deck to a rarity, or shows the globe of places: a pinch on a city's pin dives into its
+    /// pinch-drag scrubs, and a quick pinch on a side card brings it to the middle. The tabs above the deck pick
+    /// the lens, and the chips under it jump to a day, narrows the deck to a rarity, or shows the globe of places: a pinch on a city's pin dives into its
     /// street map, and a pinch on a spot's pin narrows the deck to that spot. A pinch goes to the first thing in its
     /// line: a chip, a pin, the globe, a card, and otherwise the deck. While it is open it holds the hand gate, so
     /// pinches make no Looks and palms start no Scan.
@@ -297,7 +297,7 @@ namespace Edith.Scrapbook
                     case ChipKind.City: browse.Dive(chosen.City); break;
                     case ChipKind.Globe: browse.Surface(); break;
                     case ChipKind.Spot: browse.ToggleSpot(chosen.Spot); break;
-                    default: browse.ToggleFilter(chosen.Kind == ChipKind.Tier ? chosen.Tier : (Rarity?)null); break;
+                    case ChipKind.Tier: browse.ToggleFilter(chosen.Tier); break;
                 }
             });
         }
