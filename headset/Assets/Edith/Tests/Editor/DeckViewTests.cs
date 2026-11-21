@@ -119,28 +119,51 @@ namespace Edith.Tests
         public void Between_two_cards_both_are_drawn_and_neither_is_square_on()
         {
             view.Show(Memories(10), 4.5f, NoPhoto);
-            var names = Drawn.Select(card => Shown(card, "Name")).ToArray();
-            CollectionAssert.Contains(names, "Thing 4");
-            CollectionAssert.Contains(names, "Thing 5");
+            var facts = Drawn.Select(card => Shown(card, "Fact")).ToArray();
+            CollectionAssert.Contains(facts, "Fact 4.");
+            CollectionAssert.Contains(facts, "Fact 5.");
             Assert.IsTrue(Drawn.All(card => Mathf.Abs(card.transform.localPosition.x) > 0.01f));
         }
 
         [Test]
-        public void A_photo_is_fitted_whole_into_the_frame_at_its_own_shape()
+        public void A_photo_keeps_its_own_shape_and_its_border_hugs_it()
         {
             var wide = Photo(400, 100);
             view.Show(Memories(1), 0f, _ => wide);
             var frame = Part(Middle, "Frame").sizeDelta;
             var photo = Part(Middle, "Photo").sizeDelta;
             Assert.AreEqual(4f, photo.x / photo.y, 1e-3f);
-            Assert.That(photo.x, Is.LessThan(frame.x));
-            Assert.That(photo.y, Is.LessThan(frame.y));
+            Assert.AreEqual(frame.x - photo.x, frame.y - photo.y, 1e-3f, "an even border, no bars beside the photo");
 
             var tall = Photo(100, 400);
             view.Show(Memories(1), 0f, _ => tall);
+            var tallFrame = Part(Middle, "Frame").sizeDelta;
             photo = Part(Middle, "Photo").sizeDelta;
             Assert.AreEqual(0.25f, photo.x / photo.y, 1e-3f);
-            Assert.That(photo.y, Is.LessThan(frame.y));
+            Assert.AreEqual(tallFrame.x - photo.x, tallFrame.y - photo.y, 1e-3f);
+        }
+
+        [Test]
+        public void The_text_stays_put_whatever_the_photo_shape()
+        {
+            var wide = Photo(400, 100);
+            view.Show(Memories(1), 0f, _ => wide);
+            var caption = Part(Middle, "Caption").position;
+            var wideBottom = Part(Middle, "Frame").anchoredPosition.y - Part(Middle, "Frame").sizeDelta.y * 0.5f;
+            var tall = Photo(100, 400);
+            view.Show(Memories(1), 0f, _ => tall);
+            Assert.AreEqual(caption, Part(Middle, "Caption").position);
+            Assert.AreEqual(wideBottom, Part(Middle, "Frame").anchoredPosition.y - Part(Middle, "Frame").sizeDelta.y * 0.5f, 1e-3f);
+        }
+
+        [Test]
+        public void A_card_shows_no_empty_frame_while_its_photo_is_missing()
+        {
+            view.Show(Memories(1), 0f, NoPhoto);
+            Assert.IsFalse(Part(Middle, "Frame").gameObject.activeSelf);
+            var photo = Photo(8, 8);
+            view.Show(Memories(1), 0f, _ => photo);
+            Assert.IsTrue(Part(Middle, "Frame").gameObject.activeSelf);
         }
 
         [Test]
@@ -160,10 +183,10 @@ namespace Edith.Tests
             view.Show(Memories(10), 5f, NoPhoto);
             var eye = parent.transform.position;
             Assert.AreEqual(5, view.Hit(eye, Part(Middle, "Frame").position * 0.6f));
-            var right = Drawn.Single(card => Shown(card, "Name") == "Thing 6");
+            var right = Drawn.Single(card => Shown(card, "Fact") == "Fact 6.");
             var outer = Part(right, "Frame");
             Assert.AreEqual(6, view.Hit(eye, (outer.position + outer.right * 0.03f) * 0.6f));
-            var left = Drawn.Single(card => Shown(card, "Name") == "Thing 3");
+            var left = Drawn.Single(card => Shown(card, "Fact") == "Fact 3.");
             var far = Part(left, "Frame");
             Assert.AreEqual(3, view.Hit(eye, (far.position - far.right * 0.05f) * 0.6f));
         }
@@ -180,9 +203,9 @@ namespace Edith.Tests
         public void Where_cards_overlap_the_one_nearer_the_middle_is_found()
         {
             view.Show(Memories(10), 5f, NoPhoto);
-            var first = Part(Drawn.Single(card => Shown(card, "Name") == "Thing 6"), "Frame");
+            var first = Part(Drawn.Single(card => Shown(card, "Fact") == "Fact 6."), "Frame");
             // The inner half of the second card on a side lies behind the first.
-            var second = Part(Drawn.Single(card => Shown(card, "Name") == "Thing 7"), "Frame");
+            var second = Part(Drawn.Single(card => Shown(card, "Fact") == "Fact 7."), "Frame");
             Assert.AreEqual(6, view.Hit(Vector3.zero, (second.position - second.right * 0.02f) * 0.6f));
             Assert.AreEqual(6, view.Hit(Vector3.zero, first.position * 0.6f));
         }
@@ -205,7 +228,7 @@ namespace Edith.Tests
             view.Show(memories, 1f, NoPhoto);
             view.ShowNotice("Opening", null);
             view.Show(memories, 1f, NoPhoto);
-            Assert.AreEqual("Thing 1", Shown(Middle, "Name"));
+            Assert.AreEqual("Fact 1.", Shown(Middle, "Fact"));
         }
 
         [Test]

@@ -4,21 +4,21 @@ using UnityEngine.UI;
 
 namespace Edith.Scrapbook
 {
-    /// One card of the deck: the photo, fitted whole into a frame of the rarity's colour, and under it the fun fact
-    /// and the caption, like a snapshot's card. The name shows only when there is no fact. Also draws the Scrapbook's notices, which are cards with no photo.
+    /// One card of the deck: the photo at its own shape inside a thin border of the rarity's colour, and under it the
+    /// fun fact and the caption, like a snapshot's card. The name shows only when there is no fact. Also draws the
+    /// Scrapbook's notices, which are cards with no photo.
     public sealed class MemoryCard
     {
         // Four canvas units per millimetre, so the font is rasterised sharply enough at this size.
         const float UnitsPerMetre = 4000f;
         const float Width = DeckLayout.CardWidth * UnitsPerMetre;
         const float FrameHeight = 600f, TextHeight = 240f;
-        const float FrameInset = 16f, Gap = 12f;
+        const float FrameInset = 8f, Gap = 12f;
         const int NameSize = 44, FactSize = 30, CaptionSize = 28;
         const float NameHeight = 52f, FactLineHeight = 35f, FactMaxHeight = 4f * FactLineHeight, CaptionHeight = 36f;
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
         static readonly Color Quiet = new Color(0.78f, 0.8f, 0.85f, 0.8f);
         static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
-        static readonly Color NoPhoto = new Color(0.04f, 0.05f, 0.07f, 0.8f);
         /// The frame of a memory that has no rarity, and of a notice.
         public static readonly Color Untiered = new Color(0.95f, 0.95f, 0.97f, 0.35f);
 
@@ -42,7 +42,6 @@ namespace Edith.Scrapbook
             card.group = Passive(go.GetComponent<CanvasGroup>());
 
             card.frame = New<Image>("Frame", card.root, material);
-            Anchor(card.frame.rectTransform, new Vector2(Width, FrameHeight), new Vector2(0f, TextHeight * 0.5f));
             card.photo = New<RawImage>("Photo", card.frame.rectTransform, material);
 
             var text = new GameObject("Text", typeof(RectTransform), typeof(CanvasGroup));
@@ -79,13 +78,14 @@ namespace Edith.Scrapbook
             caption.rectTransform.anchoredPosition = new Vector2(0f, -(titleHeight + factHeight + (factHeight > 0f ? Gap : 0f)));
         }
 
-        /// Shows `texture` whole inside the frame, at its own shape. Null shows an empty frame.
+        /// Shows `texture` at its own shape, as large as fits the card, with the border hugging it. Null hides the
+        /// photo and its border until there is one.
         public void SetPhoto(Texture texture)
         {
             if (fitted && photo.texture == texture) return;
             fitted = true;
             photo.texture = texture;
-            photo.color = texture == null ? NoPhoto : Color.white;
+            frame.gameObject.SetActive(texture != null);
             var room = new Vector2(Width, FrameHeight) - 2f * FrameInset * Vector2.one;
             var size = room;
             if (texture != null && texture.width > 0 && texture.height > 0)
@@ -94,6 +94,10 @@ namespace Edith.Scrapbook
                 size = shape > room.x / room.y ? new Vector2(room.x, room.x / shape) : new Vector2(room.y * shape, room.y);
             }
             Anchor(photo.rectTransform, size, Vector2.zero);
+            var rect = frame.rectTransform;
+            rect.sizeDelta = size + 2f * FrameInset * Vector2.one;
+            // The frame grows up from a fixed bottom edge, so the text under it stays put whatever the photo's shape.
+            rect.anchoredPosition = new Vector2(0f, TextHeight * 0.5f - FrameHeight * 0.5f + rect.sizeDelta.y * 0.5f);
         }
 
         /// `pose` is in the frame of the card's parent. `fade` scales the whole card's opacity.
