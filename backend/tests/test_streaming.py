@@ -18,7 +18,7 @@ STEP_S = 0.2
 
 
 class SlowAgent:
-    async def run(self, image, meta, profile_id):
+    async def run(self, image, meta, profile_id, targets=None):
         await asyncio.sleep(STEP_S)
         yield Name(name="a ceramic mug", confidence=0.9)
         await asyncio.sleep(STEP_S)

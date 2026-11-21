@@ -89,13 +89,13 @@ async def test_bad_requests_are_refused_before_streaming(client, store, files, s
 
 
 class FailingAgent:
-    async def run(self, image, meta, profile_id):
+    async def run(self, image, meta, profile_id, targets=None):
         yield Name(name="a mug", confidence=0.9)
         raise RuntimeError("model fell over")
 
 
 class StuckAgent:
-    async def run(self, image, meta, profile_id):
+    async def run(self, image, meta, profile_id, targets=None):
         yield Name(name="a mug", confidence=0.9)
         await asyncio.sleep(10)
 
@@ -113,7 +113,7 @@ async def test_an_agent_failure_ends_the_stream_with_an_error_and_is_recorded(se
 
 
 class StreamingNameAgent:
-    async def run(self, image, meta, profile_id):
+    async def run(self, image, meta, profile_id, targets=None):
         for text in ("a", "a red", "a red mug"):
             yield Name(name=text, confidence=0.0, pending=True)
         yield Name(name="a red mug", confidence=0.8)
@@ -130,7 +130,7 @@ async def test_pending_names_reach_the_client_and_only_the_final_name_is_recorde
 
 
 class DetailedAgent:
-    async def run(self, image, meta, profile_id):
+    async def run(self, image, meta, profile_id, targets=None):
         yield Name(name="a red mug", confidence=0.8)
         yield LookDetails(kind="mug", place="Waterloo, Ontario, Canada")
         yield Fact(text="Mugs are old.", sources=[])
