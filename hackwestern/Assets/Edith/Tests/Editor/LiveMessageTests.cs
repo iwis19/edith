@@ -80,6 +80,25 @@ namespace Edith.Tests
         }
     }
 
+    public class LiveOutboxTests
+    {
+        [Test]
+        public void Messages_go_out_in_order_and_a_full_outbox_drops_the_oldest_audio()
+        {
+            var outbox = new LiveOutbox(2);
+            float[] first = { 1f }, second = { 2f }, third = { 3f };
+            outbox.AddText("photo");
+            Assert.IsNull(outbox.AddAudio(first));
+            Assert.IsNull(outbox.AddAudio(second));
+            Assert.AreSame(first, outbox.AddAudio(third), "the oldest chunk comes back to be reused");
+            outbox.AddText("end");
+
+            var sent = new System.Collections.Generic.List<object>();
+            while (outbox.TryTake(out var chunk, out var json)) sent.Add((object)chunk ?? json);
+            CollectionAssert.AreEqual(new object[] { "photo", second, third, "end" }, sent);
+        }
+    }
+
     public class AskGrantTests
     {
         [Test]
