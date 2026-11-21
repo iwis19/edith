@@ -534,6 +534,101 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4453513310108136, guid: 835e735ca71bf78459fb2cababd74112, type: 3}
   m_PrefabInstance: {fileID: 795926750}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1083127874
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1083127879}
+  - component: {fileID: 1083127878}
+  - component: {fileID: 1083127877}
+  - component: {fileID: 1083127876}
+  - component: {fileID: 1083127875}
+  m_Layer: 0
+  m_Name: Ask
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1083127875
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1083127874}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b600efd3b0659b4291011dff9cfbed7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Ask.AskController
+  gestures: {fileID: 1083127877}
+  voice: {fileID: 1083127876}
+  grab: {fileID: 1145216128}
+  pinch: {fileID: 1145216124}
+  eye: {fileID: 578435152}
+  font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+  material: {fileID: 2100000, guid: 536874e4d0911184dbf48aecb14b21f0, type: 2}
+--- !u!114 &1083127876
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1083127874}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f5644085078dac43bb9437b4eeacd69, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Ask.AskVoice
+--- !u!114 &1083127877
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1083127874}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e78f4d74eec78774b9923e5de72b3d84, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Ask.ThumbGestures
+  source: {fileID: 1083127878}
+--- !u!114 &1083127878
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1083127874}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97ad1841d31cfd844995732927b7c958, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Oculus.VR::OVRMicrogestureEventSource
+  _hand: {fileID: 1405168236}
+  GestureRecognizedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+--- !u!4 &1083127879
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1083127874}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1145216121
 GameObject:
   m_ObjectHideFlags: 0
@@ -1015,3 +1110,4 @@ SceneRoots:
   - {fileID: 60529390}
   - {fileID: 682279827}
   - {fileID: 1145216126}
+  - {fileID: 1083127879}

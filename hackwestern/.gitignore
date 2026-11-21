@@ -18,3 +18,7 @@
 # Meta DevAgent stores a local access token and this machine's LAN address.
 Assets/Resources/DevAgentSettings.asset
 Assets/Resources/DevAgentSettings.asset.meta
+
+# The backend URL and device token, written from backend/.env by the editor setup.
+Assets/Resources/EdithBackend.asset
+Assets/Resources/EdithBackend.asset.meta
