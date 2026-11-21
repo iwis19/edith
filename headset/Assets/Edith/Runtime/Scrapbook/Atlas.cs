@@ -119,9 +119,9 @@ namespace Edith.Scrapbook
             return town && parts.Length >= 3 ? parts[1] : parts[0];
         }
 
-        /// "Spot · Town" for a place that has both, else its first part.
+        /// "Spot, Town" for a place that has both, else its first part.
         public static string Line(string place) =>
-            place.Split(new[] { ", " }, StringSplitOptions.None).Length >= 3 ? $"{Part(place, false)} · {Part(place, true)}" : Part(place, false);
+            place.Split(new[] { ", " }, StringSplitOptions.None).Length >= 3 ? $"{Part(place, false)}, {Part(place, true)}" : Part(place, false);
 
         /// Single-link groups: two memories share a group when a chain of memories joins them, each within `metres`
         /// of the next. Groups and their members keep the order of `memories`.

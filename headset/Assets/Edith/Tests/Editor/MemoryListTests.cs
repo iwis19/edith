@@ -109,7 +109,7 @@ namespace Edith.Tests
         [Test]
         public void A_place_of_three_or_more_parts_reads_as_the_spot_and_the_city()
         {
-            Assert.AreEqual("Western University · London", new Memory(1, "Gate", null, null, "Western University, London, Ontario, Canada", new DateTime(2026, 11, 21)).PlaceLine);
+            Assert.AreEqual("Western University, London", new Memory(1, "Gate", null, null, "Western University, London, Ontario, Canada", new DateTime(2026, 11, 21)).PlaceLine);
         }
 
         [Test]

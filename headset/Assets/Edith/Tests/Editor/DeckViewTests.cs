@@ -74,7 +74,7 @@ namespace Edith.Tests
         {
             var western = new List<Memory> { new Memory(1, "Gate", "A gate.", null, "Western University, London, Ontario, Canada", new DateTime(2026, 11, 21)) };
             view.Show(western, 0f, NoPhoto);
-            Assert.AreEqual("Western University · London", Shown(Middle, "Place"));
+            Assert.AreEqual("Western University, London", Shown(Middle, "Place"));
         }
 
         [Test]

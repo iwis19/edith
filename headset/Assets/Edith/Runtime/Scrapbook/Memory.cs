@@ -33,7 +33,7 @@ namespace Edith.Scrapbook
             Point = point;
         }
 
-        /// The card's place line, "Spot · City", or null without a place.
+        /// The card's place line, "Spot, City", or null without a place.
         public string PlaceLine => Place == null ? null : Atlas.Line(Place);
 
         public static string Day(DateTime date) => date.ToString("M/d", CultureInfo.InvariantCulture);
