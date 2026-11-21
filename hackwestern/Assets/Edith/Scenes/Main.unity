@@ -547,6 +547,8 @@ GameObject:
   - component: {fileID: 1145216124}
   - component: {fileID: 1145216123}
   - component: {fileID: 1145216122}
+  - component: {fileID: 1145216128}
+  - component: {fileID: 1145216127}
   m_Layer: 0
   m_Name: Pinch
   m_TagString: Untagged
@@ -698,12 +700,12 @@ MonoBehaviour:
     rejoinSeconds: 0.4
     rejoinMeters: 0.08
     lostSeconds: 0.2
-    steadyGapMeters: 0.025
-    steadyLookbackSeconds: 0.2
+    releaseLookbackSeconds: 0.1
     minDepthMeters: 0.15
     minTangentSize: 0.06
     maxAspect: 6
     palmFacingMax: 0.5
+  grab: {fileID: 1145216128}
 --- !u!114 &1145216125
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -734,6 +736,44 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1145216127
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1145216121}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6991a485137593b4792cb4de44e81d44, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Grab.SnapshotGrab
+  input: {fileID: 1145216128}
+--- !u!114 &1145216128
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1145216121}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b1e0f5d51088184a89574c74a436af4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Grab.GrabInput
+  hand: {fileID: 1145216125}
+  tuning:
+    closedCurl: 1.15
+    openCurl: 1.45
+    openWithinSeconds: 1
+    gripAlongPalm: 0.75
+    touchMeters: 0.06
+    touchDepthMeters: 0.15
+    pocketBelowEyeMeters: 0.3
+    pullFraction: 0.35
+    pullMinMeters: 0.08
+    pullMaxMeters: 0.18
+    graceSeconds: 0.3
 --- !u!1 &1403383107
 GameObject:
   m_ObjectHideFlags: 0
