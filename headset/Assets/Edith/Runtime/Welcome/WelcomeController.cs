@@ -70,13 +70,11 @@ namespace Edith.Welcome
         readonly List<VoiceCard> voices = new List<VoiceCard>();
         readonly TypedText speech = new TypedText(TypeCharsPerSecond);
         readonly Text[] digits = new Text[4];
-        readonly Glass[] boxes = new Glass[4];
 
         Canvas canvas;
         CanvasGroup group;
         RectTransform screen, character, stepOne, stepTwo;
-        Text speechText, link, status, counterOne, counterTwo;
-        Glass spinner;
+        Text speechText, link;
         Font regular, semibold;
         WelcomeStep shownStep = WelcomeStep.Done;
         readonly PeaceSignsTracker summon = new PeaceSignsTracker();
@@ -178,12 +176,6 @@ namespace Edith.Welcome
             flow.Next();
         }
 
-        void SkipTapped()
-        {
-            WelcomeStore.Save(flow);
-            flow.Skip();
-        }
-
         // ---- drawing
 
         void Enter(WelcomeStep step)
@@ -261,8 +253,7 @@ namespace Edith.Welcome
             leaving = true;
             if (speaker != null) speaker.Stop();
             saying = null;
-            // A paired phone completes the welcome. Skipping pairing also ends it, and brings the pairing panel back,
-            // since the gate stays closed until a phone is paired.
+            // A paired phone completes the welcome.
             WelcomeStore.Done = true;
             if (pairing != null) pairing.Suppressed = false;
             Finished?.Invoke();
@@ -284,7 +275,6 @@ namespace Edith.Welcome
             speechText.text = speech.Render();
 
             if (flow.Step == WelcomeStep.Pair) DrawPairing();
-            counterOne.text = counterTwo.text = flow.Counter;
         }
 
         string SpeechLine()
@@ -302,23 +292,9 @@ namespace Edith.Welcome
         {
             var state = pairing != null ? pairing.Flow : null;
             var code = state != null && state.Phase == PairPhase.Showing ? state.Code : null;
-            for (var i = 0; i < 4; i++)
-            {
-                var has = code != null && i < code.Length;
-                digits[i].text = has ? code[i].ToString() : "";
-                boxes[i].SetLook(has ? Theme.ChipFill : Theme.Tint(0.2f), new Color(1f, 1f, 1f, 0.1f),
-                    has ? Theme.Accent : new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f), Color.clear);
-            }
-            link.text = state != null && state.PhoneUrl != null ? PairingText.TypedAddress(state.PhoneUrl) : "...";
-            if (state == null) status.text = "This build has no EDITH server.";
-            else if (code == null) status.text = state.Failures > 0 ? "Can't reach EDITH. Trying again..." : "Getting a code...";
-            else
-            {
-                var left = Mathf.Max(0f, state.CodeExpiresAt - Time.realtimeSinceStartup);
-                status.text = "Waiting for your phone... code good for " + Mathf.FloorToInt(left / 60f) + ":" + Mathf.FloorToInt(left % 60f).ToString("00");
-            }
-            var beat = 0.5f + 0.5f * Mathf.Sin(Time.time * 4f);
-            spinner.SetLook(new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, Mathf.Lerp(0.25f, 0.9f, beat)), Color.clear, Theme.Ice, Color.clear);
+            for (var i = 0; i < 4; i++) digits[i].text = code != null && i < code.Length ? code[i].ToString() : "";
+            link.text = state == null ? "This build has no EDITH server."
+                : state.PhoneUrl != null ? PairingText.TypedAddress(state.PhoneUrl) : "...";
         }
 
         /// Redraws the picks: which chips and voice are chosen.
@@ -391,7 +367,6 @@ namespace Edith.Welcome
             var first = Panel(stepOne, "Pick", innerLeft, 83f, innerWidth, 187f, 28f);
             first.SetLook(Theme.InnerFill, new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f), Color.clear);
             Label(stepOne, "Title", semibold, 29, Theme.Ice, TextAnchor.MiddleLeft, 546f, 104f, 400f, 40f).text = "What are you into?";
-            counterOne = Label(stepOne, "Counter", semibold, 14, Theme.Accent, TextAnchor.MiddleRight, 1000f, 108f, 175f, 24f);
 
             var measure = Label(stepOne, "Measure", regular, 21, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, 10f, 10f);
             measure.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -464,28 +439,20 @@ namespace Edith.Welcome
             targets.Insert(targets.Count - 1, new Target { Rect = glass.Rect, Step = WelcomeStep.Interests, Tap = () => flow.ChooseVoice(style) });
         }
 
+        /// Only what pairing needs, large enough to read in the headset: the title, the address to open and the code.
         void BuildPairing()
         {
-            var card = Panel(stepTwo, "Pairing", 500f, 93f, 720f, 455f, 44f);
+            var card = Panel(stepTwo, "Pairing", PairPane.x, PairPane.y, PairPane.width, PairPane.height, 44f);
             card.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Accent, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.3f));
-            var inner = Panel(stepTwo, "Code", 525f, 115f, 670f, 350f, 28f);
-            inner.SetLook(Theme.InnerFill, new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f), Color.clear);
-            Label(stepTwo, "Title", semibold, 27, Theme.Ice, TextAnchor.MiddleLeft, 551f, 138f, 400f, 38f).text = "Pair your phone";
-            counterTwo = Label(stepTwo, "Counter", semibold, 14, Theme.Accent, TextAnchor.MiddleRight, 1000f, 146f, 175f, 24f);
-            Label(stepTwo, "Step A", regular, 16, Theme.Muted, TextAnchor.MiddleLeft, 551f, 200f, 600f, 24f).text = "1 · On the phone running your hotspot, open";
-            link = Label(stepTwo, "Link", semibold, 21, Theme.Accent, TextAnchor.MiddleLeft, 575f, 234f, 600f, 30f);
-            Label(stepTwo, "Step B", regular, 16, Theme.Muted, TextAnchor.MiddleLeft, 551f, 280f, 600f, 24f).text = "2 · Type this code and tap Share location";
+            var left = PairPane.x + 30f;
+            var width = PairPane.width - 60f;
+            Label(stepTwo, "Title", semibold, 46, Theme.Ice, TextAnchor.MiddleCenter, left, PairPane.y + 40f, width, 64f).text = "Pair your phone";
+            link = Label(stepTwo, "Link", semibold, 36, Theme.Accent, TextAnchor.MiddleCenter, left, PairPane.y + 135f, width, 52f);
+            link.horizontalOverflow = HorizontalWrapMode.Overflow;
+            const float digitWidth = 120f;
+            var digitsLeft = PairPane.center.x - digitWidth * 2f;
             for (var i = 0; i < 4; i++)
-            {
-                boxes[i] = Panel(stepTwo, "Digit", 642f + i * 115f, 316f, 98f, 122f, 22f);
-                digits[i] = Label(boxes[i].Rect, "Digit", semibold, 60, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, 98f, 122f, centred: true);
-            }
-            spinner = Panel(stepTwo, "Spinner", 524f, 498f, 22f, 22f, 11f);
-            status = Label(stepTwo, "Status", regular, 17, Theme.Ice, TextAnchor.MiddleLeft, 556f, 496f, 480f, 26f);
-            var skip = Panel(stepTwo, "Skip", 1062f, 483f, 134f, 50f, 25f);
-            skip.SetLook(Theme.Tint(0.3f), Color.clear, Theme.Accent, Color.clear);
-            Label(skip.Rect, "Label", semibold, 17, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, 134f, 50f, centred: true).text = "Skip for now";
-            AddTarget(skip.Rect, WelcomeStep.Pair, SkipTapped);
+                digits[i] = Label(stepTwo, "Digit", semibold, 120, Theme.Ice, TextAnchor.MiddleCenter, digitsLeft + i * digitWidth, PairPane.y + 230f, digitWidth, 170f);
         }
 
         // ---- helpers

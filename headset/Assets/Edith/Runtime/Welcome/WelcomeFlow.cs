@@ -13,8 +13,6 @@ namespace Edith.Welcome
     /// A phone that is already paired skips the pairing step, however the person got there.
     public sealed class WelcomeFlow
     {
-        public const int StepCount = 2;
-
         /// The twelve interests offered, in the order they are drawn.
         public static readonly string[] AllInterests =
         {
@@ -30,13 +28,7 @@ namespace Edith.Welcome
         /// The voice picked, Light until the person picks another.
         public VoiceStyle Voice { get; private set; } = VoiceStyle.Light;
 
-        /// The person left the pairing step without pairing.
-        public bool Skipped { get; private set; }
-
         public bool Finished => Step == WelcomeStep.Done;
-
-        /// "1 OF 3" and so on, or empty once finished.
-        public string Counter => Finished ? "" : (int)Step + " OF " + StepCount;
 
         public IReadOnlyList<string> Interests => interests;
 
@@ -69,12 +61,5 @@ namespace Edith.Welcome
             if (Step == WelcomeStep.Pair) Step = WelcomeStep.Done;
         }
 
-        /// "Skip for now" on the pairing step ends the welcome unpaired.
-        public void Skip()
-        {
-            if (Step != WelcomeStep.Pair) return;
-            Skipped = true;
-            Step = WelcomeStep.Done;
-        }
     }
 }

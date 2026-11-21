@@ -11,7 +11,6 @@ namespace Edith.Tests
             var flow = new WelcomeFlow();
             Assert.AreEqual(WelcomeStep.Interests, flow.Step);
             Assert.AreEqual(VoiceStyle.Light, flow.Voice);
-            Assert.AreEqual("1 OF 2", flow.Counter);
             Assert.IsEmpty(flow.Interests);
         }
 
@@ -33,10 +32,8 @@ namespace Edith.Tests
             var flow = new WelcomeFlow();
             flow.Next();
             Assert.AreEqual(WelcomeStep.Pair, flow.Step);
-            Assert.AreEqual("2 OF 2", flow.Counter);
             flow.PhoneConnected();
             Assert.IsTrue(flow.Finished);
-            Assert.IsFalse(flow.Skipped);
         }
 
         [Test]
@@ -47,25 +44,6 @@ namespace Edith.Tests
             Assert.AreEqual(WelcomeStep.Interests, flow.Step, "the person has not pressed Next yet");
             flow.Next();
             Assert.IsTrue(flow.Finished);
-        }
-
-        [Test]
-        public void Skipping_the_pairing_ends_the_welcome()
-        {
-            var flow = new WelcomeFlow();
-            flow.Next();
-            flow.Skip();
-            Assert.IsTrue(flow.Finished);
-            Assert.IsTrue(flow.Skipped);
-            Assert.AreEqual("", flow.Counter);
-        }
-
-        [Test]
-        public void Skip_only_works_on_the_pairing_step()
-        {
-            var flow = new WelcomeFlow();
-            flow.Skip();
-            Assert.AreEqual(WelcomeStep.Interests, flow.Step);
         }
 
         [Test]
