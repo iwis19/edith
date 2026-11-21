@@ -219,7 +219,12 @@ namespace Edith.Tests
             var events = Collect(Send(backend));
             Assert.AreEqual(1, events.Count);
             Assert.AreEqual("timeout", events[0].Code);
-            Assert.AreEqual(2, backend.Requests.Count);
+            // The fake records a request only once its listener thread has read the body, which can land after the
+            // client has already given up on it.
+            var deadline = DateTime.UtcNow.AddSeconds(2);
+            while (backend.Requests.Count < 2 && DateTime.UtcNow < deadline) Thread.Sleep(10);
+            Thread.Sleep(300);
+            Assert.AreEqual(2, backend.Requests.Count, "one try and exactly one retry");
         }
 
         [Test]
