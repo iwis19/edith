@@ -91,13 +91,19 @@
     <div class="label">Last sent</div>
     <div id="sent">Never</div>
   </div>
+  <div class="row">
+    <div class="label">Compass</div>
+    <div id="compass">Off</div>
+  </div>
 </div>
-<p id="hint" class="hidden">Keep this page open with the screen on.</p>
+<p id="hint" class="hidden">Keep this page open with the screen on. For directions, hold the phone flat and pointing the way you face.</p>
 </main>
 <script>
 (function () {
   "use strict";
-  var SEND_EVERY_MS = 10000, SEND_AFTER_METRES = 25;
+  // While the headset is giving directions, the position and compass go every two seconds so the arrow keeps up.
+  var SEND_EVERY_MS = 10000, NAV_SEND_EVERY_MS = 2000, SEND_AFTER_METRES = 25, HEADING_FRESH_MS = 3000;
+  var navigating = false, heading = null, headingAccuracy = null, headingAt = 0, compassOn = false;
   var $ = function (id) { return document.getElementById(id); };
   var TOKEN_KEY = "edith.phone";
   var token = null, watchId = null, wakeLock = null;
@@ -180,6 +186,15 @@
       accuracy_m: Math.min(Math.max(c.accuracy || 0, 0), 5000),
       taken_at: new Date(position.timestamp).toISOString()
     };
+    if (heading !== null && Date.now() - headingAt <= HEADING_FRESH_MS) {
+      body.heading_deg = heading;
+      if (headingAccuracy !== null) body.heading_accuracy_deg = headingAccuracy;
+    }
+    // Browsers give a course only while moving; at walking pace and above it is steadier than the compass.
+    if (typeof c.heading === "number" && !isNaN(c.heading) && typeof c.speed === "number" && c.speed >= 0.5) {
+      body.course_deg = ((c.heading % 360) + 360) % 360;
+      body.speed_mps = Math.min(c.speed, 100);
+    }
     fetch("/location", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Edith-Phone": token },
@@ -192,6 +207,7 @@
       last = { lat: body.lat, lon: body.lon, at: Date.now() };
       $("sent").textContent = new Date().toLocaleTimeString() + ", accurate to " + Math.round(c.accuracy) + " m";
       showError("");
+      navigating = !!summary.navigating;
       render(summary);
     }).catch(function (err) {
       showError(err instanceof TypeError ? "Cannot reach the backend. Check the phone's connection." : err.message);
@@ -203,7 +219,46 @@
     var now = Date.now();
     var moved = last.lat === null ? Infinity :
       metres(last.lat, last.lon, position.coords.latitude, position.coords.longitude);
-    if (now - last.at >= SEND_EVERY_MS || moved >= SEND_AFTER_METRES) send(position);
+    if (now - last.at >= sendEvery() || moved >= SEND_AFTER_METRES) send(position);
+  }
+
+  function sendEvery() { return navigating ? NAV_SEND_EVERY_MS : SEND_EVERY_MS; }
+
+  // Degrees clockwise from north that the top of the phone points, corrected for a rotated screen.
+  function onOrientation(e) {
+    var h = null;
+    if (typeof e.webkitCompassHeading === "number") {
+      h = e.webkitCompassHeading;
+      headingAccuracy = typeof e.webkitCompassAccuracy === "number" && e.webkitCompassAccuracy >= 0 ? e.webkitCompassAccuracy : null;
+    } else if (e.absolute && typeof e.alpha === "number") {
+      h = 360 - e.alpha;
+      headingAccuracy = null;
+    }
+    if (h === null) return;
+    var turn = screen.orientation && typeof screen.orientation.angle === "number" ? screen.orientation.angle : (window.orientation || 0);
+    heading = Math.round((((h + turn) % 360) + 360) % 360 * 10) / 10;
+    headingAt = Date.now();
+    if (!compassOn) { compassOn = true; $("compass").textContent = "On"; }
+  }
+
+  function listenCompass() {
+    if ("ondeviceorientationabsolute" in window) window.addEventListener("deviceorientationabsolute", onOrientation);
+    else window.addEventListener("deviceorientation", onOrientation);
+    setTimeout(function () { if (!compassOn) $("compass").textContent = "Not available on this phone"; }, 4000);
+  }
+
+  // iOS asks for motion access, and only inside the tap itself, before anything else waits.
+  function startCompass() {
+    var D = window.DeviceOrientationEvent;
+    if (D && typeof D.requestPermission === "function") {
+      D.requestPermission().then(function (answer) {
+        if (answer === "granted") listenCompass(); else $("compass").textContent = "Motion access was denied";
+      }).catch(function () { $("compass").textContent = "Motion access was denied"; });
+    } else if (D) {
+      listenCompass();
+    } else {
+      $("compass").textContent = "Not available on this phone";
+    }
   }
 
   function onGeoError(err) {
@@ -234,6 +289,7 @@
   function start() {
     if (!token) { showScreen(); return; }
     if (!navigator.geolocation) { showError("This browser has no location support."); return; }
+    if (!compassOn) startCompass();
     showError("");
     $("share").disabled = true;
     $("share").textContent = "Sharing location";
@@ -244,8 +300,8 @@
 
   // A tick re-sends the newest position when the phone is standing still and watchPosition stays quiet.
   setInterval(function () {
-    if (watchId !== null && latest && Date.now() - last.at >= SEND_EVERY_MS) send(latest);
-  }, 2000);
+    if (watchId !== null && latest && Date.now() - last.at >= sendEvery()) send(latest);
+  }, 1000);
 
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible" && watchId !== null) holdWake();

@@ -29,6 +29,10 @@ from .events import (
 )
 from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
+from .navigate import (
+    NAVIGATE_TIMEOUT_S, SEARCH_FIX_S, HttpPlaceFinder, NavigateReply, NavigateRequest, Navigations, NavStatus, PlaceFinder, SearchFailed,
+    others, status,
+)
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
 from .resolve import HttpResolver
 
@@ -136,6 +140,8 @@ def create_app(
     locations: Locations | None = None,
     pairings: Pairings | None = None,
     scanner: ScanAgent | None = None,
+    navigations: Navigations | None = None,
+    finder: PlaceFinder | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
@@ -143,6 +149,8 @@ def create_app(
     # Made here and not per request: only the phone's position ever uses the resolver's client.
     locations = locations or Locations(HttpResolver(httpx.AsyncClient()))
     pairings = pairings or Pairings()
+    navigations = navigations or Navigations()
+    finder = finder or HttpPlaceFinder(httpx.AsyncClient())
     store = store or make_store(settings.database_url, settings.db_pool_max)
     agent = agent or make_card_agent(settings, locations.whereabouts, store)
     ask = ask or make_live_ask(settings)
@@ -276,7 +284,9 @@ def create_app(
         profile_id = phone_tokens.verify(x_edith_phone or "")
         if profile_id is None:
             raise ApiError(401, "bad_phone_token", "The phone token is missing, wrong or expired. Pair again.")
-        return locations.update(profile_id, fix)
+        summary = locations.update(profile_id, fix)
+        summary.navigating = navigations.active(profile_id)
+        return summary
 
     @app.get("/location")
     async def get_location(profile_id: UUID = Depends(profile)) -> LocationSummary:
@@ -284,6 +294,35 @@ def create_app(
         if summary is None:
             raise ApiError(404, "no_location", "No phone position is kept for this profile.")
         return summary
+
+    # Missing fields are left out rather than sent as null, so the headset's JsonUtility keeps its own defaults.
+    @app.post("/navigate", response_model_exclude_none=True)
+    async def navigate(request: NavigateRequest, profile_id: UUID = Depends(profile)) -> NavigateReply:
+        """Ask's find_place tool: finds the nearest match around the phone's position and makes it the target."""
+        if request.category == "any" and not (request.name or "").strip():
+            raise ApiError(422, "nothing_asked", "Give a category, a name or both.")
+        latest = locations.latest(profile_id, SEARCH_FIX_S)
+        if latest is None:
+            raise ApiError(409, "no_location", "The phone has not sent a recent position, so nothing can be searched.")
+        fix, _ = latest
+        try:
+            # Gemini is waiting on this answer before it speaks, so a slow map service must not hold it for long.
+            async with asyncio.timeout(NAVIGATE_TIMEOUT_S):
+                places = await finder.find(fix.lat, fix.lon, request)
+        except (SearchFailed, TimeoutError):
+            raise ApiError(502, "search_failed", "The map services did not answer.")
+        if not places:
+            raise ApiError(404, "no_place", "Nothing like that was found within about five kilometres.")
+        navigations.set(profile_id, places[0])
+        return NavigateReply(target=status(places[0], latest), others=others(places))
+
+    @app.get("/navigate", response_model_exclude_none=True)
+    async def navigate_status(profile_id: UUID = Depends(profile)) -> NavStatus:
+        return status(navigations.target(profile_id), locations.latest(profile_id, SEARCH_FIX_S))
+
+    @app.delete("/navigate")
+    async def navigate_stop(profile_id: UUID = Depends(profile)) -> dict:
+        return {"stopped": navigations.clear(profile_id)}
 
     @app.post("/collect")
     async def collect(

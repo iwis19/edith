@@ -98,6 +98,17 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 - **Privacy:** the position is kept in memory only, for six hours, never written to the database, and never shown to anyone else.
 - There is no hand-written list of sights: a new place needs nothing from us.
 
+### Directions: the blue arrow
+
+Ask can guide the person to something nearby: "where's the nearest subway?", "take me to a Tim Hortons", "any landmarks around here?".
+
+- **Asking:** Gemini calls `find_place` with a category (restaurant, cafe, subway, landmark, park, washroom and so on) and, when one was named, a place or brand. The headset passes the call to `POST /navigate`, which searches OpenStreetMap (Overpass by category, Nominatim by name) within about 1.5 km, then 5 km, of the phone's latest fix, keeps the nearest match as the target and returns it with up to two others. EDITH says what it found, how far it is and that the arrow shows the way. "Stop directions" calls `stop_navigation`.
+- **The arrow:** a blue arrow floats low in front of the person with the place's name, distance and walking minutes under it. The headset polls `GET /navigate` every second for the distance and compass bearing from the newest fix.
+- **Finding north:** the headset has no compass, so the phone page sends its compass heading, and its GPS course while walking. Each reading, paired with the head's yaw at that moment, is one guess at where north lies in the headset's world; the guesses are averaged. Until north is known the arrow stays hidden and the label asks the person to hold the phone flat, pointing where they face. Recentring resets it.
+- **Phone cadence:** while a target is set, the phone sends its position and heading every 2 s instead of 10 s.
+- **Arrival:** within 20 m (more when the fix is poor, at most 50 m) the label says "You're at …", then the directions stop. A target is forgotten after two hours.
+- **Privacy:** as for the position: coordinates leave the backend rounded to about 11 m and are never logged; the target lives in memory only.
+
 ### Under consideration
 
 - **Scroll mode:** a toggle where EDITH tags interesting things around you by itself; the always-on version of Scan.
@@ -174,6 +185,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 - [ ] Web-search answers with sources for Ask
 - [ ] Phone location: place context for Look, Scan and Ask; named sights nearby for the Scan
 - [ ] Place confirm and geocoding (only if Spots ships)
+- [x] Directions: find_place / stop_navigation tools, `/navigate`, phone compass and course, blue arrow with north calibration
 
 **Scrapbook and visuals**
 

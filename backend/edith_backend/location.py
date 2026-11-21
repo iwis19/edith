@@ -34,6 +34,15 @@ class LocationFix(BaseModel):
     lon: float = Field(ge=-180, le=180)
     accuracy_m: float = Field(ge=0, le=5000)
     taken_at: datetime
+    # Where the phone's top points, in degrees clockwise from north, from its compass. Navigation uses it to line the
+    # headset's own yaw up with north; nothing else reads it.
+    heading_deg: float | None = Field(None, ge=0, le=360)
+    # The compass's own estimate of its error, when the browser gives one.
+    heading_accuracy_deg: float | None = Field(None, ge=0, le=360)
+    # The direction of travel from GPS, in degrees clockwise from north, and the speed. Browsers give these only while
+    # the phone is moving.
+    course_deg: float | None = Field(None, ge=0, le=360)
+    speed_mps: float | None = Field(None, ge=0, le=100)
 
 
 class Sight(BaseModel):
@@ -57,6 +66,8 @@ class LocationSummary(BaseModel):
     sights_count: int
     nearest: list[str]
     resolving: bool
+    # True while the headset is guiding the person somewhere, so the phone sends its position and heading more often.
+    navigating: bool = False
 
 
 class Resolution(BaseModel):
@@ -117,6 +128,12 @@ class Locations:
     def has_fix(self, profile_id: UUID) -> bool:
         return self._entry(profile_id) is not None
 
+    def latest(self, profile_id: UUID, max_age_s: float = FRESH_S) -> tuple[LocationFix, float] | None:
+        """The newest fix and how many seconds ago it arrived, when that is within `max_age_s`. Navigation reads this;
+        prompts never see the coordinates."""
+        entry = self._entry(profile_id, max_age_s)
+        return (entry.fix, self._clock() - entry.stored_at) if entry else None
+
     def whereabouts(self, profile_id: UUID, max_age_s: float = FRESH_S) -> Whereabouts | None:
         """The resolved place and sights, when the phone sent a position within `max_age_s`. The Look, Ask and Scan
         read this."""
@@ -145,6 +162,8 @@ class Locations:
         """Waits for the resolves in flight; tests use it."""
         while self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
+            # A finished task leaves the set in a done callback, which runs only once the loop gets a turn.
+            await asyncio.sleep(0)
 
     def _sweep(self) -> None:
         now = self._clock()
