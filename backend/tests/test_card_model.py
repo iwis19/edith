@@ -77,8 +77,16 @@ async def test_the_name_streams_as_pending_names_while_written_and_the_fact_wait
     assert len(facts.calls) == 1 and "a red enamel moka pot" in facts.calls[0]["ask"]
 
 
-async def test_a_refusal_never_shows_as_a_pending_name():
-    stream = CardModelAgent(FakeWriter("I don't know who this is."), FakeWriter("A fact.")).run(b"jpeg", META, PROFILE)
+REFUSALS = [
+    "I don't know who this is.",
+    "I don't know who this is.\n",
+    "I'm sorry, I can't help with that.\nPlease try another photo.\n",
+]
+
+
+@pytest.mark.parametrize("reply", REFUSALS)
+async def test_a_refusal_never_shows_as_a_name_and_fails_the_look(reply):
+    stream = CardModelAgent(FakeWriter(reply), FakeWriter("A fact.")).run(b"jpeg", META, PROFILE)
     with pytest.raises(ValueError):
         async for event in stream:
             assert event.type != "name"
