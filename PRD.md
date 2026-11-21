@@ -20,7 +20,7 @@ EDITH is a hands-only Quest 3/3S mixed-reality companion that makes whatever you
 | Collect | Close a fist on the snapshot and pull it in toward your chest | A memory: cropped image, name, fun fact, rarity, place and date | Yes |
 | Ask | Thumb tap on the side of the index finger, then speak, about anything | A spoken answer typed out in a two-line caption beside a small orb, which perches on the snapshot asked about or rests low in your view, shows what was heard, and fades when the answer is over | No |
 | Scan | Palms-out pose, aimed at what's in front of you | Pins on the 2 or 3 things in sight that make the most fun dares, each with a short dare to do on the spot; pinch one to open it as a snapshot card | Only cards you collect from it |
-| Remember | Open the Scrapbook from the wrist menu, or ask "what did I find today?" | Memories found by meaning, with when and where | Not applicable |
+| Remember | Open the Scrapbook with both palms held up like an open book, or ask "what did I find today?" | Memories found by meaning, with when and where | Not applicable |
 
 ## Features
 
@@ -115,7 +115,7 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 | Page or dismiss cards | Thumb swipe left or right with either hand |
 | Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |
 | App menu | Turn the left wrist inward and poke with the right index |
-| Scrapbook | Turn the left palm toward you and poke the wrist button with the right index to open or close; thumb swipe or pinch-drag to scroll; pinch a chip or a side card |
+| Scrapbook | Hold both palms up side by side for half a second to open; bring the palms together to close; thumb swipe or pinch-drag to scroll; pinch a chip or a side card |
 | Spots globe | One-hand grab to spin; two-hand pull to zoom |
 
 **Rules**
@@ -179,7 +179,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 
 **Scrapbook and visuals**
 
-- [x] Scrapbook deck: rarity frames, time and rarity lenses, wrist button
+- [x] Scrapbook deck: rarity frames, time and rarity lenses, open-book gesture
 - [ ] Scrapbook: places globe that dives into a city, voice search
 - [ ] Spots globe with pins and labelled seeded sample data (only if Spots ships)
 - [ ] A sound per rarity tier on collect

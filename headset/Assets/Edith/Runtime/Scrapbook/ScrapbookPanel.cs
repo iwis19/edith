@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using Edith.Ask;
 using Edith.Backend;
+using Edith.Grab;
 using Edith.Hands;
 using Edith.Look;
 using Edith.Pinch;
@@ -12,9 +13,10 @@ using UnityEngine;
 
 namespace Edith.Scrapbook
 {
-    /// The Scrapbook: the collected memories as a deck of cards to scroll through. The wrist button opens it in
-    /// front of the user, where it stays put in the room, and closes it. A thumb swipe moves one card, a sideways
-    /// pinch-drag scrubs, and a quick pinch on a side card brings it to the middle. The tabs under the deck pick
+    /// The Scrapbook: the collected memories as a deck of cards to scroll through. Both palms held up side by side
+    /// open it in front of the user, where it stays put in the room, and the palms brought together close it. A
+    /// thumb swipe moves one card, a sideways pinch-drag scrubs, and a quick pinch on a side card brings it to the
+    /// middle. The tabs under the deck pick
     /// the lens, and the chips under them jump to a day, narrows the deck to a rarity, or shows the globe of places: a pinch on a city's pin dives into its
     /// street map, and a pinch on a spot's pin narrows the deck to that spot. A pinch goes to the first thing in its
     /// line: a chip, a pin, the globe, a card, and otherwise the deck. While it is open it holds the hand gate, so
@@ -32,12 +34,15 @@ namespace Edith.Scrapbook
         [SerializeField] Material material;
         /// Draws the globe and the street map, which a hand in front also hides.
         [SerializeField] Material mapMaterial;
-        [SerializeField] WristTuning wrist = new WristTuning();
+        [SerializeField] BookTuning book = new BookTuning();
 
         const float FadeSeconds = 0.25f;
         /// A pinch dragged this far sideways scrolls one card.
         const float MetersPerCard = 0.07f;
         const float ListSeconds = 8f;
+        const float NearLogSeconds = 1f;
+        // The ring that fills while the open pose is held floats this far above the palms, clear of the hands.
+        const float RingAboveMeters = 0.12f;
         // More than the cards in reach, so scrolling back a few cards shows their photos at once.
         const int PhotosKept = 16;
         const int PhotosAtOnce = 3;
@@ -50,8 +55,11 @@ namespace Edith.Scrapbook
         RecentCache<Texture2D> photos;
         Func<int, Texture> photoOf;
         ScrapbookClient client;
-        WristButton button;
-        WristButtonView buttonView;
+        BookPose pose;
+        GrabInput grab;
+        ScanMarks ring;
+        Vector3 ringAt;
+        float ringProgress, nearLoggedAt;
         Transform frame;
         DeckView deckView, leaving;
         bool leavingShown;
@@ -78,8 +86,9 @@ namespace Edith.Scrapbook
 
         void Awake()
         {
-            button = new WristButton(wrist);
-            buttonView = new WristButtonView(transform, font, material, wrist.buttonRadiusMeters);
+            pose = new BookPose(book);
+            grab = rightHand.GetComponent<GrabInput>();
+            ring = new ScanMarks(font, material);
             frame = new GameObject("Deck").transform;
             frame.SetParent(transform, false);
             frame.gameObject.SetActive(false);
@@ -119,11 +128,13 @@ namespace Edith.Scrapbook
             photos.Clear();
             maps.Clear();
             places.Release();
-            buttonView.Release();
+            ring.Dispose();
         }
 
         void Update()
         {
+            ring.SetRing(ringAt, ringProgress, false);
+            ring.Tick(eye.position);
             fade = Mathf.MoveTowards(fade, Open ? 1f : 0f, Time.deltaTime / FadeSeconds);
             if (!frame.gameObject.activeSelf) return;
             if (!Open && fade == 0f)
@@ -181,18 +192,31 @@ namespace Edith.Scrapbook
         // After hand tracking has updated, like the pinch and the grab.
         void LateUpdate()
         {
-            var reading = button.Step(leftHand.Read(), rightHand.Read());
-            buttonView.Show(reading, eye.position, Open, Time.deltaTime);
-            if (!reading.Pressed) return;
-            if (Open)
+            var left = leftHand.Read();
+            var right = rightHand.Read();
+            // A hand closing on, holding or letting go of a card is busy, so it cannot pose.
+            if (grab != null && grab.Claimed(HandSide.Left)) left = left.Unseen();
+            if (grab != null && grab.Claimed(HandSide.Right)) right = right.Unseen();
+            var reading = pose.Step(left, right, Open);
+            ringProgress = reading.Progress;
+            if (reading.Progress > 0f) ringAt = reading.Between + Vector3.up * RingAboveMeters;
+            if (reading.Opened)
             {
-                Play(659.3f);
-                Close();
-            }
-            else
-            {
+                Debug.Log($"[EDITH book] opened: {reading}");
                 Play(659.3f, 987.8f);
                 Show();
+            }
+            else if (reading.Closed)
+            {
+                Debug.Log($"[EDITH book] closed: {reading}");
+                Play(987.8f, 659.3f);
+                Close();
+            }
+            // A near miss logs what each hand read, so the thresholds can be tuned from real hands.
+            else if (reading.Near && reading.Progress == 0f && Time.time - nearLoggedAt >= NearLogSeconds)
+            {
+                nearLoggedAt = Time.time;
+                Debug.Log($"[EDITH book] near: {reading}");
             }
         }
 
