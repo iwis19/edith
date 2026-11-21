@@ -6,11 +6,10 @@ namespace Edith.Grab
 {
     /// Applies grab readings to the snapshots of a room: a fist carries one, opening floats it back, and pulling it to
     /// the chest pockets it.
-    public sealed class SnapshotGrab : MonoBehaviour
+    public sealed class SnapshotGrab : MonoBehaviour, IGrabTargets
     {
         [SerializeField] GrabInput input;
 
-        readonly List<(int id, SightBox box)> cards = new List<(int id, SightBox box)>();
         SnapshotRoom room;
         Snapshot held;
         Vector3 gripAtGrab;
@@ -23,24 +22,22 @@ namespace Edith.Grab
 
         void OnEnable()
         {
-            input.Cards = Cards;
+            input.Register(this);
             input.Stepped += OnStepped;
         }
 
         void OnDisable()
         {
             input.Stepped -= OnStepped;
-            input.Cards = null;
+            input.Unregister(this);
         }
 
-        IReadOnlyList<(int id, SightBox box)> Cards()
+        public void AddGrabTargets(List<(int id, SightBox box)> targets)
         {
-            cards.Clear();
-            if (room == null) return cards;
+            if (room == null) return;
             var snapshots = room.Snapshots;
             for (var i = 0; i < snapshots.Count; i++)
-                cards.Add((snapshots[i].item.Id, snapshots[i].box));
-            return cards;
+                targets.Add((snapshots[i].item.Id, snapshots[i].box));
         }
 
         void OnStepped(GrabReading reading)

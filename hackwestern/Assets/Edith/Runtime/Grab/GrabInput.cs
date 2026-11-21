@@ -10,16 +10,21 @@ namespace Edith.Grab
     [DefaultExecutionOrder(-50)]
     public sealed class GrabInput : MonoBehaviour
     {
-        static readonly IReadOnlyList<(int id, SightBox box)> NoCards = Array.Empty<(int id, SightBox box)>();
-
         [SerializeField] RightHandSource hand;
         [SerializeField] GrabTuning tuning = new GrabTuning();
 
+        readonly List<IGrabTargets> owners = new List<IGrabTargets>();
+        readonly List<(int id, SightBox box)> targets = new List<(int id, SightBox box)>();
         GrabTracker tracker;
         GrabPhase loggedPhase;
 
-        /// The cards a fist can grab, set by whoever owns the snapshots.
-        public Func<IReadOnlyList<(int id, SightBox box)>> Cards { get; set; }
+        /// Adds `owner`'s cards to the ones a fist can grab, from the next frame on.
+        public void Register(IGrabTargets owner)
+        {
+            if (!owners.Contains(owner)) owners.Add(owner);
+        }
+
+        public void Unregister(IGrabTargets owner) => owners.Remove(owner);
 
         /// True from the grab until the hand opens; pinch ignores the hand meanwhile.
         public bool Claimed { get; private set; }
@@ -31,7 +36,10 @@ namespace Edith.Grab
 
         void LateUpdate()
         {
-            var reading = tracker.Step(hand.Read(), Cards?.Invoke() ?? NoCards);
+            targets.Clear();
+            for (var i = 0; i < owners.Count; i++)
+                owners[i].AddGrabTargets(targets);
+            var reading = tracker.Step(hand.Read(), targets);
             Claimed = reading.Claimed;
             Log(reading);
             Stepped?.Invoke(reading);
