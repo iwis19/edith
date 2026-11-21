@@ -99,7 +99,10 @@ namespace Edith.Snapshots
 
         public void Apply(in LookEvent e)
         {
+            var rated = Card.Tier != null;
             Card.Apply(e);
+            // The cue plays once, as the rarity arrives, for a Look and for a scan pin opened as one.
+            if (!rated && Card.Tier != null) RaritySounds.Play(Card.Tier, transform.position);
             view.Show(Card, caption);
             enabled = true;
         }

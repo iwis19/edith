@@ -71,7 +71,7 @@ namespace Edith.Grab
                     if (hand.Held != null && room.Pocket(hand.Held, reading.Grip))
                     {
                         hand.Pocketing = hand.Held;
-                        Play(hand.Held.Card.Tier, reading.Grip);
+                        RaritySounds.Play(hand.Held.Card.Tier, reading.Grip);
                     }
                     hand.Held = null;
                     return;
@@ -107,17 +107,6 @@ namespace Edith.Grab
         {
             var turn = reading.Rotation * Quaternion.Inverse(hand.HandAtGrab);
             hand.Held.Hold(reading.Grip + turn * (hand.CardPositionAtGrab - hand.GripAtGrab), turn * hand.CardRotationAtGrab);
-        }
-
-        // A clip made in code plays nothing after AudioSettings.Reset, which Ask runs when focus returns, so every
-        // pocket gets a new one.
-        static void Play(Rarity? tier, Vector3 point)
-        {
-            var samples = RaritySounds.Render(RaritySounds.For(tier));
-            var clip = AudioClip.Create("EDITH pocket", samples.Length, 1, RaritySounds.Rate, false);
-            clip.SetData(samples, 0);
-            AudioSource.PlayClipAtPoint(clip, point);
-            Destroy(clip, clip.length + 1f);
         }
     }
 }
