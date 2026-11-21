@@ -38,11 +38,17 @@ namespace Edith.Snapshots
             return view;
         }
 
-        public void Show(LookCard card)
+        /// `caption`, when given, is said in place of the card's fact.
+        public void Show(LookCard card, string caption)
         {
             var rated = card.Tier is Rarity tier ? RarityColors.For(tier) : (Color?)null;
             foreach (var edge in border) edge.color = rated ?? BorderWaiting;
-            if (card.Phase == LookPhase.Failed)
+            if (caption != null)
+            {
+                fact.text = caption;
+                fact.color = rated ?? Bright;
+            }
+            else if (card.Phase == LookPhase.Failed)
             {
                 fact.text = card.Error;
                 fact.color = Quiet;

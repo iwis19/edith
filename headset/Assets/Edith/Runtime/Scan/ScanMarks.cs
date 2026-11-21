@@ -5,8 +5,8 @@ using UnityEngine.UI;
 
 namespace Edith.Scan
 {
-    /// What a scan draws in the room: a dot on each pin whose hook shows while it is looked at, the ring that fills between the palms, and the
-    /// line of text for a scan that found nothing. Each is a world-space canvas that faces the eye and is scaled with
+    /// What a scan draws in the room: a dot on each pin with a ring that fills while it is looked at, the ring that
+    /// fills between the palms, and the line of text for a scan that found nothing. Each is a world-space canvas that faces the eye and is scaled with
     /// its distance, so text reads the same from anywhere in the room.
     public sealed class ScanMarks : IDisposable
     {
@@ -17,13 +17,11 @@ namespace Edith.Scan
             internal Vector3 At;
             internal float Fade, Target = 1f;
             internal Image Gaze;
-            internal CanvasGroup Hook;
-            internal float HookFade, HookTarget;
         }
 
         // 1 canvas unit is half a millimetre at ReferenceMeters.
         const float MetresPerUnit = 0.0005f, ReferenceMeters = 0.5f, MinScaleMeters = 0.3f;
-        const float DotSize = 28f, LabelWidth = 420f, LabelHeight = 160f, LabelGap = 10f;
+        const float DotSize = 28f, LabelWidth = 420f, LabelHeight = 160f;
         const float FadeSeconds = 0.25f;
         const float StatusSeconds = 2.5f;
         // The ring is about 9 cm across at ReferenceMeters. Its line is a share of its radius, and it breathes this
@@ -53,8 +51,8 @@ namespace Edith.Scan
             this.material = material;
         }
 
-        /// A pin at `at` that fades in. Hand it to Remove to fade it out.
-        public Mark AddPin(Vector3 at, string label)
+        /// A pin at `at`: a bare dot that fades in. Hand it to Remove to fade it out.
+        public Mark AddPin(Vector3 at)
         {
             var pin = new Mark { At = at };
             var root = NewCanvas("ScanPin", pin);
@@ -66,10 +64,6 @@ namespace Edith.Scan
             image.GetComponent<Shadow>().effectColor = ShadowColor;
             image.rectTransform.SetParent(root, false);
             image.rectTransform.sizeDelta = new Vector2(DotSize, DotSize);
-            var hook = Label(root, 19, TextAnchor.LowerCenter, new Vector2(0f, DotSize * 0.5f + LabelGap + LabelHeight * 0.5f));
-            hook.text = label;
-            pin.Hook = hook.gameObject.AddComponent<CanvasGroup>();
-            pin.Hook.alpha = 0f;
             var gaze = new GameObject("Gaze", typeof(Image)).GetComponent<Image>();
             gaze.sprite = ringSprite;
             gaze.type = Image.Type.Filled;
@@ -87,13 +81,8 @@ namespace Edith.Scan
             return pin;
         }
 
-        /// A pin is a bare dot until it is looked at: while `looked`, its hook fades in and the ring around it fills
-        /// to `progress`.
-        public void SetGaze(Mark pin, bool looked, float progress)
-        {
-            pin.HookTarget = looked ? 1f : 0f;
-            pin.Gaze.fillAmount = progress;
-        }
+        /// Fills the ring around `pin` to `progress` while it is looked at.
+        public void SetGaze(Mark pin, float progress) => pin.Gaze.fillAmount = progress;
 
         public void Remove(Mark pin) => pin.Target = 0f;
 
@@ -146,8 +135,6 @@ namespace Edith.Scan
             {
                 var pin = pins[i];
                 Step(pin, step, eye, 1f);
-                pin.HookFade = Mathf.MoveTowards(pin.HookFade, pin.HookTarget, step);
-                pin.Hook.alpha = pin.HookFade * pin.HookFade * (3f - 2f * pin.HookFade);
                 if (pin.Target > 0f || pin.Fade > 0f) continue;
                 UnityEngine.Object.Destroy(pin.Go);
                 pins.RemoveAt(i);

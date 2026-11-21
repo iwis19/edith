@@ -31,7 +31,7 @@ namespace Edith.Scan
 
     /// Scan, end to end on the headset. Both palms held open and facing away send one whole camera frame to the
     /// backend, which picks the few most interesting things in it. Each gets a pin: a dot on the object, placed by
-    /// depth, with a short hook above it that shows while the pin is looked at. A new scan replaces the pins of the last, and recentring the view clears
+    /// depth, that opens into a card saying its short hook. A new scan replaces the pins of the last, and recentring the view clears
     /// them. TryOpen turns a pinch on a pin into the box a Look needs.
     public sealed class ScanController : MonoBehaviour
     {
@@ -96,8 +96,9 @@ namespace Edith.Scan
         float gazeSeconds;
         Quaternion lastEyeRotation;
 
-        /// Fires with the box to hang and photograph when a pin has been looked at long enough. The pin has left the room.
-        public event Action<SightBox> Opened;
+        /// Fires with the box to hang and photograph, and the pin it came from, when a pin has been looked at long
+        /// enough. The pin has left the room.
+        public event Action<SightBox, ScanPin> Opened;
 
         /// The pins in the room, most interesting first.
         public IReadOnlyList<ScanPin> Pins => pins;
@@ -245,11 +246,12 @@ namespace Edith.Scan
         }
 
         /// Turns a pinch at `pinchPoint`, seen from `eye`, into a Look of the pin it is in line with. `box` is the
-        /// box to hang and photograph, as if the person had drawn it around the pin's object, and the pin leaves the
-        /// room. False when no pin is in line with the pinch, or the pin's object is too close to frame.
-        public bool TryOpen(Vector3 pinchPoint, Pose eye, out SightBox box)
+        /// box to hang and photograph, as if the person had drawn it around the pin's object, and `opened` the pin,
+        /// which leaves the room. False when no pin is in line with the pinch, or the pin's object is too close to frame.
+        public bool TryOpen(Vector3 pinchPoint, Pose eye, out SightBox box, out ScanPin opened)
         {
             box = default;
+            opened = default;
             if (pinchPoint == eye.position) return false;
             points.Clear();
             foreach (var pin in pins) points.Add(pin.Point);
@@ -264,15 +266,15 @@ namespace Edith.Scan
                 return false;
             }
             Debug.Log($"[EDITH scan] open \"{pins[index].Name}\" {distance:F2} m away, card at {cardDepth:F2} m");
+            opened = pins[index];
             RemovePin(index);
             box = around;
             return true;
         }
 
-        // A pin is a bare dot until the head points at it. Then its hook shows, and holding the head still fills its
-        // ring; when full, the pin opens as a Look whose box is the pin's object as seen from here, hung at the
-        // object's own distance so the photo lines up with what is around it. A far pin only points the way, so it
-        // shows its hook but never opens.
+        // A pin is a bare dot. Pointing the head at it and holding still fills its ring; when full, the pin opens as a
+        // Look whose box is the pin's object as seen from here, hung at the object's own distance so the photo lines
+        // up with what is around it, and whose card says the pin's hook. A far pin only points the way and never opens.
         void Gaze()
         {
             var turning = Quaternion.Angle(lastEyeRotation, eye.rotation) / Mathf.Max(Time.deltaTime, 1e-4f);
@@ -282,21 +284,22 @@ namespace Edith.Scan
             if (!scanning)
             {
                 points.Clear();
-                foreach (var pin in pins) points.Add(pin.Point);
+                // A point at the eye is skipped, which leaves the far pins out.
+                foreach (var pin in pins) points.Add(pin.Far ? eye.position : pin.Point);
                 index = ScanGeometry.NearestToLine(new Ray(eye.position, eye.forward), points, tuning.gazeOpenDegrees);
             }
             var looked = index >= 0 ? placed[index] : null;
 
             if (looked != gazed)
             {
-                if (gazed != null && placed.Contains(gazed)) marks.SetGaze(gazed.Mark, false, 0f);
+                if (gazed != null && placed.Contains(gazed)) marks.SetGaze(gazed.Mark, 0f);
                 gazed = looked;
                 gazeSeconds = 0f;
             }
-            else if (looked != null && !pins[index].Far && turning <= tuning.gazeStillDegreesPerSecond) gazeSeconds += Time.deltaTime;
+            else if (looked != null && turning <= tuning.gazeStillDegreesPerSecond) gazeSeconds += Time.deltaTime;
             if (gazed == null) return;
 
-            marks.SetGaze(gazed.Mark, true, Mathf.Clamp01(gazeSeconds / tuning.gazeOpenSeconds));
+            marks.SetGaze(gazed.Mark, Mathf.Clamp01(gazeSeconds / tuning.gazeOpenSeconds));
             if (gazeSeconds < tuning.gazeOpenSeconds) return;
 
             var distance = (pins[index].Point - eye.position).magnitude;
@@ -309,8 +312,9 @@ namespace Edith.Scan
             var card = ClearOfSurfaces(around);
             Debug.Log($"[EDITH scan] open \"{pins[index].Name}\" by gaze {distance:F2} m away, card at {card.Depth:F2} m");
             gazed = null;
+            var opened = pins[index];
             RemovePin(index);
-            Opened?.Invoke(card);
+            Opened?.Invoke(card, opened);
         }
 
         // Cards are drawn behind any real surface in front of them, so a ceiling seen at a slant or the glass in front
@@ -403,7 +407,7 @@ namespace Edith.Scan
                 var far = source == PinSource.Far;
                 var pin = new ScanPin(onObject - ray.direction * LiftMeters, pick.Name, pick.Hook, far);
                 pins.Add(pin);
-                placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point, far ? $"{pick.Hook} (far)" : pick.Hook) });
+                placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point) });
                 Debug.Log($"[EDITH scan] {id} pin \"{pick.Name}\" {meters:F2} m away ({source}, depth {answer}), hook \"{pick.Hook}\"");
             }
         }
