@@ -51,6 +51,22 @@ namespace Edith.Look
             return client;
         }
 
+        /// GETs `<url>/health` on the shared connection so it is open when a Look goes out: the first HTTPS
+        /// connection after launch can stall long enough to time a whole Look out. Failures are logged and ignored.
+        public static Task Warm(string url) => Task.Run(async () =>
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try
+            {
+                using var response = await Http.GetAsync(url + "/health", timeout.Token).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode) Debug.Log($"[EDITH look] keep-warm got http_{(int)response.StatusCode}");
+            }
+            catch (Exception e)
+            {
+                Debug.Log($"[EDITH look] keep-warm failed: {(timeout.IsCancellationRequested ? "timeout" : e.GetBaseException().Message)}");
+            }
+        });
+
         public bool TryNext(out LookEvent next)
         {
             next = default;

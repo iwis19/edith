@@ -1,7 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Edith.Ask;
+using Edith.Backend;
 using Edith.Capture;
 using Edith.Grab;
 using Edith.Pinch;
@@ -33,6 +35,8 @@ namespace Edith.Look
         [SerializeField] Font font;
 
         const string CameraNotReady = "The camera is not ready.";
+        // Often enough that the shared HTTPS connection is still open when the next Look goes out.
+        const float KeepWarmSeconds = 45f;
         const float AssumedSubjectMeters = 1.5f;
         const float MinSubjectMeters = 0.25f;
         const float MaxSubjectMeters = 6f;
@@ -74,6 +78,18 @@ namespace Edith.Look
             room.Pocketed += OnPocketed;
             grab.Bind(room);
             ask.Bind(room);
+        }
+
+        IEnumerator Start()
+        {
+            var settings = BackendSettings.Load();
+            if (settings == null) yield break;
+            var every = new WaitForSecondsRealtime(KeepWarmSeconds);
+            while (true)
+            {
+                LookClient.Warm(settings.Url);
+                yield return every;
+            }
         }
 
         void OnEnable() => pinch.Stepped += OnPinch;
