@@ -77,8 +77,16 @@ async def test_the_name_streams_as_pending_names_while_written_and_the_fact_wait
     assert len(facts.calls) == 1 and "a red enamel moka pot" in facts.calls[0]["ask"]
 
 
-async def test_a_refusal_never_shows_as_a_pending_name():
-    stream = CardModelAgent(FakeWriter("I don't know who this is."), FakeWriter("A fact.")).run(b"jpeg", META, PROFILE)
+REFUSALS = [
+    "I don't know who this is.",
+    "I don't know who this is.\n",
+    "I'm sorry, I can't help with that.\nPlease try another photo.\n",
+]
+
+
+@pytest.mark.parametrize("reply", REFUSALS)
+async def test_a_refusal_never_shows_as_a_name_and_fails_the_look(reply):
+    stream = CardModelAgent(FakeWriter(reply), FakeWriter("A fact.")).run(b"jpeg", META, PROFILE)
     with pytest.raises(ValueError):
         async for event in stream:
             assert event.type != "name"
@@ -92,8 +100,8 @@ async def test_unlabelled_lines_take_their_field_from_their_position():
 
 async def test_a_labelled_reply_missing_its_confidence_line_still_names_the_object():
     events = await run(CardModelAgent(FakeWriter("NAME: a red mug\nKIND: mug\nRARITY: common\n"), FakeWriter("A fact.")))
-    assert [e.type for e in events] == ["name", "rarity", "fact"]
-    assert (events[0].name, events[0].confidence) == ("a red mug", 0.5)
+    assert [e.type for e in events] == ["rarity", "name", "fact"]
+    assert (events[1].name, events[1].confidence) == ("a red mug", 0.5)
 
 
 async def test_a_failed_fact_call_still_leaves_the_name_and_tier():

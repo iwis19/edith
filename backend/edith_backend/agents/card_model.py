@@ -119,9 +119,8 @@ class LineParser:
         return labelled[1] if labelled and labelled[0] == "NAME" else ""
 
     @property
-    def lone_sentence(self) -> bool:
-        """True when the whole reply was one unlabelled line, which is how a refusal comes back."""
-        return not self._labelled and self._unlabelled == 1
+    def labelled(self) -> bool:
+        return self._labelled
 
     @staticmethod
     def _parse(line: str) -> tuple[str, str] | None:
@@ -294,18 +293,26 @@ class CardModelAgent:
         ) if places else None
         parser = LineParser()
         named = rated = False
-
         shown = ""
+
+        def answered() -> bool:
+            """A refusal comes back as one or more plain sentences, which the positional fallback would take for
+            NAME and CONFIDENCE. An unlabelled reply counts as an answer only when its CONFIDENCE slot holds a number."""
+            return "NAME" in fields and (parser.labelled or bool(re.search(r"\d", fields.get("CONFIDENCE", ""))))
 
         def updates() -> Iterator[CardEvent]:
             nonlocal named, rated, shown
-            if not named and "NAME" in fields and "CONFIDENCE" in fields:
+            if not named and "CONFIDENCE" in fields and answered():
                 named = True
                 yield Name(name=fields["NAME"], confidence=parse_confidence(fields["CONFIDENCE"]))
-            elif not named and (text := fields.get("NAME") or parser.partial_name()) and text != shown:
+            # Partial names come only from labelled lines, never from an unlabelled reply that may be a refusal.
+            elif not named and (text := (fields.get("NAME", "") if parser.labelled else "") or parser.partial_name()) \
+                    and text != shown:
                 shown = text
                 yield Name(name=text, confidence=0.0, pending=True)
-            if named and not rated and "RARITY" in fields:
+            # The tier goes out as soon as its line arrives, even before a late final name, but never from an
+            # unlabelled reply that has not yet shown it is an answer.
+            if not rated and "RARITY" in fields and (named or parser.labelled):
                 rated = True
                 if tier := parse_tier(fields["RARITY"]):
                     yield RarityEvent(tier=tier)
@@ -315,8 +322,7 @@ class CardModelAgent:
             for event in updates():
                 yield event
         fields.update(parser.finish())
-        # The positional fallback would take a refusal's one plain sentence for the name.
-        if "NAME" not in fields or parser.lone_sentence:
+        if not answered():
             raise ValueError("The naming reply was not in the line format.")
         fields.setdefault("CONFIDENCE", "0.5")
         # A place already in the context is not kept again: on a crop with no clue, the model copies it onto the
