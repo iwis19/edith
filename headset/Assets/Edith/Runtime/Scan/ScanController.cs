@@ -31,7 +31,7 @@ namespace Edith.Scan
 
     /// Scan, end to end on the headset. Both palms held open and facing away send one whole camera frame to the
     /// backend, which picks the few most interesting things in it. Each gets a pin: a dot on the object, placed by
-    /// depth, with a short hook above it. A new scan replaces the pins of the last, and recentring the view clears
+    /// depth, with a short hook above it that shows while the pin is looked at. A new scan replaces the pins of the last, and recentring the view clears
     /// them. TryOpen turns a pinch on a pin into the box a Look needs.
     public sealed class ScanController : MonoBehaviour
     {
@@ -58,6 +58,12 @@ namespace Edith.Scan
         const int DepthColumns = 16, DepthRows = 12, DepthRaysPerFrame = 24;
         // Where the ring and the status line sit for a scan that did not start from the pose.
         const float StatusAhead = 0.45f, StatusBelow = 0.1f;
+        // A card's text grows with its distance, so it covers about this much below the photo and at least this much
+        // either side of its centre, as tangents of the angle from the eye. Its depth is measured on a grid this many
+        // samples across, and it hangs this far in front of the nearest surface found.
+        const float TextBelow = 0.22f, TextHalfWidth = 0.1f;
+        const int ClearSamples = 5;
+        const float ClearMeters = 0.05f;
 
         sealed class Placed
         {
@@ -263,38 +269,34 @@ namespace Edith.Scan
             return true;
         }
 
-        // Looking at a pin with a still head fills its ring; when full, the pin opens as a Look whose box is the pin's
-        // object as seen from here, hung at the object's own distance so the photo lines up with what is around it.
+        // A pin is a bare dot until the head points at it. Then its hook shows, and holding the head still fills its
+        // ring; when full, the pin opens as a Look whose box is the pin's object as seen from here, hung at the
+        // object's own distance so the photo lines up with what is around it. A far pin only points the way, so it
+        // shows its hook but never opens.
         void Gaze()
         {
             var turning = Quaternion.Angle(lastEyeRotation, eye.rotation) / Mathf.Max(Time.deltaTime, 1e-4f);
             lastEyeRotation = eye.rotation;
 
-            Placed looked = null;
             var index = -1;
-            var sight = new Ray(eye.position, eye.forward);
             if (!scanning)
             {
                 points.Clear();
-                // A far pin only points the way and is never opened by gaze; a point at the eye is skipped.
-                foreach (var pin in pins) points.Add(pin.Far ? eye.position : pin.Point);
-                index = ScanGeometry.NearestToLine(sight, points, 180f);
+                foreach (var pin in pins) points.Add(pin.Point);
+                index = ScanGeometry.NearestToLine(new Ray(eye.position, eye.forward), points, tuning.gazeOpenDegrees);
             }
-            // The cursor sits at the distance of the pin nearest the line of sight, so both eyes focus on it there.
-            marks.SetCursor(index >= 0 ? sight.GetPoint((points[index] - eye.position).magnitude) : default, index >= 0);
-            if (index >= 0 && Vector3.Angle(sight.direction, points[index] - eye.position) > tuning.gazeOpenDegrees) index = -1;
-            if (index >= 0) looked = placed[index];
+            var looked = index >= 0 ? placed[index] : null;
 
             if (looked != gazed)
             {
-                if (gazed != null && placed.Contains(gazed)) marks.SetGaze(gazed.Mark, 0f);
+                if (gazed != null && placed.Contains(gazed)) marks.SetGaze(gazed.Mark, false, 0f);
                 gazed = looked;
                 gazeSeconds = 0f;
             }
-            else if (looked != null && turning <= tuning.gazeStillDegreesPerSecond) gazeSeconds += Time.deltaTime;
+            else if (looked != null && !pins[index].Far && turning <= tuning.gazeStillDegreesPerSecond) gazeSeconds += Time.deltaTime;
             if (gazed == null) return;
 
-            marks.SetGaze(gazed.Mark, Mathf.Clamp01(gazeSeconds / tuning.gazeOpenSeconds));
+            marks.SetGaze(gazed.Mark, true, Mathf.Clamp01(gazeSeconds / tuning.gazeOpenSeconds));
             if (gazeSeconds < tuning.gazeOpenSeconds) return;
 
             var distance = (pins[index].Point - eye.position).magnitude;
@@ -304,10 +306,36 @@ namespace Edith.Scan
                 gazeSeconds = -tuning.gazeOpenSeconds;
                 return;
             }
-            Debug.Log($"[EDITH scan] open \"{pins[index].Name}\" by gaze {distance:F2} m away, card on the object");
+            var card = ClearOfSurfaces(around);
+            Debug.Log($"[EDITH scan] open \"{pins[index].Name}\" by gaze {distance:F2} m away, card at {card.Depth:F2} m");
             gazed = null;
             RemovePin(index);
-            Opened?.Invoke(around);
+            Opened?.Invoke(card);
+        }
+
+        // Cards are drawn behind any real surface in front of them, so a ceiling seen at a slant or the glass in front
+        // of a view would hide part of the photo or its text. The card comes forward along its own sight lines until
+        // every part of it, and the text under it, is in front of what depth measures there. From here it still lines
+        // up with the object.
+        SightBox ClearOfSurfaces(in SightBox box)
+        {
+            if (environmentRaycast == null) return box;
+            var t = box.Tangent;
+            float xMin = Mathf.Min(t.xMin, t.center.x - TextHalfWidth), xMax = Mathf.Max(t.xMax, t.center.x + TextHalfWidth);
+            float yMin = t.yMin - TextBelow, yMax = t.yMax;
+            var forward = box.Eye.rotation * Vector3.forward;
+            var nearest = box.Depth;
+            for (var i = 0; i < ClearSamples; i++)
+            for (var j = 0; j < ClearSamples; j++)
+            {
+                var u = i / (ClearSamples - 1f);
+                var v = j / (ClearSamples - 1f);
+                var towards = box.PointAt(Mathf.Lerp(xMin, xMax, u), Mathf.Lerp(yMin, yMax, v), 1f) - box.Eye.position;
+                if (!environmentRaycast.Raycast(new Ray(box.Eye.position, towards), out var hit, tuning.maxPinMeters)) continue;
+                nearest = Mathf.Min(nearest, Vector3.Dot(hit.point - box.Eye.position, forward) - ClearMeters);
+            }
+            var depth = Mathf.Max(nearest, tuning.minPinMeters);
+            return depth < box.Depth ? new SightBox(box.Eye, box.Tangent, depth) : box;
         }
 
         /// The pin at the smallest angle from the line of sight of `eye`, within `maxDegrees` of it. `degrees` is
