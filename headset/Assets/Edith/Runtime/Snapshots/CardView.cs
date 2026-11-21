@@ -13,6 +13,9 @@ namespace Edith.Snapshots
     {
         // Text is laid out in quarter millimetres and scaled down, so the font is rasterised sharply at this size.
         public const float TextUnitsPerMm = 4f;
+        /// No card's photo is narrower than this over its distance from the eye, about 14.5 degrees, so a fact never
+        /// wraps into a thin column under it.
+        public const float MinPhotoTangent = 0.18f / 0.70f;
         // The glass around the photo and its corner radius, and the gap from the photo to the text.
         const float PadMm = 7f;
         const float RadiusMm = 11f;

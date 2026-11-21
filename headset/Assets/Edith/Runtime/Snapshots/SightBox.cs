@@ -50,6 +50,15 @@ namespace Edith.Snapshots
             return seen.xMin - margin <= 0f && seen.xMax + margin >= 0f && seen.yMin - margin <= 0f && seen.yMax + margin >= 0f;
         }
 
+        /// This box widened about its centre to at least `minTangentWidth` (a width over distance), or itself when
+        /// it is already that wide. The height is kept.
+        public SightBox WidenedTo(float minTangentWidth)
+        {
+            if (Tangent.width >= minTangentWidth) return this;
+            var centre = Tangent.center;
+            return new SightBox(Eye, new Rect(centre.x - minTangentWidth * 0.5f, Tangent.yMin, minTangentWidth, Tangent.height), Depth);
+        }
+
         /// The point of the box's tangent space (`tx`, `ty`) on the plane `depth` metres in front of the eye.
         public Vector3 PointAt(float tx, float ty, float depth) =>
             Eye.position + Eye.rotation * new Vector3(tx * depth, ty * depth, depth);
