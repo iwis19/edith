@@ -111,6 +111,7 @@ namespace Edith.Editor
             LookSetup.EnableCameraAccess();
             LookSetup.AddToScene(ScenePath);
             ScanSetup.AddToScene(ScenePath);
+            ScrapbookSetup.AddToScene(ScenePath);
             DiagnosticsSetup.AddToScene(ScenePath);
             BackendSettingsSetup.Write();
             // Meta's fixes enable rules that only pass after an earlier fix, so one pass is not enough.

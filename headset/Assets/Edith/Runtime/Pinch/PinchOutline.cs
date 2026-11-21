@@ -1,3 +1,4 @@
+using Edith.Hands;
 using Edith.Snapshots;
 using UnityEngine;
 
@@ -12,6 +13,8 @@ namespace Edith.Pinch
         const float LockedWidth = 0.003f;
 
         [SerializeField] PinchInput input;
+        /// While another panel holds it, a dragged pinch draws no box. Optional.
+        [SerializeField] HandGate gate;
 
         LineRenderer line;
         readonly Vector3[] corners = new Vector3[4];
@@ -27,6 +30,11 @@ namespace Edith.Pinch
 
         void OnStepped(PinchReading reading)
         {
+            if (gate != null && gate.Held)
+            {
+                line.enabled = false;
+                return;
+            }
             switch (reading.Event)
             {
                 case PinchEvent.Tap:
