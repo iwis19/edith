@@ -1,6 +1,6 @@
 # EDITH backend
 
-A FastAPI service that holds every AI call, the search and the memory, so API keys never reach the headset. It streams Look cards written by the Card agent.
+A FastAPI service that holds every AI call, the search and the memory, so API keys never reach the headset. It streams Look cards written by the Card agent and mints Gemini Live sessions for Ask.
 
 ## Card agent
 
@@ -60,6 +60,23 @@ The response is newline-delimited JSON (`application/x-ndjson`), one event per l
 
 The stream always starts with `accepted` and ends with `done` or `error`. In between, `fact` and `rarity` can each be missing (a repeated fact is dropped, an unreadable tier is skipped) and can come in either order, so a client must key on `type`, not position. A bad request is refused before streaming with an HTTP error and `{"error": {"code", "message"}}`. The token and the body size (the image cap plus 64 KB for the form) are checked before any of the body is read. Each finished Look is written to the `looks` table.
 
+### `POST /ask/session`
+
+Mints a Gemini Live session for one spoken question. The headset opens the websocket and talks to Gemini directly, so no audio passes through the backend and the API key never leaves it.
+
+The body is optional JSON. `{"voice": "Kore"}` picks the voice for this session; omit it, or send no body, for `LIVE_VOICE`. Any voice Gemini Live does not list is refused with 422 `invalid_request`.
+
+The response is `{"url", "setup", "model"}`:
+
+- `url`: the Live websocket address with a single-use token. The token opens one session, and that session must send its first message within about a minute.
+- `setup`: the JSON text the headset sends as its first message. It sets the model, spoken English, the voice, transcription of both sides (so the card can show the spoken answer) and EDITH's persona. With `LIVE_SEARCH=true` it adds Google Search.
+- `model`: the Live model ID.
+
+| Status | `error.code` | Meaning |
+| --- | --- | --- |
+| 503 | `ask_unavailable` | `GEMINI_API_KEY` is not set |
+| 502 | `ask_failed` | Gemini refused to mint a token |
+
 ## Set up
 
 Install [uv](https://docs.astral.sh/uv/), then run from this folder:
@@ -79,6 +96,14 @@ On Windows, `--loop asyncio:SelectorEventLoop` is required when `DATABASE_URL` i
 ## Configure
 
 Copy `.env.example` to `.env` and set the key for `CARD_PROVIDER`. With no `DATABASE_URL` the app runs without a database. Model IDs, the embedding size and the stub timings are settings in `edith_backend/config.py`.
+
+Ask settings:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `LIVE_MODEL` | `gemini-3.8-live` | The Gemini Live model Ask talks to |
+| `LIVE_VOICE` | `Kore` | The prebuilt Live voice. Gemini silently falls back to its default for a name it does not know, so the backend accepts only listed names |
+| `LIVE_SEARCH` | `false` | Adds Google Search to the session. A free-tier key refuses the session with it on |
 
 To see a Look stream end to end against a running backend:
 
@@ -124,6 +149,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 ## Layout
 
 - `edith_backend/app.py`: routes, header and upload checks, the NDJSON stream.
+- `edith_backend/agents/ask.py`: the Ask persona prompt, the token request and the session setup.
 - `edith_backend/agents/card.py`: the `CardAgent` protocol, the stub, and `make_card_agent`, which picks the agent from `CARD_PROVIDER`.
 - `edith_backend/agents/card_model.py`: the two-call Card agent, its line parser, and the fact and place histories.
 - `edith_backend/agents/writers.py`: the OpenAI and Gemini streaming writers.
