@@ -32,12 +32,13 @@ namespace Edith.Grab
             input.Unregister(this);
         }
 
+        /// A snapshot is a target once its card has finished, so the fact is read before the card can be put away.
         public void AddGrabTargets(List<(int id, SightBox box)> targets)
         {
             if (room == null) return;
             var snapshots = room.Snapshots;
             for (var i = 0; i < snapshots.Count; i++)
-                targets.Add((snapshots[i].item.Id, snapshots[i].box));
+                if (snapshots[i].item.Card.Finished) targets.Add((snapshots[i].item.Id, snapshots[i].box));
         }
 
         void OnStepped(GrabReading reading)
