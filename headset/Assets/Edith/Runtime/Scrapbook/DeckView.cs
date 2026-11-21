@@ -22,8 +22,10 @@ namespace Edith.Scrapbook
         }
 
         /// Draws `memories` scrolled to `position`. `photoOf` gives a memory's photo by id, or null while it has none.
-        /// `fade` scales every card's opacity.
-        public void Show(IReadOnlyList<Memory> memories, float position, Func<int, Texture> photoOf, float fade = 1f)
+        /// `fade` scales every card's opacity. `form` below 1 draws a deck folded toward its middle, its cards fainter
+        /// the more folded, except `steady`, which keeps its opacity. `skip` is left undrawn.
+        public void Show(IReadOnlyList<Memory> memories, float position, Func<int, Texture> photoOf, float fade = 1f,
+            float form = 1f, Memory steady = null, Memory skip = null)
         {
             middle = Mathf.RoundToInt(position);
             for (var at = middle - DeckLayout.Reach; at <= middle + DeckLayout.Reach; at++)
@@ -31,7 +33,7 @@ namespace Edith.Scrapbook
                 // Consecutive indices land on different cards, and an index keeps its card while it is in reach.
                 var slot = (at % Cards + Cards) % Cards;
                 var card = cards[slot];
-                if (at < 0 || at >= memories.Count)
+                if (at < 0 || at >= memories.Count || memories[at] == skip)
                 {
                     bound[slot] = null;
                     card.Hide();
@@ -44,18 +46,23 @@ namespace Edith.Scrapbook
                 }
                 index[slot] = at;
                 card.SetPhoto(photoOf(memories[at].Id));
-                card.Place(DeckLayout.Pose(at - position), fade);
+                card.Place(DeckLayout.Pose((at - position) * form), memories[at] == steady ? fade : fade * form);
             }
         }
 
-        /// Draws one card in the middle that says `title` and `body`, in place of the deck.
-        public void ShowNotice(string title, string body, float fade = 1f)
+        public void Hide()
         {
             for (var slot = 0; slot < Cards; slot++)
             {
                 bound[slot] = null;
                 cards[slot].Hide();
             }
+        }
+
+        /// Draws one card in the middle that says `title` and `body`, in place of the deck.
+        public void ShowNotice(string title, string body, float fade = 1f)
+        {
+            Hide();
             cards[0].Show(title, body, null, null, MemoryCard.Untiered);
             cards[0].SetPhoto(null);
             cards[0].Place(DeckLayout.Pose(0f), fade);

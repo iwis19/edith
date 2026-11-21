@@ -50,6 +50,24 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_deck_that_replaces_another_forms_over_a_fifth_of_a_second()
+        {
+            var deck = new Deck(5, 2, true);
+            Assert.AreEqual(0f, deck.Form);
+            deck.Advance(0.1f);
+            Assert.That(deck.Form, Is.GreaterThan(0f).And.LessThan(1f));
+            deck.Advance(0.11f);
+            Assert.AreEqual(1f, deck.Form);
+            Assert.AreEqual(2f, deck.Position, "forming never moves the middle card");
+        }
+
+        [Test]
+        public void A_new_deck_is_formed_at_once()
+        {
+            Assert.AreEqual(1f, new Deck(5).Form);
+        }
+
+        [Test]
         public void Steps_stop_at_both_ends()
         {
             var deck = new Deck(3);

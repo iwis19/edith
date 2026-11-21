@@ -298,6 +298,47 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_deck_folded_into_its_middle_draws_only_the_steady_card()
+        {
+            var memories = Memories(10);
+            view.Show(memories, 5f, NoPhoto, 1f, 0f, memories[5]);
+            Assert.AreEqual(1, Drawn.Length);
+            Assert.AreEqual("Fact 5.", Shown(Middle, "Fact"));
+        }
+
+        [Test]
+        public void A_deck_forming_fans_its_cards_out_from_the_middle_and_fades_them_in()
+        {
+            var memories = Memories(10);
+            view.Show(memories, 5f, NoPhoto, 1f, 0.5f, memories[5]);
+            var side = Drawn.Single(card => Shown(card, "Fact") == "Fact 6.");
+            var formed = DeckLayout.Pose(1f);
+            Assert.That(side.transform.localPosition.x, Is.GreaterThan(0f).And.LessThan(formed.Position.x));
+            Assert.That(side.GetComponent<CanvasGroup>().alpha, Is.EqualTo(0.5f).Within(1e-4f));
+            Assert.AreEqual(1f, Middle.GetComponent<CanvasGroup>().alpha, "the steady card does not fade");
+        }
+
+        [Test]
+        public void A_skipped_memory_is_not_drawn()
+        {
+            var memories = Memories(10);
+            view.Show(memories, 5f, NoPhoto, 1f, 1f, null, memories[5]);
+            Assert.IsFalse(Drawn.Any(card => Shown(card, "Fact") == "Fact 5."));
+            Assert.AreEqual(4, Drawn.Length);
+        }
+
+        [Test]
+        public void A_hidden_deck_draws_nothing_and_draws_again()
+        {
+            var memories = Memories(4);
+            view.Show(memories, 1f, NoPhoto);
+            view.Hide();
+            Assert.AreEqual(0, Drawn.Length);
+            view.Show(memories, 1f, NoPhoto);
+            Assert.AreEqual("Fact 1.", Shown(Middle, "Fact"));
+        }
+
+        [Test]
         public void A_faded_out_deck_draws_nothing()
         {
             view.Show(Memories(10), 5f, NoPhoto, 0f);
