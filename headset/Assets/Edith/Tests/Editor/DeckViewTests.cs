@@ -60,10 +60,10 @@ namespace Edith.Tests
             card.GetComponentsInChildren<RectTransform>(true).Single(part => part.name == name);
 
         [Test]
-        public void The_middle_card_shows_the_name_the_fact_and_the_caption()
+        public void The_middle_card_shows_the_fact_and_the_caption_without_the_name()
         {
             view.Show(Memories(5), 0f, NoPhoto);
-            Assert.AreEqual("Thing 0", Shown(Middle, "Name"));
+            Assert.AreEqual("", Shown(Middle, "Name"));
             Assert.AreEqual("Fact 0.", Shown(Middle, "Fact"));
             Assert.AreEqual("Home · 11/21", Shown(Middle, "Caption"));
         }
@@ -76,10 +76,11 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_memory_without_a_fact_shows_its_caption_right_under_its_name()
+        public void A_memory_without_a_fact_shows_its_name_with_the_caption_right_under_it()
         {
             var plain = new List<Memory> { new Memory(1, "Fern", null, null, null, new DateTime(2026, 3, 4)) };
             view.Show(plain, 0f, NoPhoto);
+            Assert.AreEqual("Fern", Shown(Middle, "Name"));
             Assert.AreEqual("", Shown(Middle, "Fact"));
             Assert.AreEqual("3/4", Shown(Middle, "Caption"));
             Assert.AreEqual(Part(Middle, "Fact").anchoredPosition.y, Part(Middle, "Caption").anchoredPosition.y);
@@ -101,8 +102,8 @@ namespace Edith.Tests
         {
             view.Show(Memories(10), 5f, NoPhoto);
             Assert.AreEqual(5, Drawn.Length);
-            Assert.AreEqual("Thing 5", Shown(Middle, "Name"));
-            CollectionAssert.AreEquivalent(new[] { "Thing 3", "Thing 4", "Thing 5", "Thing 6", "Thing 7" }, Drawn.Select(card => Shown(card, "Name")));
+            Assert.AreEqual("Fact 5.", Shown(Middle, "Fact"));
+            CollectionAssert.AreEquivalent(new[] { "Fact 3.", "Fact 4.", "Fact 5.", "Fact 6.", "Fact 7." }, Drawn.Select(card => Shown(card, "Fact")));
         }
 
         [Test]
@@ -111,7 +112,7 @@ namespace Edith.Tests
             var memories = Memories(60);
             for (var position = 0f; position <= 59f; position += 0.37f) view.Show(memories, position, NoPhoto);
             Assert.AreEqual(2 * DeckLayout.Reach + 1, Cards.Length);
-            Assert.AreEqual("Thing 59", Shown(Middle, "Name"));
+            Assert.AreEqual("Fact 59.", Shown(Middle, "Fact"));
         }
 
         [Test]

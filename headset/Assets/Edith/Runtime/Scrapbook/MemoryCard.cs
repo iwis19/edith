@@ -4,8 +4,8 @@ using UnityEngine.UI;
 
 namespace Edith.Scrapbook
 {
-    /// One card of the deck: the photo, fitted whole into a frame of the rarity's colour, and under it the name,
-    /// the fun fact and the caption. Also draws the Scrapbook's notices, which are cards with no photo.
+    /// One card of the deck: the photo, fitted whole into a frame of the rarity's colour, and under it the fun fact
+    /// and the caption, like a snapshot's card. The name shows only when there is no fact. Also draws the Scrapbook's notices, which are cards with no photo.
     public sealed class MemoryCard
     {
         // Four canvas units per millimetre, so the font is rasterised sharply enough at this size.
@@ -55,7 +55,6 @@ namespace Edith.Scrapbook
             card.name.horizontalOverflow = HorizontalWrapMode.Overflow;
             card.fact = Label("Fact", column, font, material, FactSize, FontStyle.Normal, FactMaxHeight);
             card.fact.verticalOverflow = VerticalWrapMode.Truncate;
-            card.fact.rectTransform.anchoredPosition = new Vector2(0f, -NameHeight);
             card.caption = Label("Caption", column, font, material, CaptionSize, FontStyle.Normal, CaptionHeight);
             card.caption.color = Quiet;
             card.SetPhoto(null);
@@ -64,7 +63,7 @@ namespace Edith.Scrapbook
         }
 
         public void Show(Memory memory) =>
-            Show(memory.Name, memory.Fact, memory.Caption, memory.Tier is Rarity tier ? RarityColors.For(tier) : Untiered);
+            Show(string.IsNullOrEmpty(memory.Fact) ? memory.Name : null, memory.Fact, memory.Caption, memory.Tier is Rarity tier ? RarityColors.For(tier) : Untiered);
 
         public void Show(string title, string body, string footer, Color frameColor)
         {
@@ -72,9 +71,12 @@ namespace Edith.Scrapbook
             name.text = title ?? "";
             fact.text = body ?? "";
             caption.text = footer ?? "";
-            // The caption follows the fact, however many lines the fact wraps to.
+            // The fact sits under the title when there is one, and the caption follows the fact, however many lines it
+            // wraps to.
+            var titleHeight = string.IsNullOrEmpty(title) ? 0f : NameHeight;
+            fact.rectTransform.anchoredPosition = new Vector2(0f, -titleHeight);
             var factHeight = string.IsNullOrEmpty(body) ? 0f : Mathf.Clamp(fact.preferredHeight, FactLineHeight, FactMaxHeight);
-            caption.rectTransform.anchoredPosition = new Vector2(0f, -(NameHeight + factHeight + (factHeight > 0f ? Gap : 0f)));
+            caption.rectTransform.anchoredPosition = new Vector2(0f, -(titleHeight + factHeight + (factHeight > 0f ? Gap : 0f)));
         }
 
         /// Shows `texture` whole inside the frame, at its own shape. Null shows an empty frame.
