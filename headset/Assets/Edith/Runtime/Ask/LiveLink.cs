@@ -234,8 +234,7 @@ namespace Edith.Ask
                 Post(new LiveEvent(LiveEventKind.Audio));
             }
             if (message.OutputText.Length > 0) Post(new LiveEvent(LiveEventKind.OutputText, message.OutputText));
-            if (message.Sources.Count > 0) Post(new LiveEvent(LiveEventKind.Sources, string.Join("
-", message.Sources)));
+            if (message.Sources.Count > 0) Post(new LiveEvent(LiveEventKind.Sources, string.Join("\n", message.Sources)));
             if (message.Interrupted)
             {
                 speech.Drop();
