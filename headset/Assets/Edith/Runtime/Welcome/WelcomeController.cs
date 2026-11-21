@@ -64,7 +64,6 @@ namespace Edith.Welcome
             public Glass Glass, Play;
         }
 
-        readonly WelcomeFlow flow = new WelcomeFlow();
         readonly PinchPair taps = new PinchPair(new PinchTuning());
         readonly List<Target> targets = new List<Target>();
         readonly List<Chip> chips = new List<Chip>();
@@ -80,33 +79,47 @@ namespace Edith.Welcome
         Glass spinner;
         Font regular, semibold;
         WelcomeStep shownStep = WelcomeStep.Done;
-        bool phoneKnown, leaving, greeted;
+        readonly PeaceSignsTracker summon = new PeaceSignsTracker();
+        WelcomeFlow flow = new WelcomeFlow();
+        bool open, phoneKnown, leaving, greeted;
         AudioSource speaker;
 
         void Start()
         {
-            if (WelcomeStore.Done && !everyLaunch)
-            {
-                enabled = false;
-                return;
-            }
             Build();
-            if (pairing != null) pairing.Suppressed = true;
-            Refresh();
+            if (!WelcomeStore.Done || everyLaunch) Open();
         }
 
         void Update()
         {
-            if (screen == null) return;
+            if (right == null || left == null) return;
+            // Ungated, so the gesture and the taps work before a phone is paired.
+            HandFrame rightHand = right.ReadUngated(), leftHand = left.ReadUngated();
+            if (summon.Step(leftHand, rightHand) && (!open || leaving)) Open();
+            if (!open) return;
             WatchPhone();
-            ReadTaps();
+            if (!leaving) ReadTaps(rightHand, leftHand);
             if (flow.Step != shownStep) Enter(flow.Step);
             Draw();
         }
 
+        /// Starts the welcome over from the first step, with nothing picked. Two peace signs held for 1.5 seconds call
+        /// it at any time, so it can be shown again wherever the person is.
+        void Open()
+        {
+            flow = new WelcomeFlow();
+            open = true;
+            leaving = phoneKnown = greeted = false;
+            speech.Set("");
+            shownStep = WelcomeStep.Done;
+            if (pairing != null) pairing.Suppressed = true;
+            Refresh();
+            Debug.Log("[EDITH welcome] opened");
+        }
+
         void LateUpdate()
         {
-            if (screen == null || group.alpha <= 0f) return;
+            if (!open || group.alpha <= 0f) return;
             var follow = 1f - Mathf.Exp(-FollowRate * Time.deltaTime);
             var rest = Rest();
             var position = Vector3.Lerp(transform.position, rest, follow);
@@ -125,10 +138,9 @@ namespace Edith.Welcome
             flow.PhoneConnected();
         }
 
-        void ReadTaps()
+        void ReadTaps(in HandFrame rightHand, in HandFrame leftHand)
         {
-            if (right == null || left == null) return;
-            var reading = taps.Step(right.ReadUngated(), left.ReadUngated());
+            var reading = taps.Step(rightHand, leftHand);
             if (reading.Event == PinchEvent.Tap) Tap(reading.Start);
         }
 
@@ -242,7 +254,7 @@ namespace Edith.Welcome
             canvas.enabled = group.alpha > 0f;
             if (leaving && group.alpha <= 0f)
             {
-                enabled = false;
+                open = false;
                 return;
             }
 
