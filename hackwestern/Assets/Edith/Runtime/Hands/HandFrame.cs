@@ -12,9 +12,13 @@ namespace Edith.Hands
         public Quaternion EyeRotation;
         /// False when the hand is lost or tracking is unsure of the thumb or index.
         public bool Tracked;
+        /// True whenever the hand is tracked at all, with any confidence. A fist usually fails Tracked's high
+        /// confidence on the thumb and index, so grab reads this instead.
+        public bool Visible;
         /// Horizon OS's index pinch flag.
         public bool Pinching;
         public Vector3 ThumbTip, IndexTip, Wrist, IndexKnuckle, LittleKnuckle;
+        public Vector3 MiddleKnuckle, MiddleTip, RingKnuckle, RingTip;
 
         public Vector3 PinchPoint => (ThumbTip + IndexTip) * 0.5f;
         public float FingerGap => Vector3.Distance(ThumbTip, IndexTip);
