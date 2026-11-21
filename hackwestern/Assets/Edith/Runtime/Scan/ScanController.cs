@@ -86,6 +86,9 @@ namespace Edith.Scan
         /// The pins in the room, most interesting first.
         public IReadOnlyList<ScanPin> Pins => pins;
 
+        /// What the last scan ended with: how many pins landed, or why none did. Null before the first scan.
+        public string LastResult { get; private set; }
+
         void Awake()
         {
             tracker = new ScanPoseTracker(tuning);
@@ -195,7 +198,11 @@ namespace Edith.Scan
                     return;
                 }
                 Place(id, frame.CameraPose, picks);
-                if (pins.Count > 0) Play(1318.5f);
+                if (pins.Count > 0)
+                {
+                    LastResult = $"{id}: {pins.Count} pins";
+                    Play(1318.5f);
+                }
                 else Fail("Nothing stands out here.");
             }
             catch (Exception e)
@@ -336,6 +343,7 @@ namespace Edith.Scan
         /// A scan that ends with no pins says why where the ring was, with a low tone.
         void Fail(string message)
         {
+            LastResult = message;
             marks.ShowStatus(ringAt, message);
             Play(440f);
         }

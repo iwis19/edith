@@ -19,6 +19,10 @@ namespace Edith.Editor
         const string RecordingApkPath = "Builds/edith-record.apk";
         /// Compiles HandRecorder into the recording build only.
         const string RecordHandsDefine = "EDITH_RECORD_HANDS";
+        const string DiagnosticsApkPath = "Builds/edith-diagnostics.apk";
+        /// Compiles the status panel into the diagnostics build only. A Unity Development Build would also embed
+        /// Meta's access token and this machine's address, so the panel has its own define.
+        const string DiagnosticsDefine = "EDITH_DIAGNOSTICS";
         const string CameraRigPrefab = "Packages/com.meta.xr.sdk.core/Prefabs/OVRCameraRig.prefab";
 
         [MenuItem("EDITH/Configure Project")]
@@ -29,6 +33,9 @@ namespace Edith.Editor
 
         [MenuItem("EDITH/Build Recording APK")]
         static void BuildRecordingMenu() => Build(recordHands: true);
+
+        [MenuItem("EDITH/Build Diagnostics APK")]
+        static void BuildDiagnosticsMenu() => Build(diagnostics: true);
 
         /// Batch entry. Run without -quit: Meta's fixes are async, so this exits the editor itself.
         public static async void BatchConfigure()
@@ -57,6 +64,12 @@ namespace Edith.Editor
         public static void BatchBuildRecording()
         {
             if (!Build(recordHands: true)) EditorApplication.Exit(1);
+        }
+
+        /// Batch entry for the diagnostics build, which shows a status panel in the headset.
+        public static void BatchBuildDiagnostics()
+        {
+            if (!Build(diagnostics: true)) EditorApplication.Exit(1);
         }
 
         public static async Task Configure()
@@ -98,6 +111,7 @@ namespace Edith.Editor
             LookSetup.EnableCameraAccess();
             LookSetup.AddToScene(ScenePath);
             ScanSetup.AddToScene(ScenePath);
+            DiagnosticsSetup.AddToScene(ScenePath);
             BackendSettingsSetup.Write();
             // Meta's fixes enable rules that only pass after an earlier fix, so one pass is not enough.
             for (var pass = 0; pass < 3; pass++)
@@ -155,15 +169,18 @@ namespace Edith.Editor
                 Debug.Log($"[EDITH setup] OpenXR {(issue.error ? "error" : "warning")} left: {issue.message}");
         }
 
-        public static bool Build(bool recordHands = false)
+        public static bool Build(bool recordHands = false, bool diagnostics = false)
         {
+            var defines = new List<string>();
+            if (recordHands) defines.Add(RecordHandsDefine);
+            if (diagnostics) defines.Add(DiagnosticsDefine);
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },
-                locationPathName = recordHands ? RecordingApkPath : ApkPath,
+                locationPathName = recordHands ? RecordingApkPath : diagnostics ? DiagnosticsApkPath : ApkPath,
                 target = BuildTarget.Android,
                 options = BuildOptions.None,
-                extraScriptingDefines = recordHands ? new[] { RecordHandsDefine } : Array.Empty<string>(),
+                extraScriptingDefines = defines.ToArray(),
             });
             var summary = report.summary;
             Debug.Log($"[EDITH setup] build {summary.result} {summary.outputPath} {summary.totalSize} bytes, {summary.totalErrors} errors");

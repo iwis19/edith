@@ -36,6 +36,9 @@ namespace Edith.Pairing
         PairPhase shown = PairPhase.Hidden;
         readonly CancellationTokenSource lifetime = new CancellationTokenSource();
 
+        /// The pairing state, or null when the build has no backend and the panel never started.
+        public PairingFlow Flow => flow;
+
         void Start()
         {
             var settings = BackendSettings.Load();
