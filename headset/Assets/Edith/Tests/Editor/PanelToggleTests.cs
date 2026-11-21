@@ -44,64 +44,95 @@ namespace Edith.Tests
             };
         }
 
-        void Feed(float curl, float seconds, bool visible = true)
+        void Feed(float left, float right, float seconds, bool leftVisible = true, bool grabbing = false)
         {
             for (var elapsed = 0f; elapsed < seconds - 1e-5f; elapsed += Dt)
             {
-                if (toggle.Step(Hand(time, curl, visible))) toggles++;
+                if (toggle.Step(Hand(time, left, leftVisible), Hand(time, right), grabbing)) toggles++;
                 time += Dt;
             }
         }
 
         [Test]
-        public void A_fist_held_for_a_second_toggles_once()
+        public void Both_fists_held_for_a_second_toggle_once()
         {
-            Feed(Open, 0.5f);
-            Feed(Fist, PanelToggle.HoldSeconds + 0.5f);
+            Feed(Open, Open, 0.5f);
+            Feed(Fist, Fist, PanelToggle.HoldSeconds + 0.5f);
 
             Assert.AreEqual(1, toggles);
         }
 
         [Test]
-        public void A_fist_that_opens_early_toggles_nothing()
+        public void One_fist_alone_toggles_nothing()
         {
-            Feed(Open, 0.5f);
-            Feed(Fist, 0.7f);
-            Feed(Open, 0.5f);
-            Feed(Fist, 0.7f);
+            Feed(Fist, Open, 2f);
+            Feed(Open, Fist, 2f);
+            Feed(Fist, Relaxed, 2f);
 
             Assert.AreEqual(0, toggles);
         }
 
         [Test]
-        public void The_hand_must_open_before_the_next_hold_counts()
+        public void The_hold_counts_from_when_the_second_fist_closes()
         {
-            Feed(Fist, PanelToggle.HoldSeconds + 0.2f);
-            Feed(Relaxed, 0.5f);
-            Feed(Fist, PanelToggle.HoldSeconds + 0.2f);
+            Feed(Fist, Open, 0.8f);
+            Feed(Fist, Fist, 0.8f);
+            Assert.AreEqual(0, toggles);
+
+            Feed(Fist, Fist, 0.3f);
+
+            Assert.AreEqual(1, toggles);
+        }
+
+        [Test]
+        public void A_fist_that_grabbed_a_card_toggles_nothing()
+        {
+            Feed(Open, Open, 0.3f);
+            Feed(Fist, Fist, 2f, grabbing: true);
+
+            Assert.AreEqual(0, toggles);
+        }
+
+        [Test]
+        public void Fists_that_open_early_toggle_nothing()
+        {
+            Feed(Open, Open, 0.5f);
+            Feed(Fist, Fist, 0.7f);
+            Feed(Open, Fist, 0.5f);
+            Feed(Fist, Fist, 0.7f);
+
+            Assert.AreEqual(0, toggles);
+        }
+
+        [Test]
+        public void A_hand_must_open_before_the_next_hold_counts()
+        {
+            Feed(Fist, Fist, PanelToggle.HoldSeconds + 0.2f);
+            Feed(Relaxed, Relaxed, 0.5f);
+            Feed(Fist, Fist, PanelToggle.HoldSeconds + 0.2f);
             Assert.AreEqual(1, toggles);
 
-            Feed(Open, 0.3f);
-            Feed(Fist, PanelToggle.HoldSeconds + 0.2f);
+            Feed(Fist, Open, 0.3f);
+            Feed(Fist, Fist, PanelToggle.HoldSeconds + 0.2f);
 
             Assert.AreEqual(2, toggles);
         }
 
         [Test]
-        public void Losing_the_hand_restarts_the_hold()
+        public void Losing_a_hand_restarts_the_hold()
         {
-            Feed(Fist, 0.7f);
-            Feed(Fist, 0.5f, visible: false);
-            Feed(Fist, 0.7f);
+            Feed(Fist, Fist, 0.7f);
+            Feed(Fist, Fist, 0.5f, leftVisible: false);
+            Feed(Fist, Fist, 0.7f);
 
             Assert.AreEqual(0, toggles);
         }
 
         [Test]
-        public void A_relaxed_hand_between_the_thresholds_does_not_start_a_hold()
+        public void Relaxed_hands_between_the_thresholds_do_not_start_a_hold()
         {
-            Feed(Open, 0.3f);
-            Feed(Relaxed, 3f);
+            Feed(Open, Open, 0.3f);
+            Feed(Relaxed, Relaxed, 3f);
 
             Assert.AreEqual(0, toggles);
         }

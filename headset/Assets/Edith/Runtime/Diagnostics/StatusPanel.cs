@@ -18,8 +18,8 @@ using UnityEngine.UI;
 namespace Edith.Diagnostics
 {
     /// A small world-space panel of live status for the diagnostics build: pinch and grab state, counts, camera,
-    /// pairing, the last Scan, the backend's /health and the last error in the log. A left fist held for a second
-    /// shows or hides it. Release builds carry none of its code, and the component destroys itself there.
+    /// pairing, the last Scan, the backend's /health and the last error in the log. Both fists held for a second
+    /// show or hide it. Release builds carry none of its code, and the component destroys itself there.
     public sealed class StatusPanel : MonoBehaviour
     {
         [SerializeField] PinchInput pinch;
@@ -29,6 +29,7 @@ namespace Edith.Diagnostics
         [SerializeField] PhonePairing pairing;
         [SerializeField] ScanController scan;
         [SerializeField] LeftHandSource leftHand;
+        [SerializeField] RightHandSource rightHand;
         [SerializeField] Transform eye;
         [SerializeField] Font font;
         [SerializeField] Material material;
@@ -89,7 +90,7 @@ namespace Edith.Diagnostics
 
         void OnPinch(PinchReading reading) => tally.OnPinch(reading, Time.realtimeSinceStartup);
 
-        void OnGrab(GrabReading reading) => tally.OnGrab(reading);
+        void OnGrab(HandSide side, GrabReading reading) => tally.OnGrab(side, reading);
 
         // Logs arrive from any thread, and an exception inside an async call arrives from a worker.
         void OnLog(string message, string stackTrace, LogType type)
@@ -101,7 +102,8 @@ namespace Edith.Diagnostics
         void Update()
         {
             var now = Time.realtimeSinceStartup;
-            if (toggle.Step(leftHand.Read()))
+            var grabbing = grab.Claimed(HandSide.Left) || grab.Claimed(HandSide.Right);
+            if (toggle.Step(leftHand.Read(), rightHand.Read(), grabbing))
             {
                 shown = !shown;
                 Debug.Log($"[EDITH diagnostics] panel {(shown ? "shown" : "hidden")}");

@@ -1,6 +1,7 @@
 using Edith.Capture;
 using Edith.Diagnostics;
 using Edith.Grab;
+using Edith.Hands;
 using Edith.Pairing;
 using Edith.Pinch;
 using NUnit.Framework;
@@ -54,13 +55,30 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void Grab_state_follows_the_hand_that_holds_a_card()
+        {
+            var tally = new StatusTally();
+            tally.OnGrab(HandSide.Left, Grab(GrabPhase.Holding, GrabEvent.Grabbed, 5));
+            tally.OnGrab(HandSide.Right, Grab(GrabPhase.Idle, GrabEvent.None, GrabTracker.NoCard));
+            Assert.That(StatusText.Format(View(tally)), Does.Contain("grab     Holding card 5, last Grabbed"));
+
+            tally.OnGrab(HandSide.Right, Grab(GrabPhase.Holding, GrabEvent.Grabbed, 6));
+            tally.OnGrab(HandSide.Left, Grab(GrabPhase.Holding, GrabEvent.None, 5));
+            Assert.That(StatusText.Format(View(tally)), Does.Contain("grab     Holding card 6, last Grabbed"));
+
+            tally.OnGrab(HandSide.Right, Grab(GrabPhase.Idle, GrabEvent.Pocketed, 6));
+            tally.OnGrab(HandSide.Left, Grab(GrabPhase.Holding, GrabEvent.None, 5));
+            Assert.That(StatusText.Format(View(tally)), Does.Contain("grab     Holding card 5, last Pocketed"));
+        }
+
+        [Test]
         public void Grab_state_names_the_held_card_and_the_last_event()
         {
             var tally = new StatusTally();
-            tally.OnGrab(Grab(GrabPhase.Holding, GrabEvent.Grabbed, 3));
+            tally.OnGrab(HandSide.Right, Grab(GrabPhase.Holding, GrabEvent.Grabbed, 3));
 
             var held = StatusText.Format(View(tally));
-            tally.OnGrab(Grab(GrabPhase.Idle, GrabEvent.Pocketed, 3));
+            tally.OnGrab(HandSide.Right, Grab(GrabPhase.Idle, GrabEvent.Pocketed, 3));
             var pocketed = StatusText.Format(View(tally));
 
             Assert.That(held, Does.Contain("grab     Holding card 3, last Grabbed"));

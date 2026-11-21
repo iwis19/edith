@@ -3,9 +3,9 @@ using Edith.Hands;
 
 namespace Edith.Diagnostics
 {
-    /// A closed left fist held for HoldSeconds shows or hides the status panel. The left hand has no other job
-    /// besides the palms-out Scan, which needs it open, and the right-hand pinch, grab and thumb gestures never read it.
-    /// One hold toggles once; the hand has to open before the next one counts.
+    /// Both hands held in closed fists for HoldSeconds show or hide the status panel. A fist that grabbed a card does
+    /// not count, so carrying or pocketing a card never toggles the panel, and Scan needs both hands open. One hold
+    /// toggles once; a hand has to open before the next one counts.
     public sealed class PanelToggle
     {
         public const float HoldSeconds = 1f;
@@ -16,24 +16,25 @@ namespace Edith.Diagnostics
 
         public PanelToggle(GrabTuning tuning) => this.tuning = tuning;
 
-        /// True on the one frame the hold completes.
-        public bool Step(in HandFrame left)
+        /// True on the one frame the hold completes. `grabbing` is true while either fist is one that grabbed a card.
+        public bool Step(in HandFrame left, in HandFrame right, bool grabbing)
         {
-            if (!left.Visible)
+            if (!left.Visible || !right.Visible || grabbing)
             {
                 closedSince = -1f;
                 return false;
             }
-            var curl = GrabTracker.Curl(left);
-            if (curl > tuning.openCurl)
+            var leftCurl = GrabTracker.Curl(left);
+            var rightCurl = GrabTracker.Curl(right);
+            if (leftCurl > tuning.openCurl || rightCurl > tuning.openCurl)
             {
                 armed = true;
                 closedSince = -1f;
                 return false;
             }
-            if (curl >= tuning.closedCurl || !armed) return false;
-            if (closedSince < 0f) closedSince = left.Time;
-            if (left.Time - closedSince < HoldSeconds) return false;
+            if (leftCurl >= tuning.closedCurl || rightCurl >= tuning.closedCurl || !armed) return false;
+            if (closedSince < 0f) closedSince = right.Time;
+            if (right.Time - closedSince < HoldSeconds) return false;
             armed = false;
             closedSince = -1f;
             return true;

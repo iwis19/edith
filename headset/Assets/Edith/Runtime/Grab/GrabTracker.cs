@@ -36,7 +36,7 @@ namespace Edith.Grab
         }
     }
 
-    /// Right-hand fist grab on cards, carry and pull to the chest. Deterministic in HandFrame.Time.
+    /// One hand's fist grab on cards, carry and pull to the chest. Deterministic in HandFrame.Time.
     public sealed class GrabTracker
     {
         public const int NoCard = -1;
@@ -55,6 +55,10 @@ namespace Edith.Grab
         Quaternion rotation = Quaternion.identity;
 
         public GrabTracker(GrabTuning tuning) => this.tuning = tuning;
+
+        public bool IsHolding => phase == GrabPhase.Holding;
+        /// The card held while IsHolding.
+        public int HeldCard => cardId;
 
         /// Whether the hand is closed, with the curl of the newest frame it was visible and the lowest curl since it closed.
         public bool IsClosed => closed;

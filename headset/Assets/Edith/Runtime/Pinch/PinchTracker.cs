@@ -35,7 +35,7 @@ namespace Edith.Pinch
         }
     }
 
-    /// Right-hand pinch, drag and release. Deterministic in HandFrame.Time.
+    /// One hand's pinch, drag and release. Deterministic in HandFrame.Time.
     public sealed class PinchTracker
     {
         struct Sample

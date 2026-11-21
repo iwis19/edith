@@ -36,7 +36,7 @@ namespace Edith.Tests
 
         /// A right hand with its grip at `grip`, palm facing away from an eye at the origin looking down +z.
         /// Each fingertip sits at `curl` times its knuckle's distance from the wrist.
-        static HandFrame Hand(float t, Vector3 grip, float curl, bool visible = true)
+        internal static HandFrame Hand(float t, Vector3 grip, float curl, bool visible = true)
         {
             var wrist = grip - new Vector3(0f, 0.0675f, 0f);
             var index = wrist + new Vector3(-0.03f, 0.085f, 0f);

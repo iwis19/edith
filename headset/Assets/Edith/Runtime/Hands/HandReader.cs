@@ -5,14 +5,16 @@ namespace Edith.Hands
     /// Reads one tracked hand and the eye into a HandFrame.
     public sealed class HandReader
     {
+        readonly HandSide side;
         readonly OVRHand hand;
         readonly OVRSkeleton skeleton;
         readonly Transform eye;
 
         Transform thumbTip, indexTip, wrist, indexKnuckle, littleKnuckle, middleKnuckle, middleTip, ringKnuckle, ringTip;
 
-        public HandReader(OVRHand hand, OVRSkeleton skeleton, Transform eye)
+        public HandReader(HandSide side, OVRHand hand, OVRSkeleton skeleton, Transform eye)
         {
+            this.side = side;
             this.hand = hand;
             this.skeleton = skeleton;
             this.eye = eye;
@@ -20,7 +22,7 @@ namespace Edith.Hands
 
         public HandFrame Read()
         {
-            var frame = new HandFrame { Time = Time.time, EyePosition = eye.position, EyeRotation = eye.rotation };
+            var frame = new HandFrame { Side = side, Time = Time.time, EyePosition = eye.position, EyeRotation = eye.rotation };
             if (!FindBones()) return frame;
 
             frame.Visible = hand.IsTracked;
