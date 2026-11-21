@@ -102,7 +102,7 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 
 Ask can guide the person to something nearby: "where's the nearest subway?", "take me to a Tim Hortons", "any landmarks around here?".
 
-- **Asking:** Gemini calls `find_place` with a category (restaurant, cafe, subway, landmark, park, washroom and so on) and, when one was named, a place or brand. The headset passes the call to `POST /navigate`, which searches OpenStreetMap (Overpass by category, Nominatim by name) within about 1.5 km, then 5 km, of the phone's latest fix, keeps the nearest match as the target and returns it with up to two others. EDITH says what it found, how far it is and that the arrow shows the way. "Stop directions" calls `stop_navigation`.
+- **Asking:** Gemini calls `find_place` with a category (restaurant, cafe, subway, landmark, park, washroom and so on) and, when one was named, a place or brand. The headset passes the call to `POST /navigate`, which searches OpenStreetMap (Overpass by category, Nominatim by name) within about 1.5 km, then 5 km, of the phone's latest fix, keeps the nearest match as the target and returns it with up to two others. EDITH says what it found, how far it is and that the arrow shows the way. "Stop directions" calls `stop_navigation`. The same works hands-only: two finger guns pointing ahead open a question with "Where's our next adventure?" on screen, and two pointing up stop the directions at once and say so.
 - **The arrow:** a blue arrow floats low in front of the person with the place's name, distance and walking minutes under it. The headset polls `GET /navigate` every second for the distance and compass bearing from the newest fix.
 - **Finding north:** the headset has no compass, so the phone page sends its compass heading, and its GPS course while walking. Each reading, paired with the head's yaw at that moment, is one guess at where north lies in the headset's world; the guesses are averaged. Until north is known the arrow stays hidden and the label asks the person to hold the phone flat, pointing where they face. Recentring resets it.
 - **Phone cadence:** while a target is set, the phone sends its position and heading every 2 s instead of 10 s.
@@ -122,6 +122,8 @@ Ask can guide the person to something nearby: "where's the nearest subway?", "ta
 | Collect | Fist of either hand on the snapshot, pull toward the chest; open the hand first to let it float back. A sound that grows brighter and longer with the rarity plays as it goes in |
 | Ask | Thumb tap on the side of the index finger of either hand; stops on silence |
 | Page or dismiss cards | Thumb swipe left or right with either hand |
+| Start directions | Both hands as finger guns pointing straight ahead, held about 0.3 s; EDITH asks "Where's our next adventure?" and listens for the destination |
+| Stop directions | Both hands as finger guns pointing up, held about 0.3 s |
 | Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |
 | App menu | Turn the left wrist inward and poke with the right index |
 | Scrapbook | Thumb swipe to flip; pinch to open; grab to pull closer |

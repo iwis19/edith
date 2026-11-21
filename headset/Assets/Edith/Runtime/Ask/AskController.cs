@@ -25,6 +25,9 @@ namespace Edith.Ask
         /// Optional: without it no pin is offered as a hint.
         [SerializeField] ScanController scan;
 
+        /// What EDITH asks when the directions gesture opens a question.
+        public const string NavigationPrompt = "Where's our next adventure?";
+
         const int PhotoLongSide = 512;
         // The whole view holds more than one framed object, so it keeps more detail.
         const int ViewLongSide = 768;
@@ -98,21 +101,42 @@ namespace Edith.Ask
             Sync(now);
         }
 
-        void Begin()
+        /// Opens a question that asks where to go, as the two-handed finger-gun gesture does: the orb shows
+        /// NavigationPrompt and Gemini is told to search for whatever is said. A question already under way is dropped.
+        public void BeginNavigation()
+        {
+            var now = Time.time;
+            if (session.Busy)
+            {
+                if (current != null) current.Leave(0f);
+                current = null;
+                session.Dismiss(now);
+                Sync(now);
+            }
+            if (session.Tap(now)) Begin(navigate: true);
+            Sync(now);
+        }
+
+        void Begin(bool navigate = false)
         {
             if (current != null) current.Leave(-1f);
-            var asked = NearestSnapshot(out var photoDegrees);
-            var pin = default(ScanPin);
-            var pinDegrees = 0f;
-            var hasPin = scan != null && scan.TryNearest(new Pose(eye.position, eye.rotation), AskGeometry.MaxGazeDegrees,
-                out pin, out pinDegrees);
+            Snapshot asked = null;
             AskHint? hint = null;
-            if (AskGeometry.PinWins(hasPin, pinDegrees, asked != null, photoDegrees))
+            if (!navigate)
             {
-                hint = new AskHint(pin.Name, pin.Hook);
-                asked = null;
+                asked = NearestSnapshot(out var photoDegrees);
+                var pin = default(ScanPin);
+                var pinDegrees = 0f;
+                var hasPin = scan != null && scan.TryNearest(new Pose(eye.position, eye.rotation),
+                    AskGeometry.MaxGazeDegrees, out pin, out pinDegrees);
+                if (AskGeometry.PinWins(hasPin, pinDegrees, asked != null, photoDegrees))
+                {
+                    hint = new AskHint(pin.Name, pin.Hook);
+                    asked = null;
+                }
             }
             current = AnswerOrb.Create(eye, font, material, room, asked);
+            if (navigate) current.ShowAnswer(NavigationPrompt, 1f);
             said.Clear();
             heard.Clear();
             sources.Clear();
@@ -131,10 +155,10 @@ namespace Edith.Ask
                 return;
             }
             link = LiveLink.Open(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, hint, voice.Speech,
-                AskVoice.ChunkSamples);
+                AskVoice.ChunkSamples, navigate);
             photo = asked != null ? PhotoJpeg.Start(asked.Photo, PhotoLongSide) : null;
-            view = asked == null && hint == null ? CaptureView() : null;
-            var about = hint is { } h ? $"about the pin on {h.Name}"
+            view = !navigate && asked == null && hint == null ? CaptureView() : null;
+            var about = navigate ? "for directions" : hint is { } h ? $"about the pin on {h.Name}"
                 : photo != null ? "with a snapshot photo" : view != null ? "with the view" : "without a hint";
             Debug.Log($"[EDITH ask] listening, {about}");
         }

@@ -30,6 +30,7 @@ namespace Edith.Navigation
         const float ArrivedLingerSeconds = 5f;
         const float YawRecordSeconds = 0.05f;
         const int LabelFontSize = 34;
+        const float NoticeSeconds = 2.5f;
 
         static readonly Color Blue = new Color(0.16f, 0.52f, 1f, 1f);
         static readonly Color Rim = new Color(0.86f, 0.94f, 1f, 1f);
@@ -55,9 +56,28 @@ namespace Edith.Navigation
         NavStatus received;
         float receivedSentAt;
         bool hasReceived;
+        // A short line shown in place of everything else, such as after the stop gesture, until noticeUntil.
+        string notice;
+        float noticeUntil = -1f;
+        // Polls sent before a cancel may still report the old target, so their answers are dropped.
+        float ignoreBefore = -1f;
 
         /// Asks for a poll on the next frame, as when Ask has just set or stopped a target.
         public static void Poke() => poked = true;
+
+        /// Stops the directions under way at once, as the finger guns pointing up do, and says so. With none under
+        /// way it says that instead.
+        public void Cancel()
+        {
+            var now = Time.realtimeSinceStartup;
+            notice = status is { active: true } ? "Directions stopped" : "No directions to stop";
+            noticeUntil = now + NoticeSeconds;
+            ignoreBefore = now;
+            status = null;
+            arrivedAt = -1f;
+            stopSent = false;
+            Stop();
+        }
 
         void Awake()
         {
@@ -174,7 +194,7 @@ namespace Edith.Navigation
                 sentAt = receivedSentAt;
                 received = null;
             }
-            if (next == null) return;
+            if (next == null || sentAt < ignoreBefore) return;
             var now = Time.realtimeSinceStartup;
             if (next.active && status is not { active: true }) Debug.Log($"[EDITH nav] guiding to {next.name}");
             if (!next.active && status is { active: true }) Debug.Log("[EDITH nav] directions ended");
@@ -197,7 +217,15 @@ namespace Edith.Navigation
             var s = status;
             var wantArrow = false;
             var wantLabel = false;
-            if (!PairingGate.Open || s == null)
+            if (!PairingGate.Open)
+            {
+            }
+            else if (now < noticeUntil)
+            {
+                label.text = notice;
+                wantLabel = true;
+            }
+            else if (s == null)
             {
             }
             else if (s.active && s.arrived)
