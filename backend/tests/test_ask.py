@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from edith_backend.agents.ask import ASK_PROMPT, LiveAsk
+from edith_backend.agents.ask import ASK_PROMPT, SEARCH_NOTE, LiveAsk
 from edith_backend.location import Locations, Sight, Whereabouts
 from edith_backend.app import create_app
 from edith_backend.config import LIVE_VOICES, Settings
@@ -84,6 +84,13 @@ async def test_search_is_offered_only_when_turned_on(settings, store):
     assert "tools" not in setup_of(await ask_session(settings, store, live()))
     searching = setup_of(await ask_session(settings, store, live(search=True)))
     assert searching["tools"] == [{"googleSearch": {}}]
+
+
+async def test_the_persona_limits_search_to_questions_that_need_the_web(settings, store):
+    quiet = setup_of(await ask_session(settings, store, live()))["systemInstruction"]["parts"][0]["text"]
+    searching = setup_of(await ask_session(settings, store, live(search=True)))["systemInstruction"]["parts"][0]["text"]
+    assert SEARCH_NOTE not in quiet
+    assert searching.startswith(ASK_PROMPT) and SEARCH_NOTE in searching
 
 
 @pytest.mark.parametrize("body", [None, {}])

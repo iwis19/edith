@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Edith.Snapshots;
 using UnityEngine;
 using UnityEngine.UI;
@@ -20,6 +21,8 @@ namespace Edith.Ask
         const int FontSize = 56;
         const float CaptionHeight = 160f;
         public const int MaxLines = 2;
+        const int SourcesFontSize = 36;
+        public const int MaxSources = 3;
         public const float HomeCaptionMetres = 0.26f, MinCaptionMetres = 0.1f;
         static readonly Color Quiet = new Color(0.78f, 0.8f, 0.85f, 0.85f);
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
@@ -44,7 +47,7 @@ namespace Edith.Ask
         bool atPerch;
         Vector2 spot = OrbPlacement.Home;
         float homeClearSince = -1f;
-        Text caption;
+        Text caption, sources;
         RectTransform disc;
         Texture2D discTexture;
         CanvasGroup group;
@@ -112,6 +115,22 @@ namespace Edith.Ask
             captionRect.pivot = new Vector2(0f, 0.5f);
             captionRect.anchoredPosition = new Vector2(GapMetres * UnitsPerMetre, 0f);
             orb.caption = text;
+
+            var names = new GameObject("Sources", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            names.font = font;
+            names.fontSize = SourcesFontSize;
+            names.color = Quiet;
+            names.alignment = TextAnchor.UpperLeft;
+            names.horizontalOverflow = HorizontalWrapMode.Wrap;
+            names.verticalOverflow = VerticalWrapMode.Truncate;
+            names.raycastTarget = false;
+            names.material = material;
+            var namesRect = names.rectTransform;
+            namesRect.SetParent(rect, false);
+            namesRect.anchorMin = namesRect.anchorMax = new Vector2(1f, 0.5f);
+            namesRect.pivot = new Vector2(0f, 1f);
+            namesRect.anchoredPosition = new Vector2(GapMetres * UnitsPerMetre, -CaptionHeight * 0.5f);
+            orb.sources = names;
 
             orb.Choose(Time.time, true);
             orb.FitCaption(orb.CaptionMetres);
@@ -209,6 +228,20 @@ namespace Edith.Ask
             Show(text.Substring(0, revealed), Bright);
         }
 
+        /// Shows up to three of `names` as one quiet line under the caption; nothing when there are none.
+        public void ShowSources(IReadOnlyList<string> names)
+        {
+            sources.text = SourcesLine(names);
+            sources.rectTransform.sizeDelta = new Vector2(captionMetres * UnitsPerMetre, CaptionHeight * 0.5f);
+        }
+
+        /// The first three of `names` joined by a middle dot, led by "Sources:". Empty when there are none.
+        public static string SourcesLine(IReadOnlyList<string> names)
+        {
+            if (names == null || names.Count == 0) return "";
+            return "Sources: " + string.Join(" · ", names.Take(MaxSources));
+        }
+
         /// `words` with its spacing tidied, in curly quotes, or empty when nothing was heard.
         public static string Quoted(string words)
         {
@@ -246,6 +279,7 @@ namespace Edith.Ask
             if (Mathf.Approximately(metres, captionMetres)) return;
             captionMetres = metres;
             caption.rectTransform.sizeDelta = new Vector2(metres * UnitsPerMetre, CaptionHeight);
+            sources.rectTransform.sizeDelta = new Vector2(metres * UnitsPerMetre, CaptionHeight * 0.5f);
             if (shown.Length > 0) caption.text = LastLines(caption, lines, shown, MaxLines);
         }
 

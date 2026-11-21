@@ -88,5 +88,13 @@ namespace Edith.Tests
             orb.ShowHeard("what is this");
             Assert.AreEqual("“what is this”", orb.Caption);
         }
+
+        [Test]
+        public void Sources_show_as_one_line_of_at_most_three_names()
+        {
+            Assert.AreEqual("", AnswerOrb.SourcesLine(new string[0]));
+            Assert.AreEqual("Sources: a.com", AnswerOrb.SourcesLine(new[] { "a.com" }));
+            Assert.AreEqual("Sources: a.com · b.com · c.com", AnswerOrb.SourcesLine(new[] { "a.com", "b.com", "c.com", "d.com" }));
+        }
     }
 }
