@@ -9,8 +9,9 @@ namespace Edith.Ask
 {
     /// Ask on the headset. A thumb tap chimes and starts a spoken question about what is nearest the line of sight: a
     /// Scan pin's name and hook, or a snapshot's photo, whichever is nearer; Gemini's activity detection ends the
-    /// question. The answer is spoken and written
-    /// on a card that follows the gaze and fades once the answer is over. A thumb swipe flicks the card away.
+    /// question. The answer is spoken and typed out beside an orb that perches on that snapshot, or rests low in the
+    /// view clear of every snapshot, and fades once the answer is over. A thumb swipe flicks the orb away, and drawing
+    /// a new box makes it vanish until the next tap.
     public sealed class AskController : MonoBehaviour
     {
         [SerializeField] ThumbGestures gestures;
@@ -25,14 +26,14 @@ namespace Edith.Ask
 
         readonly AskSession session = new AskSession();
         readonly List<Vector3> photoCentres = new List<Vector3>();
-        readonly List<Texture> photos = new List<Texture>();
+        readonly List<Snapshot> photographed = new List<Snapshot>();
         readonly StringBuilder said = new StringBuilder();
         readonly StringBuilder heard = new StringBuilder();
         AskPhase phase;
         float lastHeardAt, firstChunkAt;
         bool playingLogged;
         SnapshotRoom room;
-        AnswerCard current;
+        AnswerOrb current;
         LiveLink link;
         PhotoJpeg photo;
         bool photoSent;
@@ -69,19 +70,36 @@ namespace Edith.Ask
                     return;
                 case ThumbGesture.SwipeLeft:
                 case ThumbGesture.SwipeRight:
-                    if (current == null) return;
-                    current.Leave(gesture == ThumbGesture.SwipeLeft ? -1f : 1f);
-                    current = null;
-                    session.Dismiss(now);
-                    Sync(now);
+                    Dismiss(gesture == ThumbGesture.SwipeLeft ? -1f : 1f, now);
                     return;
             }
+        }
+
+        /// Sends the orb away and drops the question with it. `direction` is as AnswerOrb.Leave takes it.
+        void Dismiss(float direction, float now)
+        {
+            if (current == null) return;
+            current.Leave(direction);
+            current = null;
+            session.Dismiss(now);
+            Sync(now);
         }
 
         void Begin()
         {
             if (current != null) current.Leave(-1f);
-            current = AnswerCard.Create(eye, font, material);
+            var asked = NearestSnapshot(out var photoDegrees);
+            var pin = default(ScanPin);
+            var pinDegrees = 0f;
+            var hasPin = scan != null && scan.TryNearest(new Pose(eye.position, eye.rotation), AskGeometry.MaxGazeDegrees,
+                out pin, out pinDegrees);
+            AskHint? hint = null;
+            if (AskGeometry.PinWins(hasPin, pinDegrees, asked != null, photoDegrees))
+            {
+                hint = new AskHint(pin.Name, pin.Hook);
+                asked = null;
+            }
+            current = AnswerOrb.Create(eye, font, material, room, asked);
             said.Clear();
             heard.Clear();
             lastHeardAt = -1f;
@@ -98,47 +116,40 @@ namespace Edith.Ask
                 session.Fail(AskProblem.NotConfigured, Time.time);
                 return;
             }
-            var texture = NearestPhoto(out var photoDegrees);
-            var pin = default(ScanPin);
-            var pinDegrees = 0f;
-            var hasPin = scan != null && scan.TryNearest(new Pose(eye.position, eye.rotation), AskGeometry.MaxGazeDegrees,
-                out pin, out pinDegrees);
-            AskHint? hint = null;
-            if (AskGeometry.PinWins(hasPin, pinDegrees, texture != null, photoDegrees))
-            {
-                hint = new AskHint(pin.Name, pin.Hook);
-                texture = null;
-            }
             link = LiveLink.Open(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, hint, voice.Speech,
                 AskVoice.ChunkSamples);
-            photo = texture != null ? PhotoJpeg.Start(texture, PhotoLongSide) : null;
+            photo = asked != null ? PhotoJpeg.Start(asked.Photo, PhotoLongSide) : null;
             var about = hint is { } h ? $"about the pin on {h.Name}" : photo != null ? "with a photo" : "without a hint";
             Debug.Log($"[EDITH ask] listening, {about}");
         }
 
-        /// The photo of the snapshot nearest the line of sight and its angle from it, or null when no snapshot with a
-        /// photo is near it.
-        Texture NearestPhoto(out float degrees)
+        /// The snapshot with a photo nearest the line of sight and its angle from it, or null when none is near it.
+        Snapshot NearestSnapshot(out float degrees)
         {
             degrees = float.PositiveInfinity;
             if (room == null) return null;
             photoCentres.Clear();
-            photos.Clear();
+            photographed.Clear();
             var snapshots = room.Snapshots;
             for (var i = 0; i < snapshots.Count; i++)
             {
                 var (snapshot, box) = snapshots[i];
                 if (snapshot == null || snapshot.Photo == null) continue;
                 photoCentres.Add(box.Center);
-                photos.Add(snapshot.Photo);
+                photographed.Add(snapshot);
             }
             var nearest = AskGeometry.NearestToGaze(eye.position, eye.forward, photoCentres, out degrees);
-            return nearest < 0 ? null : photos[nearest];
+            return nearest < 0 ? null : photographed[nearest];
         }
 
         void Update()
         {
             var now = Time.time;
+            if (room != null && room.Drawing)
+            {
+                Dismiss(0f, now);
+                return;
+            }
             if (session.MicWanted(now)) PumpMicrophone(now);
             if (link != null && !photoSent && photo?.Result is { } jpeg)
             {
@@ -152,6 +163,11 @@ namespace Edith.Ask
             }
             session.Tick(now, voice.Speech.Count);
             Sync(now);
+            if (current != null)
+            {
+                current.Level = voice.Level;
+                if (session.Phase == AskPhase.Answering && said.Length > 0) current.ShowAnswer(Answer(), Spoken());
+            }
             if (session.Phase == AskPhase.Answering && !playingLogged && voice.Speech.Played > 0) LogFirstAudio();
         }
 
@@ -161,6 +177,16 @@ namespace Edith.Ask
             var at = Time.realtimeSinceStartup;
             var afterWords = lastHeardAt >= 0f ? $"{Ms(at - lastHeardAt)} ms after the last heard words, " : "";
             Debug.Log($"[EDITH ask] first answer audio playing {afterWords}{Ms(at - firstChunkAt)} ms after the first answer chunk");
+        }
+
+        string Answer() => SpokenNumbers.ToDigits(said.ToString().Trim());
+
+        /// The share of the answer audio received so far that has been played, which paces the typed caption.
+        float Spoken()
+        {
+            var played = voice.Speech.Played;
+            var received = played + voice.Speech.Count;
+            return received > 0 ? played / (float)received : 0f;
         }
 
         static int Ms(float seconds) => Mathf.RoundToInt(seconds * 1000f);
@@ -200,7 +226,6 @@ namespace Edith.Ask
                     return;
                 case LiveEventKind.OutputText:
                     said.Append(e.Text);
-                    if (current != null) current.ShowAnswer(SpokenNumbers.ToDigits(said.ToString().Trim()));
                     return;
                 case LiveEventKind.InputText:
                     heard.Append(e.Text);
@@ -238,7 +263,7 @@ namespace Edith.Ask
                     Debug.Log($"[EDITH ask] answer starts, {voice.OutputState}");
                     voice.StopMic();
                     link?.EndAudio();
-                    if (said.Length == 0 && current != null) current.ShowAnswer("…");
+                    if (said.Length == 0 && current != null) current.ShowAnswer("…", 1f);
                     return;
                 case AskPhase.Fading:
                     Close();
@@ -247,6 +272,7 @@ namespace Edith.Ask
                         voice.PlayLowTone();
                         if (current != null) current.ShowProblem(AskSession.Describe(session.Problem));
                     }
+                    else if (current != null && said.Length > 0) current.ShowAnswer(Answer(), 1f);
                     return;
                 case AskPhase.Idle:
                     Close();

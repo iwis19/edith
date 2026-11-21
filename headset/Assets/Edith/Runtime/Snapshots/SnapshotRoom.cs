@@ -26,12 +26,16 @@ namespace Edith.Snapshots
         /// Oldest first.
         public IReadOnlyList<(Snapshot item, SightBox box)> Snapshots => shelf.Items;
 
+        /// True from the first Preview of a drag until it ends in Place or CancelPreview.
+        public bool Drawing { get; private set; }
+
         /// Fires as a snapshot leaves the room into the pocket, while it still exists.
         public event Action<Snapshot> Pocketed;
 
         /// Fades out the snapshots `dragged` covers and brings back the ones it no longer covers.
         public void Preview(in SightBox dragged)
         {
+            Drawing = true;
             shelf.Under(dragged, under);
             foreach (var snapshot in covered)
                 if (!under.Contains(snapshot)) snapshot.SetCovered(false);
@@ -43,6 +47,7 @@ namespace Edith.Snapshots
         /// Brings back every snapshot the dragged box was covering, for a drag that ends without a snapshot.
         public void CancelPreview()
         {
+            Drawing = false;
             foreach (var snapshot in covered)
                 snapshot.SetCovered(false);
             covered.Clear();

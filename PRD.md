@@ -18,7 +18,7 @@ EDITH is a hands-only Quest 3/3S mixed-reality companion that makes whatever you
 | --- | --- | --- | --- |
 | Look | Pinch empty space, drag a box around an object, let go | A snapshot card pinned where you took it: what it is, a fun fact you haven't heard for that kind of object, a rarity glow | No |
 | Collect | Close a fist on the snapshot and pull it in toward your chest | A memory: cropped image, name, fun fact, rarity, sources behind a flip | Yes |
-| Ask | Thumb tap on the side of the index finger, then speak, about anything | A spoken answer plus a card that follows your head, shows what was heard, and fades when the answer is over | No |
+| Ask | Thumb tap on the side of the index finger, then speak, about anything | A spoken answer typed out in a two-line caption beside a small orb, which perches on the snapshot asked about or rests low in your view, shows what was heard, and fades when the answer is over | No |
 | Scan | Palms-out pose, aimed at what's in front of you | Pins on the 2 or 3 most interesting things in sight, each with a short hook; pinch one to open it as a snapshot card | Only cards you collect from it |
 | Remember | Open the Scrapbook from the wrist menu, or ask "what did I find today?" | Memories found by meaning, with when and where | Not applicable |
 
@@ -154,7 +154,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 - [ ] Passthrough camera permission and frame capture
 - [ ] Pinch-and-drag frame and crop
 - [ ] Label, Collect by grab and pocket, memory card with flip and rarity reveal
-- [ ] Thumb-tap Ask, head-following answer card, swipe to dismiss
+- [ ] Thumb-tap Ask, answer orb that perches on the snapshot asked about, swipe to dismiss
 - [ ] Scan: palms-out pose, one front frame, pins with hooks placed by depth, pinch a pin to open its card, Ask aimed at the nearest pin or card
 - [ ] Wrist menu
 - [ ] Welcome: intro, interests, practice Look
