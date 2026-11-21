@@ -38,6 +38,38 @@ namespace Edith.Tests
             Assert.AreEqual("2026-11-21T15:04:05.123Z", meta.captured_at);
         }
 
+        [Serializable]
+        sealed class Collect
+        {
+            public string look_ref;
+            public string collected_at;
+        }
+
+        [Test]
+        public void A_collect_carries_the_local_time_with_its_utc_offset()
+        {
+            var local = new DateTimeOffset(2026, 11, 21, 20, 14, 3, 120, TimeSpan.FromHours(-5));
+            var meta = JsonUtility.FromJson<Collect>(LookMeta.CollectJson("abc123", local));
+            Assert.AreEqual("abc123", meta.look_ref);
+            Assert.AreEqual("2026-11-21T20:14:03.120-05:00", meta.collected_at);
+        }
+
+        [Test]
+        public void A_collect_late_in_the_evening_keeps_its_local_day()
+        {
+            var local = new DateTimeOffset(2026, 11, 21, 23, 30, 0, TimeSpan.FromHours(-5));
+            var meta = JsonUtility.FromJson<Collect>(LookMeta.CollectJson("abc123", local));
+            StringAssert.StartsWith("2026-11-21T23:30:00.000", meta.collected_at);
+        }
+
+        [Test]
+        public void A_collect_east_of_utc_writes_a_plus_offset()
+        {
+            var local = new DateTimeOffset(2026, 11, 22, 9, 0, 0, new TimeSpan(5, 30, 0));
+            var meta = JsonUtility.FromJson<Collect>(LookMeta.CollectJson("abc123", local));
+            Assert.AreEqual("2026-11-22T09:00:00.000+05:30", meta.collected_at);
+        }
+
         [Test]
         public void A_local_time_is_converted_to_utc()
         {

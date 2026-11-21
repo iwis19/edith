@@ -45,6 +45,8 @@ namespace Edith.Scan
         [SerializeField] Font font;
         [SerializeField] Material material;
         [SerializeField] ScanTuning tuning = new ScanTuning();
+        /// While another panel holds it, the palms start no scan. Optional.
+        [SerializeField] HandGate gate;
 
         // A pin sits this far in front of the surface it was measured on, so the surface does not occlude it.
         const float LiftMeters = 0.04f;
@@ -141,7 +143,7 @@ namespace Edith.Scan
         {
             var right = rightHand.Read();
             // A hand closing on, holding or letting go of a card is busy, so its open hand cannot pose.
-            if (grab != null && grab.Claimed) right.Tracked = false;
+            if ((grab != null && grab.Claimed) || (gate != null && gate.Held)) right.Tracked = false;
             var pose = tracker.Step(leftHand.Read(), right);
             holdProgress = pose.Progress;
             if (pose.Progress > 0f) ringAt = pose.Between;
@@ -363,7 +365,7 @@ namespace Edith.Scan
         }
 
         /// A short soft tone, or a rising two-note one when given two pitches.
-        static AudioClip Tone(float first, float second)
+        internal static AudioClip Tone(float first, float second)
         {
             const int rate = 48000;
             var samples = new float[rate * (second > 0f ? 26 : 18) / 100];

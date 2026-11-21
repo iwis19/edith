@@ -6,6 +6,7 @@ using Edith.Ask;
 using Edith.Backend;
 using Edith.Capture;
 using Edith.Grab;
+using Edith.Hands;
 using Edith.Pinch;
 using Edith.Scan;
 using Edith.Snapshots;
@@ -36,6 +37,8 @@ namespace Edith.Look
         [SerializeField] Font font;
         /// Opens a scan pin as a Look when a quick pinch lands on it rather than on a snapshot. Optional.
         [SerializeField] ScanController scan;
+        /// While another panel holds it, pinches make no boxes and clear or open nothing. Optional.
+        [SerializeField] HandGate gate;
 
         const string CameraNotReady = "The camera is not ready.";
         // Often enough that the shared HTTPS connection is still open when the next Look goes out.
@@ -106,6 +109,12 @@ namespace Edith.Look
 
         void OnPinch(PinchReading reading)
         {
+            if (gate != null && gate.Held)
+            {
+                room.CancelPreview();
+                DropUnconfirmed();
+                return;
+            }
             switch (reading.Event)
             {
                 case PinchEvent.Tap:
@@ -121,15 +130,20 @@ namespace Edith.Look
                     break;
                 case PinchEvent.Resumed:
                     // The release was a tracking dropout: the drag goes on and the photo is not wanted.
-                    foreach (var release in releases)
-                        if (!release.Confirmed) release.Request?.Cancel();
-                    releases.RemoveAll(release => !release.Confirmed);
+                    DropUnconfirmed();
                     break;
                 case PinchEvent.Confirmed:
                     foreach (var release in releases) release.Confirmed = true;
                     break;
             }
             if (reading.Phase == PinchPhase.Dragging && reading.HasBox) room.Preview(reading.Box);
+        }
+
+        void DropUnconfirmed()
+        {
+            foreach (var release in releases)
+                if (!release.Confirmed) release.Request?.Cancel();
+            releases.RemoveAll(release => !release.Confirmed);
         }
 
         void Update()
