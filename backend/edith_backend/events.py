@@ -31,6 +31,8 @@ class ScanPick(BaseModel):
     hook: str
     point: tuple[float, float]
     box: tuple[float, float, float, float]
+    # The hunt target this pick fits, as its index in the hunt's list. Only set while a hunt is active.
+    target: int | None = None
 
 
 class ScanReply(BaseModel):
@@ -74,6 +76,17 @@ class RarityEvent(_Event):
     tier: Rarity
 
 
+class HuntEvent(_Event):
+    """A Look ticked a hunt target off. `found` counts the targets found so far, including this one."""
+
+    type: Literal["hunt"] = "hunt"
+    index: int
+    text: str
+    found: int
+    total: int
+    status: Literal["active", "found_all"]
+
+
 class Done(_Event):
     type: Literal["done"] = "done"
 
@@ -92,8 +105,33 @@ class LookDetails(BaseModel):
     place: str | None = None
     # The place the photo itself showed, kept for later Looks. None when the model only copied the hint it was given.
     photo_place: str | None = None
+    # The index in the hunt's list of the open target the object fits, as the card call judged it.
+    hunt_pick: int | None = None
 
 
 StreamedEvent = Name | Fact | RarityEvent
 CardEvent = StreamedEvent | LookDetails
-LookEvent = Accepted | StreamedEvent | Done | ErrorEvent
+LookEvent = Accepted | StreamedEvent | HuntEvent | Done | ErrorEvent
+
+
+class TargetState(BaseModel):
+    index: int
+    text: str
+    tier: Rarity | None
+    found: bool
+    found_at: AwareDatetime | None
+    look_ref: str | None
+    # The memory collected from the finding Look. Filled only in the hunt list, and only once the card is collected.
+    memory_id: int | None = None
+
+
+class HuntState(BaseModel):
+    hunt_ref: str
+    status: Literal["active", "found_all", "stopped", "timeout"]
+    started_at: AwareDatetime
+    ends_at: AwareDatetime
+    ended_at: AwareDatetime | None
+    remaining_s: int
+    place: str | None
+    found: int
+    targets: list[TargetState]

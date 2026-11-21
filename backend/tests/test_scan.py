@@ -42,10 +42,12 @@ class FakeModel:
     """Answers each call with the next batch of picks and records the context it was given."""
 
     def __init__(self, *batches: list[ScanPick]) -> None:
-        self.batches, self.contexts = list(batches), []
+        self.batches, self.contexts, self.systems, self.targets = list(batches), [], [], []
 
-    async def pick(self, system, context, image):
+    async def pick(self, system, context, image, open_targets=()):
         self.contexts.append(context)
+        self.systems.append(system)
+        self.targets.append(open_targets)
         return self.batches.pop(0)
 
 
@@ -78,7 +80,7 @@ async def test_scan_reply_carries_the_picks_in_contract_form(settings, store):
     assert len(body["scan_ref"]) == 32 and isinstance(body["ms"], int)
     assert [p["name"] for p in body["picks"]] == ["a brass compass", "a globe"]
     assert body["picks"][0] == {"name": "a brass compass", "hook": "Spot which way it points.",
-                                "point": [0.5, 0.5], "box": [0.4, 0.4, 0.6, 0.6]}
+                                "point": [0.5, 0.5], "box": [0.4, 0.4, 0.6, 0.6], "target": None}
 
 
 async def test_scan_reads_a_form_with_a_quoted_boundary_and_a_typed_meta_part(settings, store):
@@ -148,7 +150,7 @@ class Failing:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    async def scan(self, image, profile_id, session):
+    async def scan(self, image, profile_id, session, targets=None):
         raise self._error
 
 
@@ -161,7 +163,7 @@ async def test_model_failure_is_502(settings, store, error):
 
 async def test_a_scan_over_its_budget_is_504(settings, store):
     class Slow:
-        async def scan(self, image, profile_id, session):
+        async def scan(self, image, profile_id, session, targets=None):
             await asyncio.sleep(5)
 
     settings.scan_timeout_s = 0.05
@@ -367,7 +369,7 @@ class TimedModel:
         self.picks, self.delay, self.error = list(picks), delay, error
         self.calls = self.cancelled = 0
 
-    async def pick(self, system, context, image):
+    async def pick(self, system, context, image, open_targets=()):
         self.calls += 1
         try:
             await asyncio.sleep(self.delay)
@@ -463,3 +465,21 @@ async def test_openai_scanner_asks_for_strict_json_with_the_image_and_context():
 async def test_openai_scanner_raises_on_a_refusal():
     with pytest.raises(RuntimeError, match="refused"):
         await openai_scanner(FakeCompletions(None, refusal="no")).pick("system", None, b"jpeg")
+
+
+def test_a_pick_carries_a_target_only_when_it_names_an_open_one():
+    picks = parse_picks(reply(
+        {"name": "a", "hook": "Spot it.", "box_2d": [0, 0, 500, 500], "target": 3},
+        {"name": "b", "hook": "Spot it.", "box_2d": [0, 0, 500, 500], "target": 2},
+        {"name": "c", "hook": "Spot it.", "box_2d": [0, 0, 500, 500], "target": "nope"},
+    ), open_targets={0, 2})
+    assert [p.target for p in picks] == [2, None, None]
+    assert [p.target for p in parse_picks(reply(
+        {"name": "a", "hook": "Spot it.", "box_2d": [0, 0, 500, 500], "target": 3}))] == [None]
+
+
+def test_the_openai_reply_may_carry_a_target_too():
+    raw = json.dumps({"picks": [{"name": "a", "hook": "Spot it.", "box": {"x0": 0, "y0": 0, "x1": 1, "y1": 1},
+                                 "point": {"x": 0.5, "y": 0.5}, "target": 2}]})
+    assert [p.target for p in parse_openai(raw, {1})] == [1]
+    assert [p.target for p in parse_openai(raw)] == [None]

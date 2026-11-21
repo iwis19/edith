@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Protocol
 from uuid import UUID
 
@@ -20,8 +20,11 @@ log = logging.getLogger("edith")
 
 
 class CardAgent(Protocol):
-    def run(self, image: bytes, meta: LookMeta, profile_id: UUID) -> AsyncIterator[CardEvent]:
-        """Yield name, fact and rarity. Raise to fail the Look."""
+    def run(
+        self, image: bytes, meta: LookMeta, profile_id: UUID, targets: Sequence[tuple[int, str]] | None = None
+    ) -> AsyncIterator[CardEvent]:
+        """Yield name, fact and rarity. Raise to fail the Look. `targets` are the (index, text) of the open hunt
+        targets, or None without a hunt."""
         ...
 
 
@@ -45,7 +48,9 @@ class StubCardAgent:
         self._settings = settings
         self._count = 0
 
-    async def run(self, image: bytes, meta: LookMeta, profile_id: UUID) -> AsyncIterator[CardEvent]:
+    async def run(
+        self, image: bytes, meta: LookMeta, profile_id: UUID, targets: Sequence[tuple[int, str]] | None = None
+    ) -> AsyncIterator[CardEvent]:
         name, confidence, tier, fact, source = _CANNED[self._count % len(_CANNED)]
         self._count += 1
         start = time.monotonic()

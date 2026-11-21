@@ -135,7 +135,7 @@ async def test_without_a_database_the_memory_routes_answer_503(settings):
 
 
 class DetailedAgent:
-    async def run(self, image, meta, profile_id):
+    async def run(self, image, meta, profile_id, targets=None):
         yield Name(name="a red mug", confidence=0.8)
         yield LookDetails(kind="mug", place="Waterloo, Ontario, Canada")
         yield RarityEvent(tier="common")

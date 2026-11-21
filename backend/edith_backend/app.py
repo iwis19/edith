@@ -14,19 +14,21 @@ import httpx
 from fastapi import Body, Depends, FastAPI, File, Form, Header, Query, Request, Response, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import VERSION
 from .agents.ask import AskError, AskRequest, AskSession, LiveAsk, make_live_ask
 from .agents.card import CardAgent, make_card_agent
+from .agents.hunt_targets import make_target_drafter
 from .agents.scan import ScanAgent, make_scan_agent
 from .config import Settings
 from .db import LookRecord, Store, StoreUnavailable, make_store
 from .events import (
-    Accepted, CollectMeta, Done, ErrorEvent, Fact, LookDetails, LookEvent, LookMeta, Name, RarityEvent, ScanMeta,
-    ScanReply,
+    Accepted, CollectMeta, Done, ErrorEvent, Fact, HuntEvent, HuntState, LookDetails, LookEvent, LookMeta, Name,
+    RarityEvent, ScanMeta, ScanReply,
 )
+from .hunts import TARGET_COUNT, Hunts, can_tick, to_state
 from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
 from .navigate import (
@@ -132,6 +134,10 @@ class PairClaim(BaseModel):
     code: str
 
 
+class HuntRequest(BaseModel):
+    interests: list[str] = Field(default_factory=list, max_length=10)
+
+
 def create_app(
     settings: Settings | None = None,
     agent: CardAgent | None = None,
@@ -140,6 +146,7 @@ def create_app(
     locations: Locations | None = None,
     pairings: Pairings | None = None,
     scanner: ScanAgent | None = None,
+    hunts: Hunts | None = None,
     navigations: Navigations | None = None,
     finder: PlaceFinder | None = None,
 ) -> FastAPI:
@@ -155,6 +162,7 @@ def create_app(
     agent = agent or make_card_agent(settings, locations.whereabouts, store)
     ask = ask or make_live_ask(settings)
     scanner = scanner or make_scan_agent(settings, store, locations.whereabouts)
+    hunts = hunts or Hunts(store, make_target_drafter(settings), locations.whereabouts, settings.hunt_seconds)
     # Looks still streaming, by look_ref, so a /collect that arrives before the Look is recorded can wait for it. A
     # per-process map is right because the backend runs as a single replica.
     inflight: dict[UUID, asyncio.Event] = {}
@@ -166,9 +174,12 @@ def create_app(
         # finishes go without the places from before the restart. Only the model agent remembers places.
         restore = getattr(agent, "restore_places", None)
         restoring = asyncio.create_task(restore()) if restore else None
+        restoring_hunts = asyncio.create_task(hunts.restore())
         yield
         if restoring:
             restoring.cancel()
+        restoring_hunts.cancel()
+        await hunts.settle()
         if _recording:
             await asyncio.wait(_recording, timeout=10)
         await store.close()
@@ -207,7 +218,7 @@ def create_app(
         parsed = _parse_meta(meta, LookMeta)
         data, size = await _read_image(image, settings)
         return StreamingResponse(
-            _stream(agent, store, settings, inflight, profile_id, parsed, data, size, received),
+            _stream(agent, store, settings, inflight, hunts, profile_id, parsed, data, size, received),
             media_type="application/x-ndjson",
         )
 
@@ -224,7 +235,7 @@ def create_app(
             raise ApiError(503, "scan_unavailable", "Scan needs GEMINI_API_KEY on the backend.")
         try:
             async with asyncio.timeout(settings.scan_timeout_s):
-                picks = await scanner.scan(data, profile_id, parsed.session)
+                picks = await scanner.scan(data, profile_id, parsed.session, hunts.open_targets(profile_id))
         except TimeoutError:
             log.warning("scan timed out after %.1f s", settings.scan_timeout_s)
             raise ApiError(504, "scan_timeout", "The scan took too long.")
@@ -240,10 +251,39 @@ def create_app(
         if ask is None:
             raise ApiError(503, "ask_unavailable", "Ask needs GEMINI_API_KEY on the backend.")
         try:
-            return await ask.start(request or AskRequest(), locations.whereabouts(profile_id))
+            hunt = hunts.current(profile_id)
+            return await ask.start(request or AskRequest(), locations.whereabouts(profile_id),
+                                   to_state(hunt, hunts.now()) if hunt else None)
         except AskError as exc:
             log.warning("ask session failed: %s", exc)
             raise ApiError(502, "ask_failed", "Gemini did not give a session token.")
+
+    @app.post("/hunt")
+    async def start_hunt(request: HuntRequest | None = Body(None), profile_id: UUID = Depends(profile)) -> HuntState:
+        interests = [i.strip()[:60] for i in (request.interests if request else []) if i.strip()]
+        hunt = await hunts.start(profile_id, interests)
+        log.info("hunt %s started", hunt.hunt_ref.hex)
+        return to_state(hunt, hunts.now())
+
+    @app.get("/hunt")
+    async def get_hunt(profile_id: UUID = Depends(profile)) -> HuntState:
+        hunt = hunts.current(profile_id)
+        if hunt is None:
+            raise ApiError(404, "no_hunt", "This profile has no active hunt.")
+        return to_state(hunt, hunts.now())
+
+    @app.post("/hunt/stop")
+    async def stop_hunt(profile_id: UUID = Depends(profile)) -> HuntState:
+        hunt = hunts.stop(profile_id)
+        if hunt is None:
+            raise ApiError(404, "no_hunt", "This profile has no active hunt.")
+        return to_state(hunt, hunts.now())
+
+    @app.get("/hunts")
+    async def list_hunts(limit: int = Query(50, ge=1, le=200), profile_id: UUID = Depends(profile)) -> dict:
+        now = hunts.now()
+        stored = await _stored(hunts.history(profile_id, limit))
+        return {"hunts": [to_state(s.hunt, now, s.memory_ids) for s in stored]}
 
     @app.post("/pair")
     async def pair(request: Request, profile_id: UUID = Depends(profile)) -> dict:
@@ -408,6 +448,7 @@ async def _stream(
     store: Store,
     settings: Settings,
     inflight: dict[UUID, asyncio.Event],
+    hunts: Hunts,
     profile_id: UUID,
     meta: LookMeta,
     image: bytes,
@@ -432,7 +473,26 @@ async def _stream(
     seen: dict[str, LookEvent] = {}
     details: LookDetails | None = None
     final: LookEvent
-    events = agent.run(image, meta, profile_id)
+    events = agent.run(image, meta, profile_id, hunts.open_targets(profile_id))
+    ticked = False
+
+    def hunt_line(*, last: bool) -> str | None:
+        """Ticks the hunt once the final name and the tier are known, and returns the event line for a hit. It runs
+        when the card agent reports its details, which come before the fact, and otherwise when the stream ends."""
+        nonlocal ticked
+        name, rarity = seen.get("name"), seen.get("rarity")
+        if ticked or not isinstance(name, Name) or not (last or details is not None):
+            return None
+        ticked = True
+        if not can_tick(name.name, name.confidence):
+            return None
+        tier = rarity.tier if isinstance(rarity, RarityEvent) else None
+        hit = hunts.tick(profile_id, look_ref, details.hunt_pick if details else None, tier)
+        if hit is None:
+            return None
+        return stamp(HuntEvent(index=hit.target.index, text=hit.target.text, found=hit.hunt.found,
+                               total=TARGET_COUNT, status=hit.status))
+
     # The budget is spent only while waiting on the agent. Time suspended at a yield belongs to the client, and a
     # timeout firing there would cancel the response's send instead of the agent.
     loop = asyncio.get_running_loop()
@@ -447,9 +507,13 @@ async def _stream(
                 event = await anext(events, None)
             budget -= loop.time() - waited_from
             if event is None:
+                if line := hunt_line(last=True):
+                    yield line
                 break
             if isinstance(event, LookDetails):
                 details = event
+                if line := hunt_line(last=False):
+                    yield line
                 continue
             line = stamp(event)
             # The first name event, pending or not, is when the card's first words appear.

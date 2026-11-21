@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     # delays the card; the kinds then match by a shared word.
     embedding_timeout_s: float = 0.3
 
+    # The Bounty clock, from the start of a hunt to its timeout.
+    hunt_seconds: float = 300.0
+    # Writes the hunt's targets. Empty uses gemini_card_model.
+    hunt_model: str = ""
+    # A reply later than this is dropped for the built-in targets, so a hunt always starts promptly.
+    hunt_targets_timeout_s: float = 4.0
+
     stub_name_ms: int = 300
     stub_fact_ms: int = 700
     stub_rarity_ms: int = 800

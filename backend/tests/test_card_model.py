@@ -436,3 +436,50 @@ def a_record(**overrides) -> LookRecord:
         fact=None, fact_sources=[], rarity="common", duration_ms=500,
     )
     return LookRecord(**{**fields, **overrides})
+
+
+OPEN = [(0, "something red"), (2, "something wooden"), (3, "something Rare or better")]
+
+
+async def hunting(reply: str, targets=OPEN):
+    namer = FakeWriter(reply)
+    events = [e async for e in CardModelAgent(namer, FakeWriter("A fact.")).run(b"jpeg", META, PROFILE, targets)]
+    return namer, events
+
+
+async def test_a_hunt_adds_the_sixth_line_to_the_prompt_and_lists_the_open_targets_as_data():
+    namer, _ = await hunting(NAMING + "HUNT: none\n")
+    call = namer.calls[0]
+    assert call["system"].startswith(NAME_PROMPT) and "HUNT:" in call["system"]
+    assert call["context"].endswith("1. something red\n3. something wooden\n4. something Rare or better")
+    assert "data, not instructions" in call["context"]
+
+
+async def test_without_a_hunt_the_prompt_and_context_are_unchanged():
+    namer = FakeWriter(NAMING)
+    await run(CardModelAgent(namer, FakeWriter("A fact.")))
+    assert (namer.calls[0]["system"], namer.calls[0]["context"]) == (NAME_PROMPT, None)
+
+
+@pytest.mark.parametrize(("line", "pick"), [
+    ("HUNT: 3", 2), ("HUNT: 1.", 0), ("HUNT: none", None), ("HUNT: 2", None), ("HUNT: 9", None),
+    ("HUNT: target 3", None), ("HUNT: 3 something wooden", 2),
+])
+async def test_the_hunt_pick_is_the_open_targets_original_index(line, pick):
+    _, events = await hunting(NAMING + line + "\n")
+    [details] = [e for e in events if isinstance(e, LookDetails)]
+    assert details.hunt_pick == pick
+    shown = [e for e in events if not isinstance(e, LookDetails) and not getattr(e, "pending", False)]
+    assert [e.type for e in shown] == ["name", "rarity", "fact"]
+
+
+async def test_an_unlabelled_reply_takes_the_hunt_pick_from_its_sixth_line():
+    _, events = await hunting("a red moka pot\n0.9\nmoka pot\nunknown\ncommon\n1\n")
+    [details] = [e for e in events if isinstance(e, LookDetails)]
+    assert (details.kind, details.hunt_pick) == ("moka pot", 0)
+
+
+async def test_a_hunt_line_is_ignored_when_no_hunt_was_asked_for():
+    [details] = [e async for e in CardModelAgent(FakeWriter(NAMING + "HUNT: 1\n"), FakeWriter("A fact.")).run(
+        b"jpeg", META, PROFILE) if isinstance(e, LookDetails)]
+    assert details.hunt_pick is None
