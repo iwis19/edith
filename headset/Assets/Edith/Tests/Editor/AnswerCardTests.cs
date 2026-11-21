@@ -54,5 +54,13 @@ namespace Edith.Tests
             Assert.That(words, Does.EndWith(" " + kept), "it starts on a whole word");
         }
 
+
+        [Test]
+        public void Sources_show_as_one_line_of_at_most_three_names()
+        {
+            Assert.AreEqual("", AnswerCard.SourcesLine(new string[0]));
+            Assert.AreEqual("Sources: a.com", AnswerCard.SourcesLine(new[] { "a.com" }));
+            Assert.AreEqual("Sources: a.com · b.com · c.com", AnswerCard.SourcesLine(new[] { "a.com", "b.com", "c.com", "d.com" }));
+        }
     }
 }

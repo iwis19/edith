@@ -180,5 +180,37 @@ namespace Edith.Tests
         {
             Assert.IsFalse(AskGrant.TryParse(json, out _));
         }
+
+        const string Grounded =
+            "{\"serverContent\":{\"groundingMetadata\":{\"webSearchQueries\":[\"weather toronto\"]," +
+            "\"searchEntryPoint\":{\"renderedContent\":\"<div></div>\"},\"groundingChunks\":[" +
+            "{\"web\":{\"uri\":\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbC\",\"title\":\"weather.gc.ca\"}}," +
+            "{\"web\":{\"uri\":\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/DeF\",\"title\":\"Toronto Weather - The Weather Network\"}}," +
+            "{\"web\":{\"uri\":\"https://vertexaisearch.cloud.google.com/grounding-api-redirect/GhI\",\"title\":\"weather.gc.ca\"}}," +
+            "{\"web\":{\"uri\":\"https://www.example.com/page\"}}]," +
+            "\"groundingSupports\":[{\"segment\":{\"endIndex\":40},\"groundingChunkIndices\":[0,1]}]}}}";
+
+        [Test]
+        public void Grounding_chunks_give_one_name_per_distinct_source()
+        {
+            var message = LiveMessage.Parse(Grounded);
+            CollectionAssert.AreEqual(new[] { "weather.gc.ca", "Toronto Weather - The Weather Network", "example.com" },
+                message.Sources);
+        }
+
+        [Test]
+        public void A_message_without_grounding_has_no_sources()
+        {
+            Assert.AreEqual(0, LiveMessage.Parse("{\"serverContent\":{\"turnComplete\":true}}").Sources.Count);
+            Assert.AreEqual(0, LiveMessage.Parse("{\"serverContent\":{\"groundingMetadata\":{}}}").Sources.Count);
+        }
+
+        [Test]
+        public void A_source_without_a_usable_title_is_named_by_its_site()
+        {
+            Assert.AreEqual("example.com", LiveMessage.SourceName("https://www.example.com/a", null));
+            Assert.AreEqual("example.com", LiveMessage.SourceName(null, "https://example.com/a"));
+            Assert.AreEqual("", LiveMessage.SourceName(null, null));
+        }
     }
 }

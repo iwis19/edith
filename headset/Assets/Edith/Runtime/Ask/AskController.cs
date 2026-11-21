@@ -28,6 +28,7 @@ namespace Edith.Ask
         readonly List<Texture> photos = new List<Texture>();
         readonly StringBuilder said = new StringBuilder();
         readonly StringBuilder heard = new StringBuilder();
+        readonly List<string> sources = new List<string>();
         AskPhase phase;
         float lastHeardAt, firstChunkAt;
         bool playingLogged;
@@ -84,6 +85,7 @@ namespace Edith.Ask
             current = AnswerCard.Create(eye, font, material);
             said.Clear();
             heard.Clear();
+            sources.Clear();
             lastHeardAt = -1f;
             playingLogged = false;
             photoSent = false;
@@ -201,6 +203,14 @@ namespace Edith.Ask
                 case LiveEventKind.OutputText:
                     said.Append(e.Text);
                     if (current != null) current.ShowAnswer(SpokenNumbers.ToDigits(said.ToString().Trim()));
+                    return;
+                case LiveEventKind.Sources:
+                    foreach (var name in e.Text.Split('
+'))
+                        if (name.Length > 0 && !sources.Contains(name)) sources.Add(name);
+                    var sinceHeard = lastHeardAt >= 0f ? $"{Ms(Time.realtimeSinceStartup - lastHeardAt)} ms after the last heard words" : "before any words were heard";
+                    Debug.Log($"[EDITH ask] {sources.Count} sources, {sinceHeard}: {string.Join(", ", sources)}");
+                    if (current != null) current.ShowSources(sources);
                     return;
                 case LiveEventKind.InputText:
                     heard.Append(e.Text);

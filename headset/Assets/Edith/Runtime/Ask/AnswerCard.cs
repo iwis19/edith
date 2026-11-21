@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,6 +17,9 @@ namespace Edith.Ask
         const int FontSize = 44;
         const int HeardFontSize = 34;
         const float HeardHeight = 56f;
+        const int SourcesFontSize = 30;
+        const float SourcesHeight = 48f;
+        const int MaxSources = 3;
         /// The longest heard line, about what fits on one line of the card.
         public const int MaxHeardChars = 50;
         static readonly Color Backing = new Color(0.04f, 0.05f, 0.07f, 0.65f);
@@ -29,7 +34,7 @@ namespace Edith.Ask
 
         Transform eye;
         Text text;
-        Text heard;
+        Text heard, sources;
         CanvasGroup group;
         bool leaving;
         float leaveProgress;
@@ -75,7 +80,24 @@ namespace Edith.Ask
             heardRect.offsetMin = new Vector2(Pad, -(Pad + HeardHeight));
             heardRect.offsetMax = new Vector2(-Pad, -Pad);
 
+            var sourcesLabel = new GameObject("Sources", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            sourcesLabel.font = font;
+            sourcesLabel.fontSize = SourcesFontSize;
+            sourcesLabel.color = Quiet;
+            sourcesLabel.alignment = TextAnchor.LowerLeft;
+            sourcesLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            sourcesLabel.verticalOverflow = VerticalWrapMode.Truncate;
+            sourcesLabel.raycastTarget = false;
+            sourcesLabel.material = material;
+            var sourcesRect = sourcesLabel.rectTransform;
+            sourcesRect.SetParent(rect, false);
+            sourcesRect.anchorMin = Vector2.zero;
+            sourcesRect.anchorMax = new Vector2(1f, 0f);
+            sourcesRect.offsetMin = new Vector2(Pad, Pad);
+            sourcesRect.offsetMax = new Vector2(-Pad, Pad + SourcesHeight);
+
             var card = root.AddComponent<AnswerCard>();
+            card.sources = sourcesLabel;
             card.eye = eye;
             card.text = label;
             card.heard = heardLabel;
@@ -97,6 +119,20 @@ namespace Edith.Ask
         {
             heard.text = HeardLine(words);
             text.rectTransform.offsetMax = new Vector2(-Pad, heard.text.Length == 0 ? -Pad : -(Pad + HeardHeight));
+        }
+
+        /// Shows up to three of `names` as one quiet line under the answer; nothing when there are none.
+        public void ShowSources(IReadOnlyList<string> names)
+        {
+            sources.text = SourcesLine(names);
+            text.rectTransform.offsetMin = new Vector2(Pad, sources.text.Length == 0 ? Pad : Pad + SourcesHeight);
+        }
+
+        /// The first three of `names` joined by a middle dot, led by "Sources:". Empty when there are none.
+        public static string SourcesLine(IReadOnlyList<string> names)
+        {
+            if (names == null || names.Count == 0) return "";
+            return "Sources: " + string.Join(" · ", names.Take(MaxSources));
         }
 
         /// `words` with its spacing tidied, in quotes. Past MaxHeardChars it keeps the latest words, from a word break.

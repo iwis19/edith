@@ -11,12 +11,12 @@ using UnityEngine;
 
 namespace Edith.Ask
 {
-    public enum LiveEventKind { Ready, Audio, InputText, OutputText, TurnComplete, Interrupted, Closed, Failed }
+    public enum LiveEventKind { Ready, Audio, InputText, OutputText, Sources, TurnComplete, Interrupted, Closed, Failed }
 
     public readonly struct LiveEvent
     {
         public readonly LiveEventKind Kind;
-        /// The new piece of transcript, for InputText and OutputText.
+        /// The new piece of transcript, for InputText and OutputText; the source names one per line, for Sources.
         public readonly string Text;
         /// Why, for Failed.
         public readonly AskProblem Problem;
@@ -234,6 +234,8 @@ namespace Edith.Ask
                 Post(new LiveEvent(LiveEventKind.Audio));
             }
             if (message.OutputText.Length > 0) Post(new LiveEvent(LiveEventKind.OutputText, message.OutputText));
+            if (message.Sources.Count > 0) Post(new LiveEvent(LiveEventKind.Sources, string.Join("
+", message.Sources)));
             if (message.Interrupted)
             {
                 speech.Drop();
