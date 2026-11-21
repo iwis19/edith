@@ -13,6 +13,9 @@ namespace Edith.Scrapbook
         const float UnitsPerMetre = 1000f;
         // The photo is fitted into this room, in millimetres.
         static readonly Vector2 Room = new Vector2(DeckLayout.CardWidth, DeckLayout.CardHeight) * UnitsPerMetre;
+        // A tall photo is widened to at least this, growing taller up to MaxPhotoMm, so its fact wraps into a few
+        // readable lines rather than a thin column. Millimetres.
+        public const float MinPhotoMm = 180f, MaxPhotoMm = 260f;
         const int NoticeTitleSize = 44, NoticeBodySize = 30;
         static readonly Color EmptyPhoto = new Color(1f, 1f, 1f, 0.35f);
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
@@ -81,8 +84,13 @@ namespace Edith.Scrapbook
             {
                 var shape = texture.width / (float)texture.height;
                 size = shape > Room.x / Room.y ? new Vector2(Room.x, Room.x / shape) : new Vector2(Room.y * shape, Room.y);
+                if (size.x < MinPhotoMm) size = new Vector2(MinPhotoMm, MinPhotoMm / shape);
+                if (size.y > MaxPhotoMm) size = new Vector2(MaxPhotoMm * shape, MaxPhotoMm);
             }
             photo.rectTransform.sizeDelta = size;
+            // The bottom edge stays where the room's is, so a taller photo grows upward and its fact never moves down
+            // onto the rarity chips.
+            photo.rectTransform.anchoredPosition = new Vector2(0f, (size.y - Room.y) * 0.5f);
             view.Fit(size);
         }
 

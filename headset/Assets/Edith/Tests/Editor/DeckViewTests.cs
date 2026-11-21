@@ -123,6 +123,33 @@ namespace Edith.Tests
             AssertBorderHugs(photo);
         }
 
+        [Test]
+        public void A_portrait_photo_is_widened_to_the_minimum_and_grows_upward()
+        {
+            var landscape = Photo(400, 300);
+            view.Show(Memories(1), 0f, _ => landscape);
+            var bottom = Bottom(Part(Middle, "Photo"));
+
+            var portrait = Photo(300, 400);
+            view.Show(Memories(1), 0f, _ => portrait);
+            var photo = Part(Middle, "Photo");
+            Assert.AreEqual(MemoryCard.MinPhotoMm, photo.sizeDelta.x, 1e-3f);
+            Assert.AreEqual(0.75f, photo.sizeDelta.x / photo.sizeDelta.y, 1e-3f, "keeps its shape");
+            Assert.AreEqual(bottom, Bottom(photo), 1e-3f, "the bottom edge stays put");
+        }
+
+        [Test]
+        public void A_very_tall_photo_stops_at_the_height_cap()
+        {
+            var tall = Photo(100, 400);
+            view.Show(Memories(1), 0f, _ => tall);
+            var photo = Part(Middle, "Photo").sizeDelta;
+            Assert.AreEqual(MemoryCard.MaxPhotoMm, photo.y, 1e-3f);
+            Assert.AreEqual(0.25f, photo.x / photo.y, 1e-3f);
+        }
+
+        static float Bottom(RectTransform rect) => rect.anchoredPosition.y - rect.sizeDelta.y * 0.5f;
+
         // The glass keeps the same margin either side of the photo, whatever the photo's shape, so nothing pads it
         // out to a fixed width.
         float? margin;
