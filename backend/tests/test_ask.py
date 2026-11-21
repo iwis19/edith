@@ -81,9 +81,9 @@ def test_the_configured_voice_must_be_a_known_one():
 
 
 async def test_search_is_offered_only_when_turned_on(settings, store):
-    assert "tools" not in setup_of(await ask_session(settings, store, live()))
+    assert {"googleSearch": {}} not in setup_of(await ask_session(settings, store, live()))["tools"]
     searching = setup_of(await ask_session(settings, store, live(search=True)))
-    assert searching["tools"] == [{"googleSearch": {}}]
+    assert {"googleSearch": {}} in searching["tools"]
 
 
 async def test_the_persona_limits_search_to_questions_that_need_the_web(settings, store):
