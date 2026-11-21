@@ -36,6 +36,26 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void What_was_heard_is_one_tidy_quoted_line()
+        {
+            Assert.AreEqual("“what is this”", AnswerCard.HeardLine(" what  is\nthis "));
+            Assert.AreEqual("", AnswerCard.HeardLine("  "));
+            Assert.AreEqual("", AnswerCard.HeardLine(null));
+        }
+
+        [Test]
+        public void A_long_question_keeps_its_latest_words_from_a_word_break()
+        {
+            var words = "can you tell me what kind of plant this is and whether it needs a lot of water every week";
+            var line = AnswerCard.HeardLine(words);
+            Assert.That(line, Does.StartWith("“…"));
+            Assert.That(line, Does.EndWith(" every week”"));
+            Assert.That(line.Length, Is.LessThanOrEqualTo(AnswerCard.MaxHeardChars + 3));
+            var kept = line.Substring(2, line.Length - 3);
+            Assert.That(words, Does.EndWith(" " + kept), "it starts on a whole word");
+        }
+
+        [Test]
         public void A_snapshot_keeps_the_photo_it_shows()
         {
             var parent = new GameObject("Room");

@@ -183,6 +183,7 @@ namespace Edith.Ask
                     return;
                 case LiveEventKind.InputText:
                     heard.Append(e.Text);
+                    if (current != null) current.ShowHeard(heard.ToString());
                     if (session.Phase != AskPhase.Answering) lastHeardAt = Time.realtimeSinceStartup;
                     return;
                 case LiveEventKind.TurnComplete:
