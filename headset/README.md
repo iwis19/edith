@@ -20,7 +20,7 @@ $adb = "C:\Program Files\Unity\Hub\Editor\6000.6.9f1\Editor\Data\PlaybackEngines
 
 ## Open the project
 
-In Unity Hub, click **Add** > **Add project from disk** and select this `hackwestern` folder. The first open downloads the packages in `Packages/manifest.json` and compiles them, which takes several minutes.
+In Unity Hub, click **Add** > **Add project from disk** and select this `headset` folder. The first open downloads the packages in `Packages/manifest.json` and compiles them, which takes several minutes.
 
 Unity can crash on project open (exit code `0xc0000409` in Meta's `OVRPlugin.dll`) while an adb server is running with the Quest connected. Run `& $adb kill-server` before you open the project or start a headless run, and start adb again only to install.
 
@@ -45,7 +45,7 @@ Each setup needs the objects of the ones before it, in the order of the table, a
 
 ## Build from a terminal
 
-Run setup and build as two separate Unity sessions. Meta's fixes change scripting defines, and the recompile that follows blocks a build in the same session. Run both from the `hackwestern` folder. Do not pass `-quit` to `BatchConfigure`, because Meta's fixes are asynchronous and the method exits the editor itself.
+Run setup and build as two separate Unity sessions. Meta's fixes change scripting defines, and the recompile that follows blocks a build in the same session. Run both from the `headset` folder. Do not pass `-quit` to `BatchConfigure`, because Meta's fixes are asynchronous and the method exits the editor itself.
 
 ```powershell
 & $adb kill-server
