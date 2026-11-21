@@ -81,7 +81,7 @@ namespace Edith.Look
             room = new SnapshotRoom(transform, occludedMaterial, font);
             room.Pocketed += OnPocketed;
             grab.Bind(room);
-            ask.Bind(room);
+            ask.Bind(room, headsetCamera);
         }
 
         IEnumerator Start()

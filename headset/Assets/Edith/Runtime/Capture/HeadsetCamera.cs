@@ -115,16 +115,18 @@ namespace Edith.Capture
             return Readback(texture, pixels, CropSize.MaxSide, cameraAccess.Timestamp, pose);
         }
 
-        /// Reads back the whole latest image at full size. Throws InvalidOperationException when the camera is not
-        /// Streaming.
-        public Task<CameraFrame> CaptureFullAsync()
+        /// Reads back the whole latest image, scaled down to at most `maxLongSide` on its longer side when that is
+        /// given, else at full size. Throws InvalidOperationException when the camera is not Streaming.
+        public Task<CameraFrame> CaptureFullAsync(int maxLongSide = 0)
         {
             if (Status != CameraStatus.Streaming)
                 throw new InvalidOperationException($"Camera is {Status}, not Streaming.");
 
             var texture = cameraAccess.GetTexture();
-            return Readback(texture, new RectInt(0, 0, texture.width, texture.height), Mathf.Max(texture.width, texture.height),
-                cameraAccess.Timestamp, cameraAccess.GetCameraPose());
+            var full = Mathf.Max(texture.width, texture.height);
+            var longSide = maxLongSide > 0 ? Mathf.Min(maxLongSide, full) : full;
+            return Readback(texture, new RectInt(0, 0, texture.width, texture.height), longSide, cameraAccess.Timestamp,
+                cameraAccess.GetCameraPose());
         }
 
         RectInt RegionPixels(WorldQuad quad, Pose pose, Vector2Int image)

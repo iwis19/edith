@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 using Edith.Backend;
+using Edith.Capture;
 using Edith.Scan;
 using Edith.Snapshots;
 using UnityEngine;
@@ -8,10 +11,10 @@ using UnityEngine;
 namespace Edith.Ask
 {
     /// Ask on the headset. A thumb tap chimes and starts a spoken question about what is nearest the line of sight: a
-    /// Scan pin's name and hook, or a snapshot's photo, whichever is nearer; Gemini's activity detection ends the
-    /// question. The answer is spoken and typed out beside an orb that perches on that snapshot, or rests low in the
-    /// view clear of every snapshot, and fades once the answer is over. A thumb swipe flicks the orb away, and drawing
-    /// a new box makes it vanish until the next tap.
+    /// Scan pin's name and hook, or a snapshot's photo, whichever is nearer, and a picture of the view ahead when
+    /// neither is near; Gemini's activity detection ends the question. The answer is spoken and typed out beside an orb
+    /// that perches on that snapshot, or rests low in the view clear of every snapshot, and fades once the answer is
+    /// over. A thumb swipe flicks the orb away, and drawing a new box makes it vanish until the next tap.
     public sealed class AskController : MonoBehaviour
     {
         [SerializeField] ThumbGestures gestures;
@@ -23,6 +26,8 @@ namespace Edith.Ask
         [SerializeField] ScanController scan;
 
         const int PhotoLongSide = 512;
+        // The whole view holds more than one framed object, so it keeps more detail.
+        const int ViewLongSide = 768;
 
         readonly AskSession session = new AskSession();
         readonly List<Vector3> photoCentres = new List<Vector3>();
@@ -36,10 +41,17 @@ namespace Edith.Ask
         AnswerOrb current;
         LiveLink link;
         PhotoJpeg photo;
+        Task<CameraFrame> view;
+        HeadsetCamera headsetCamera;
         bool photoSent;
 
-        /// The room whose snapshot photos can go with a question. Without one, every question goes without a photo.
-        public void Bind(SnapshotRoom room) => this.room = room;
+        /// The room whose snapshot photos can go with a question, and the camera that pictures the view when no
+        /// snapshot is looked at. Without them, questions go without that photo.
+        public void Bind(SnapshotRoom room, HeadsetCamera headsetCamera)
+        {
+            this.room = room;
+            this.headsetCamera = headsetCamera;
+        }
 
         public AskPhase Phase => session.Phase;
 
@@ -119,8 +131,32 @@ namespace Edith.Ask
             link = LiveLink.Open(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, hint, voice.Speech,
                 AskVoice.ChunkSamples);
             photo = asked != null ? PhotoJpeg.Start(asked.Photo, PhotoLongSide) : null;
-            var about = hint is { } h ? $"about the pin on {h.Name}" : photo != null ? "with a photo" : "without a hint";
+            view = asked == null && hint == null ? CaptureView() : null;
+            var about = hint is { } h ? $"about the pin on {h.Name}"
+                : photo != null ? "with a snapshot photo" : view != null ? "with the view" : "without a hint";
             Debug.Log($"[EDITH ask] listening, {about}");
+        }
+
+        /// A picture of the whole camera view, or null when the camera is not streaming.
+        Task<CameraFrame> CaptureView()
+        {
+            if (headsetCamera == null || headsetCamera.Status != CameraStatus.Streaming) return null;
+            try
+            {
+                return headsetCamera.CaptureFullAsync(ViewLongSide);
+            }
+            catch (InvalidOperationException e)
+            {
+                Debug.Log($"[EDITH ask] no view photo: {e.Message}");
+                return null;
+            }
+        }
+
+        /// The photo to send once it is ready: the snapshot's, or the view's.
+        byte[] ReadyPhoto()
+        {
+            if (photo != null) return photo.Result;
+            return view != null && view.IsCompletedSuccessfully ? view.Result.Jpeg : null;
         }
 
         /// The snapshot with a photo nearest the line of sight and its angle from it, or null when none is near it.
@@ -151,7 +187,7 @@ namespace Edith.Ask
                 return;
             }
             if (session.MicWanted(now)) PumpMicrophone(now);
-            if (link != null && !photoSent && photo?.Result is { } jpeg)
+            if (link != null && !photoSent && ReadyPhoto() is { } jpeg)
             {
                 photoSent = true;
                 if (session.Phase == AskPhase.Connecting || session.Phase == AskPhase.Listening) link.SendImage(jpeg);
@@ -302,6 +338,7 @@ namespace Edith.Ask
             link?.Dispose();
             link = null;
             photo = null;
+            view = null;
             voice.Speech.Clear();
         }
 
