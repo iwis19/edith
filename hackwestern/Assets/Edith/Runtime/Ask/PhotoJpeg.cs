@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Edith.Capture;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -25,7 +26,7 @@ namespace Edith.Ask
                 Debug.LogWarning("[EDITH ask] this GPU cannot read photos back, so the question goes without one");
                 return result;
             }
-            var size = AskGeometry.FitLongSide(photo.width, photo.height, maxLongSide);
+            var size = CropSize.FitLongSide(photo.width, photo.height, maxLongSide);
             var scaled = RenderTexture.GetTemporary(size.x, size.y, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             Graphics.Blit(photo, scaled);
             AsyncGPUReadback.Request(scaled, 0, TextureFormat.RGBA32, request =>
