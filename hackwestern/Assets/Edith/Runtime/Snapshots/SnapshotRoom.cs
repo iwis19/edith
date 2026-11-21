@@ -8,12 +8,20 @@ namespace Edith.Snapshots
     public sealed class SnapshotRoom
     {
         readonly Transform parent;
+        readonly Material material;
+        readonly Font font;
         readonly SnapshotShelf<Snapshot> shelf = new SnapshotShelf<Snapshot>();
         List<Snapshot> covered = new List<Snapshot>();
         List<Snapshot> under = new List<Snapshot>();
 
-        /// `parent` must have unit world scale.
-        public SnapshotRoom(Transform parent) => this.parent = parent;
+        /// `parent` must have unit world scale. `material`, when given, draws every photo and card so real objects in
+        /// front of them hide them. `font` writes the cards' text.
+        public SnapshotRoom(Transform parent, Material material = null, Font font = null)
+        {
+            this.parent = parent;
+            this.material = material;
+            this.font = font;
+        }
 
         /// Oldest first.
         public IReadOnlyList<(Snapshot item, SightBox box)> Snapshots => shelf.Items;
@@ -43,11 +51,21 @@ namespace Edith.Snapshots
         /// Hangs a snapshot in `box`. The ones it covers and the oldest past four fade out and are destroyed.
         public Snapshot Place(in SightBox box, Texture photo = null)
         {
-            var snapshot = Snapshot.Create(box, parent, photo);
+            var snapshot = Snapshot.Create(box, parent, photo, material, font);
             foreach (var gone in shelf.Add(snapshot, box))
                 gone.Leave();
             CancelPreview();
             return snapshot;
+        }
+
+        /// The newest snapshot whose box lies on the line from `eye` through `point`, or null. A point off the box
+        /// hits nothing, however near.
+        public Snapshot Hit(Vector3 eye, Vector3 point)
+        {
+            var items = shelf.Items;
+            for (var i = items.Count - 1; i >= 0; i--)
+                if (!items[i].item.Leaving && items[i].box.InLine(eye, point, 0f)) return items[i].item;
+            return null;
         }
 
         /// Fades out and destroys `snapshot`. False when it is not in the room.

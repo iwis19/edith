@@ -1,11 +1,13 @@
+using Edith.Look;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace Edith.Snapshots
 {
-    /// A snapshot photo hanging where its box was drawn, at the box's size, facing the eye that drew it. It fades in
-    /// when placed, fades out while a new box covers it, and fades out for good when it leaves the room. A fist can
-    /// carry it off its hook and it floats back, or shrink it into a pocket point.
+    /// A snapshot photo hanging where its box was drawn, at the box's size, facing the eye that drew it, with the
+    /// card the backend writes about it underneath. It fades in when placed, fades out while a new box covers it,
+    /// and fades out for good when it leaves the room. A fist can carry it off its hook and it floats back, or
+    /// shrink it into a pocket point.
     public sealed class Snapshot : MonoBehaviour
     {
         const float FadeSeconds = 0.25f;
@@ -31,15 +33,24 @@ namespace Edith.Snapshots
         Vector3 pocketFrom;
         Vector3 pocketPoint;
         Vector3 fullScale;
+        CardView view;
 
         public SightBox Box { get; private set; }
+
+        /// The photo it shows, or null for a plain panel.
+        public Texture Photo { get; private set; }
         public bool Leaving { get; private set; }
+
+        /// What the backend has said about the photo so far. Feed it events through Apply.
+        public LookCard Card { get; } = new LookCard();
 
         /// Unique among snapshots, and stable for as long as this one lives.
         public int Id { get; private set; }
 
-        /// Shows on the plane of `box`. `parent` must have unit world scale. A null `photo` shows a plain panel.
-        public static Snapshot Create(in SightBox box, Transform parent, Texture photo = null)
+        /// Shows on the plane of `box`. `parent` must have unit world scale. A null `photo` shows a plain panel; any
+        /// other is destroyed with the snapshot. `material`, when given, draws the photo so real objects in front
+        /// of it hide it. `font` writes the card's text.
+        public static Snapshot Create(in SightBox box, Transform parent, Texture photo = null, Material material = null, Font font = null)
         {
             var root = new GameObject("Snapshot", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
             var rect = (RectTransform)root.transform;
@@ -57,16 +68,20 @@ namespace Edith.Snapshots
             imageRect.sizeDelta = Vector2.zero;
             var raw = image.GetComponent<RawImage>();
             raw.raycastTarget = false;
+            raw.material = material;
             raw.texture = photo;
             if (photo == null) raw.color = EmptyPhoto;
 
             var snapshot = root.AddComponent<Snapshot>();
             snapshot.Id = nextId++;
             snapshot.Box = box;
+            snapshot.Photo = photo;
             snapshot.group = root.GetComponent<CanvasGroup>();
             snapshot.group.alpha = 0f;
             snapshot.group.interactable = false;
             snapshot.group.blocksRaycasts = false;
+            snapshot.view = CardView.Build(rect, box.Size * UnitsPerMetre, font, material);
+            snapshot.view.Show(snapshot.Card);
             return snapshot;
         }
 
@@ -78,6 +93,13 @@ namespace Edith.Snapshots
         {
             if (Leaving) return;
             target = covered ? 0f : 1f;
+            enabled = true;
+        }
+
+        public void Apply(in LookEvent e)
+        {
+            Card.Apply(e);
+            view.Show(Card);
             enabled = true;
         }
 
@@ -107,6 +129,12 @@ namespace Edith.Snapshots
             enabled = true;
         }
 
+        /// Moves the point a pocketed snapshot shrinks into, so it follows the hand that took it.
+        public void PocketToward(Vector3 point)
+        {
+            if (pocketing) pocketPoint = point;
+        }
+
         /// Shrinks and fades into `point`, then destroys the snapshot.
         public void Pocket(Vector3 point)
         {
@@ -117,12 +145,23 @@ namespace Edith.Snapshots
             fullScale = transform.localScale;
         }
 
+        void OnDestroy()
+        {
+            if (Photo != null) Destroy(Photo);
+        }
+
         void Update()
         {
             fade = Mathf.MoveTowards(fade, target, Time.deltaTime / FadeSeconds);
             group.alpha = fade * fade * (3f - 2f * fade);
             var settled = pocketing ? Shrink() : Follow();
-            if (fade != target || !settled) return;
+            var typing = Card.Typing && !Leaving;
+            if (typing)
+            {
+                Card.Advance(Time.deltaTime);
+                view.Show(Card);
+            }
+            if (fade != target || !settled || typing) return;
             if (Leaving) Destroy(gameObject);
             else enabled = false;
         }

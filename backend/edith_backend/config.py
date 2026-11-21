@@ -1,10 +1,20 @@
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+# Gemini Live's prebuilt voices. Live falls back to its default voice for a name it does not know, so an unknown name
+# must be refused here instead.
+LiveVoice = Literal[
+    "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", "Aoede", "Callirrhoe", "Autonoe", "Enceladus",
+    "Iapetus", "Umbriel", "Algieba", "Despina", "Erinome", "Algenib", "Rasalgethi", "Laomedeia", "Achernar",
+    "Alnilam", "Schedar", "Gacrux", "Pulcherrima", "Achird", "Zubenelgenubi", "Vindemiatrix", "Sadachbia",
+    "Sadaltager", "Sulafat",
+]
+LIVE_VOICES: tuple[str, ...] = get_args(LiveVoice)
 
 
 class Settings(BaseSettings):
@@ -35,6 +45,9 @@ class Settings(BaseSettings):
     gemini_thinking_level: str = "minimal"
     scan_model: str = "gemini-3.5-flash"
     live_model: str = "gemini-3.8-live"
+    live_voice: LiveVoice = "Kore"
+    # Google Search grounding for Ask. A free-tier key refuses the Live session when the setup carries the tool.
+    live_search: bool = False
     embedding_model: str = "gemini-embedding-2"
     # The size of every stored embedding; it can change only before the first one is written.
     embedding_dimensions: int = 1536

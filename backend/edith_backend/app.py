@@ -8,13 +8,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, File, Form, Header, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import VERSION
+from .agents.ask import AskError, AskRequest, AskSession, LiveAsk, make_live_ask
 from .agents.card import CardAgent, make_card_agent
 from .config import Settings
 from .db import LookRecord, Store, make_store
@@ -105,12 +106,18 @@ class DeviceGate:
                 await _send_error(send, 413, "body_too_large", f"The request body must be at most {self.max_body} bytes.")
 
 
-def create_app(settings: Settings | None = None, agent: CardAgent | None = None, store: Store | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    agent: CardAgent | None = None,
+    store: Store | None = None,
+    ask: LiveAsk | None = None,
+) -> FastAPI:
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
         raise RuntimeError("PUBLIC_SERVER is set but DEVICE_TOKEN is empty, so anyone could spend the API keys.")
     agent = agent or make_card_agent(settings)
     store = store or make_store(settings.database_url, settings.db_pool_max)
+    ask = ask or make_live_ask(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -156,6 +163,16 @@ def create_app(settings: Settings | None = None, agent: CardAgent | None = None,
             _stream(agent, store, settings, profile_id, parsed, data, size, received),
             media_type="application/x-ndjson",
         )
+
+    @app.post("/ask/session")
+    async def ask_session(request: AskRequest | None = Body(None), _: UUID = Depends(profile)) -> AskSession:
+        if ask is None:
+            raise ApiError(503, "ask_unavailable", "Ask needs GEMINI_API_KEY on the backend.")
+        try:
+            return await ask.start(request or AskRequest())
+        except AskError as exc:
+            log.warning("ask session failed: %s", exc)
+            raise ApiError(502, "ask_failed", "Gemini did not give a session token.")
 
     return app
 

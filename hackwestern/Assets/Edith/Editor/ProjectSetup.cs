@@ -93,9 +93,15 @@ namespace Edith.Editor
             DepthSetup.AddToScene(ScenePath);
             PinchSetup.AddToScene(ScenePath);
             GrabSetup.AddToScene(ScenePath);
+            AskSetup.AddToScene(ScenePath);
+            LookSetup.EnableCameraAccess();
+            LookSetup.AddToScene(ScenePath);
+            BackendSettingsSetup.Write();
             // Meta's fixes enable rules that only pass after an earlier fix, so one pass is not enough.
             for (var pass = 0; pass < 3; pass++)
                 await OVRProjectSetup.FixAllAsync(BuildTargetGroup.Android);
+            ManifestSetup.EnsurePermission(AskSetup.MicrophonePermission);
+            ManifestSetup.EnsurePermission(Edith.Capture.HeadsetCamera.HeadsetCameraPermission);
             FixOpenXRValidation();
             AssetDatabase.SaveAssets();
             Debug.Log("[EDITH setup] configured for Quest 3/3S");

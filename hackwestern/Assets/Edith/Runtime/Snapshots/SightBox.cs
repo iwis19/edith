@@ -41,6 +41,19 @@ namespace Edith.Snapshots
             return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
         }
 
-        Vector3 Point(float tx, float ty) => Eye.position + Eye.rotation * new Vector3(tx * Depth, ty * Depth, Depth);
+        /// True when `point`, seen from `eye`, lies on this box or within `margin` (a tangent, about margin radians) of it.
+        public bool InLine(Vector3 eye, Vector3 point, float margin)
+        {
+            var toPoint = point - eye;
+            if (toPoint.sqrMagnitude < 1e-8f) return false;
+            if (SeenFrom(new Pose(eye, Quaternion.LookRotation(toPoint))) is not { } seen) return false;
+            return seen.xMin - margin <= 0f && seen.xMax + margin >= 0f && seen.yMin - margin <= 0f && seen.yMax + margin >= 0f;
+        }
+
+        /// The point of the box's tangent space (`tx`, `ty`) on the plane `depth` metres in front of the eye.
+        public Vector3 PointAt(float tx, float ty, float depth) =>
+            Eye.position + Eye.rotation * new Vector3(tx * depth, ty * depth, depth);
+
+        Vector3 Point(float tx, float ty) => PointAt(tx, ty, Depth);
     }
 }

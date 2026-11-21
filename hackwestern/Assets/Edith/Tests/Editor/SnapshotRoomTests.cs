@@ -35,6 +35,21 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_snapshot_keeps_the_photo_it_shows()
+        {
+            var photo = new Texture2D(4, 4);
+            try
+            {
+                Assert.AreSame(photo, Snapshot.Create(Box(0f), parent.transform, photo).Photo);
+                Assert.IsNull(Snapshot.Create(Box(0f), parent.transform).Photo);
+            }
+            finally
+            {
+                Object.DestroyImmediate(photo);
+            }
+        }
+
+        [Test]
         public void Dragging_over_a_snapshot_fades_it_and_dragging_off_brings_it_back()
         {
             var old = room.Place(Box(0f));
@@ -147,6 +162,31 @@ namespace Edith.Tests
 
         static bool Carried(Snapshot snapshot) =>
             (bool)typeof(Snapshot).GetField("carried", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(snapshot);
+
+        [Test]
+        public void A_pinch_hits_only_a_snapshot_it_lands_on()
+        {
+            var left = room.Place(Box(-0.3f));
+            var right = room.Place(Box(0.3f));
+            var eye = Vector3.zero;
+
+            Assert.AreSame(left, room.Hit(eye, new Vector3(-0.28f, 0.05f, 0.4f)));
+            Assert.AreSame(right, room.Hit(eye, new Vector3(0.3f, 0f, 0.4f)));
+            Assert.AreSame(right, room.Hit(eye, new Vector3(0.12f, 0.02f, 0.2f)), "a nearer point on the same line of sight");
+            Assert.IsNull(room.Hit(eye, new Vector3(0f, 0f, 0.4f)), "between the two");
+            Assert.IsNull(room.Hit(eye, new Vector3(0.45f, 0f, 0.4f)), "just past the edge, with no slack");
+            Assert.IsNull(room.Hit(eye, new Vector3(0.3f, 0.2f, 0.4f)), "above it");
+            Assert.IsNull(room.Hit(eye, new Vector3(0.3f, 0f, -0.4f)), "behind the eye");
+        }
+
+        [Test]
+        public void A_snapshot_that_is_leaving_cannot_be_hit()
+        {
+            var snapshot = room.Place(Box(0f));
+            Assert.AreSame(snapshot, room.Hit(Vector3.zero, new Vector3(0f, 0f, 0.4f)));
+            snapshot.Leave();
+            Assert.IsNull(room.Hit(Vector3.zero, new Vector3(0f, 0f, 0.4f)));
+        }
 
         [Test]
         public void Snapshots_have_distinct_ids()

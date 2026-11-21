@@ -3,6 +3,7 @@
     "rootNamespace": "Edith",
     "references": [
         "Oculus.VR",
+        "meta.xr.mrutilitykit",
         "UnityEngine.UI"
     ],
     "includePlatforms": [],
