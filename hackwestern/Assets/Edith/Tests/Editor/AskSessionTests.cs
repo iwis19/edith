@@ -55,14 +55,27 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_tap_while_busy_cuts_the_question_short_and_a_tap_while_fading_starts_another()
+        public void A_tap_while_a_question_is_under_way_does_nothing()
         {
             session.Tap(0f);
+            Assert.IsFalse(session.Tap(0.5f));
+            Assert.AreEqual(AskPhase.Connecting, session.Phase);
             session.Ready(1f);
             Assert.IsFalse(session.Tap(2f));
+            Assert.AreEqual(AskPhase.Listening, session.Phase);
+            Assert.IsTrue(session.MicWanted(2f), "the extra tap doesn't restart the chime delay");
+            session.AnswerAudio(3f);
+            Assert.IsFalse(session.Tap(4f));
+            Assert.AreEqual(AskPhase.Answering, session.Phase);
+        }
+
+        [Test]
+        public void A_tap_while_fading_starts_another_question()
+        {
+            Answered(at: 3f);
+            session.Tick(4f, speechLeft: 0);
             Assert.AreEqual(AskPhase.Fading, session.Phase);
-            Assert.IsFalse(session.Busy);
-            Assert.IsTrue(session.Tap(3f));
+            Assert.IsTrue(session.Tap(5f));
             Assert.AreEqual(AskPhase.Connecting, session.Phase);
         }
 
