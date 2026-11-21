@@ -133,7 +133,10 @@ namespace Edith.Tests
         {
             Draw(Travels());
             var image = frame.GetComponentInChildren<RawImage>(true);
-            Assert.AreEqual(new Rect(0f, 0.2f, 1f, 0.6f), image.uvRect);
+            Assert.AreEqual(0f, image.uvRect.x, 1e-6f);
+            Assert.AreEqual(0.2f, image.uvRect.y, 1e-6f);
+            Assert.AreEqual(1f, image.uvRect.width, 1e-6f);
+            Assert.AreEqual(0.6f, image.uvRect.height, 1e-6f);
             Assert.AreEqual(5f / 3f, MapPanel.Width / MapPanel.Height, 1e-5f);
         }
 

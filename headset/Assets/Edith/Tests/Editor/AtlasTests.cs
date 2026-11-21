@@ -195,7 +195,7 @@ namespace Edith.Tests
         [Test]
         public void The_world_map_shows_every_city_inside_the_visible_crop_at_a_zoom_from_2_to_12()
         {
-            foreach (var cities in new[] { new[] { Sydney, Oslo }, new[] { Tokyo, Lagos, Lima }, new[] { Sydney, Tokyo, Lagos, Lima, Oslo } })
+            foreach (var cities in new[] { new[] { Sydney, Oslo }, new[] { Tokyo, Lagos, Lima }, new[] { Oslo, Lagos, Tokyo } })
             {
                 var atlas = Across(cities);
                 Assert.That(atlas.World.Zoom, Is.InRange(MercatorMath.MinWorldZoom, MercatorMath.MaxWorldZoom));
@@ -207,6 +207,12 @@ namespace Edith.Tests
                     Assert.That(Math.Abs(at.y), Is.LessThanOrEqualTo(512f * ScrapbookPlacement.MapVisibleShare * margin), $"{city.Label} down, zoom {atlas.World.Zoom}");
                 }
             }
+        }
+
+        [Test]
+        public void Cities_spread_too_far_for_any_zoom_get_the_widest_map()
+        {
+            Assert.AreEqual(MercatorMath.MinWorldZoom, Across(Sydney, Tokyo, Lagos, Lima, Oslo).World.Zoom);
         }
 
         [Test]
