@@ -105,5 +105,15 @@ namespace Edith.Tests
             drag.Move(3f, 0f);
             Assert.AreEqual(2, drag.Land(1f));
         }
+
+        [Test]
+        public void A_quick_flick_shorter_than_the_lookback_still_lands_a_card_on()
+        {
+            var drag = Drag();
+            drag.Move(0.3f, 0f);
+            drag.Move(0.3f, 0.04f);
+            drag.Move(0.1f, 0.08f);
+            Assert.AreEqual(1, drag.Land(0.09f));
+        }
     }
 }

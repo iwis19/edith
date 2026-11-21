@@ -43,7 +43,8 @@ namespace Edith.Scrapbook
         public int Land(float now)
         {
             if (history.Count == 0) return Mathf.Clamp(Mathf.RoundToInt(start), 0, last);
-            var cut = now - ScrubTuning.LookbackSeconds;
+            // A quick flick is shorter than the lookback; undoing at most half of it keeps its direction.
+            var cut = now - Mathf.Min(ScrubTuning.LookbackSeconds, (now - history[0].time) * 0.5f);
             var at = history[0].position;
             var furthest = 0f;
             foreach (var (time, position) in history)
