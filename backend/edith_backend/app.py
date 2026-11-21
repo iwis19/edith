@@ -6,11 +6,14 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
+import httpx
 from fastapi import Body, Depends, FastAPI, File, Form, Header, Query, Request, Response, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -21,6 +24,9 @@ from .config import Settings
 from .db import LookRecord, Store, StoreUnavailable, make_store
 from .events import Accepted, CollectMeta, Done, ErrorEvent, Fact, LookEvent, LookMeta, Name, RarityEvent
 from .jpeg import is_jpeg, jpeg_size
+from .location import LocationFix, Locations, LocationSummary
+from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
+from .resolve import HttpResolver
 
 log = logging.getLogger("edith")
 if not log.handlers:
@@ -31,6 +37,12 @@ if not log.handlers:
 
 # Room for the multipart boundaries, part headers and the meta field on top of the largest allowed image.
 _FORM_OVERHEAD_BYTES = 64 * 1024
+
+# The phone cannot send the device token, so these answer without it. Each checks its own credential: a pairing code
+# with a throttle, or the phone token the code is traded for. Their bodies are a few fields, so the cap is small.
+_PHONE_ROUTES = frozenset({("GET", "/phone"), ("POST", "/pair/claim"), ("POST", "/location")})
+_PHONE_BODY_BYTES = 4096
+_PHONE_PAGE = (Path(__file__).parent / "static" / "phone.html").read_text(encoding="utf-8")
 
 
 class ApiError(Exception):
@@ -65,12 +77,14 @@ class DeviceGate:
             await self.app(scope, receive, send)
             return
         headers = dict(scope["headers"])
-        if self.token and not secrets.compare_digest(headers.get(b"x-edith-token", b""), self.token):
+        phone = (scope["method"], scope["path"]) in _PHONE_ROUTES
+        max_body = _PHONE_BODY_BYTES if phone else self.max_body
+        if self.token and not phone and not secrets.compare_digest(headers.get(b"x-edith-token", b""), self.token):
             await _send_error(send, 401, "bad_token", "The X-Edith-Token header is missing or wrong.")
             return
         length = headers.get(b"content-length")
-        if length is not None and (not length.isdigit() or int(length) > self.max_body):
-            await _send_error(send, 413, "body_too_large", f"The request body must be at most {self.max_body} bytes.")
+        if length is not None and (not length.isdigit() or int(length) > max_body):
+            await _send_error(send, 413, "body_too_large", f"The request body must be at most {max_body} bytes.")
             return
 
         received = 0
@@ -81,7 +95,7 @@ class DeviceGate:
             nonlocal received, exceeded
             message = await receive()
             received += len(message.get("body", b""))
-            if received > self.max_body:
+            if received > max_body:
                 exceeded = True
                 raise _BodyTooLarge
             return message
@@ -94,7 +108,7 @@ class DeviceGate:
                 if not replied:
                     replied = True
                     await _send_error(send, 413, "body_too_large",
-                                      f"The request body must be at most {self.max_body} bytes.")
+                                      f"The request body must be at most {max_body} bytes.")
                 return
             await send(message)
 
@@ -103,7 +117,11 @@ class DeviceGate:
         except _BodyTooLarge:
             if not replied:
                 replied = True
-                await _send_error(send, 413, "body_too_large", f"The request body must be at most {self.max_body} bytes.")
+                await _send_error(send, 413, "body_too_large", f"The request body must be at most {max_body} bytes.")
+
+
+class PairClaim(BaseModel):
+    code: str
 
 
 def create_app(
@@ -111,10 +129,15 @@ def create_app(
     agent: CardAgent | None = None,
     store: Store | None = None,
     ask: LiveAsk | None = None,
+    locations: Locations | None = None,
+    pairings: Pairings | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
         raise RuntimeError("PUBLIC_SERVER is set but DEVICE_TOKEN is empty, so anyone could spend the API keys.")
+    # Made here and not per request: only the phone's position ever uses the resolver's client.
+    locations = locations or Locations(HttpResolver(httpx.AsyncClient()))
+    pairings = pairings or Pairings()
     agent = agent or make_card_agent(settings)
     store = store or make_store(settings.database_url, settings.db_pool_max)
     ask = ask or make_live_ask(settings)
@@ -132,6 +155,7 @@ def create_app(
 
     app = FastAPI(title="EDITH backend", version=VERSION, lifespan=lifespan)
     token = settings.device_token
+    phone_tokens = PhoneTokens(token.get_secret_value().encode() if token else None)
     app.add_middleware(DeviceGate, token=token.get_secret_value().encode() if token else None,
                        max_body=settings.max_image_bytes + _FORM_OVERHEAD_BYTES)
 
@@ -176,6 +200,54 @@ def create_app(
         except AskError as exc:
             log.warning("ask session failed: %s", exc)
             raise ApiError(502, "ask_failed", "Gemini did not give a session token.")
+
+    @app.post("/pair")
+    async def pair(request: Request, profile_id: UUID = Depends(profile)) -> dict:
+        record = pairings.issue(profile_id)
+        return {"code": record.code, "expires_in_s": int(record.expires - record.created),
+                "phone_url": settings.phone_link or str(request.base_url).rstrip("/") + "/phone"}
+
+    @app.get("/pair/{code}")
+    async def pair_status(code: str, profile_id: UUID = Depends(profile)) -> dict:
+        paired, expired = pairings.status(profile_id, code)
+        return {"paired": paired, "expired": expired}
+
+    @app.post("/pair/claim")
+    async def pair_claim(claim: PairClaim, request: Request) -> dict:
+        ip = request.client.host if request.client else "unknown"
+        try:
+            profile_id = pairings.claim(claim.code.strip(), ip)
+        except TooManyTries:
+            raise ApiError(429, "too_many_tries", "Too many wrong codes. Wait ten minutes and try again.")
+        except BadCode:
+            raise ApiError(404, "bad_code", "That code is wrong, used or expired. Look at the headset for a new one.")
+        phone_token, expires = phone_tokens.issue(profile_id)
+        return {"phone_token": phone_token,
+                "expires_at": datetime.fromtimestamp(expires, UTC).isoformat().replace("+00:00", "Z")}
+
+    @app.get("/phone", response_class=HTMLResponse)
+    async def phone() -> HTMLResponse:
+        # The page holds no secret: the phone token comes from /pair/claim and stays in the phone's own storage.
+        return HTMLResponse(_PHONE_PAGE, headers={
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                                       "connect-src 'self'; base-uri 'none'; form-action 'none'",
+        })
+
+    @app.post("/location")
+    async def post_location(fix: LocationFix, x_edith_phone: str | None = Header(None)) -> LocationSummary:
+        profile_id = phone_tokens.verify(x_edith_phone or "")
+        if profile_id is None:
+            raise ApiError(401, "bad_phone_token", "The phone token is missing, wrong or expired. Pair again.")
+        return locations.update(profile_id, fix)
+
+    @app.get("/location")
+    async def get_location(profile_id: UUID = Depends(profile)) -> LocationSummary:
+        summary = locations.summary(profile_id)
+        if summary is None:
+            raise ApiError(404, "no_location", "No phone position is kept for this profile.")
+        return summary
 
     @app.post("/collect")
     async def collect(

@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     device_token: SecretStr | None = None
     # Set by the Dockerfile: a public backend must not start without device_token.
     public_server: bool = False
+    # The address the headset's pairing panel tells people to open on their phone. Empty uses this backend's own /phone,
+    # which on a hosted domain can be too long to type, so it can be set to a short link that redirects there.
+    phone_link: str = ""
 
     # Which provider writes the card. Without that provider's key the stub card agent answers instead.
     card_provider: Literal["openai", "gemini"] = "openai"
