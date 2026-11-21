@@ -9,7 +9,7 @@ namespace Edith.Scan
     /// What a scan draws in the room, each with its own shape so none is mistaken for another:
     /// - the Scan hold: two arcs of light grow from either palm and close into a circle, then sonar rings sweep out
     ///   while the reply is awaited;
-    /// - a pin: a small glass bead that lands with one ripple and breathes;
+    /// - a pin: a small glass bead that lands with one ripple and breathes, under a soft pillar of light;
     /// - looking at a pin: the bead swells while its own rim fills like a clock hand;
     /// - the Scrapbook hold: three card outlines rise and fan out between the palms.
     /// Plus the line of text for a scan that found nothing. Each is a world-space canvas that faces the eye and is
@@ -24,7 +24,9 @@ namespace Edith.Scan
             internal float Fade, Target = 1f;
             internal Image Gaze, Pulse, Glow;
             internal RectTransform Bead;
-            internal float Age, Look, Phase;
+            internal GameObject Pillar;
+            internal CanvasGroup PillarGroup;
+            internal float Age, Look, Phase, Wait;
         }
 
         // 1 canvas unit is half a millimetre at ReferenceMeters.
@@ -41,6 +43,9 @@ namespace Edith.Scan
         const float BeadSize = 26f, BreatheScale = 0.06f, BreatheHz = 0.4f, LookSwell = 0.35f;
         // A new bead's single ripple grows to RippleGrowth times its size over RippleSeconds.
         const float RippleSeconds = 0.9f, RippleGrowth = 5f;
+        // A pin's light pillar rises from its bead, in real metres so it reads as part of the room: this wide and tall,
+        // brightest at the base. It fades out as the person walks within PillarNearMeters, where the bead is enough.
+        const float PillarWidthMetres = 0.07f, PillarHeightMetres = 1.4f, PillarNearMeters = 0.8f, PillarFarMeters = 1.8f;
         // The Scrapbook fan: three cards this big, spread this far and turned this much when the hold is full.
         static readonly Vector2 CardSize = new Vector2(90f, 120f);
         const float CardSpread = 62f, CardTurn = 14f, CardRadius = 12f;
@@ -57,6 +62,7 @@ namespace Edith.Scan
         readonly Sprite rimRing = Circle(256, 0.88f);
         readonly Sprite glow = Glow(128);
         readonly Sprite bead = Bead(128);
+        readonly Sprite beam = Beam(32, 256);
         readonly List<(Image image, float age)> sonar = new List<(Image, float)>();
         Mark ring, deck, status;
         Image ringFill;
@@ -73,10 +79,11 @@ namespace Edith.Scan
             this.material = material;
         }
 
-        /// A pin at `at`: a glass bead that lands with a ripple. Hand it to Remove to fade it out.
-        public Mark AddPin(Vector3 at)
+        /// A pin at `at`: a glass bead that lands with a ripple after `wait` seconds, when the scan's ping reaches it.
+        /// Hand it to Remove to fade it out.
+        public Mark AddPin(Vector3 at, float wait = 0f)
         {
-            var pin = new Mark { At = at, Phase = UnityEngine.Random.value * 6f };
+            var pin = new Mark { At = at, Phase = UnityEngine.Random.value * 6f, Wait = wait };
             var root = NewCanvas("ScanPin", pin);
             pin.Pulse = Disc(root, thinRing, Ice, BeadSize);
             pin.Glow = Disc(root, glow, new Color(Ice.r, Ice.g, Ice.b, 0.35f), BeadSize * 2.6f);
@@ -85,8 +92,45 @@ namespace Edith.Scan
             Disc(pin.Bead, bead, Color.white, BeadSize);
             Disc(pin.Bead, thinRing, new Color(Frost.r, Frost.g, Frost.b, 0.85f), BeadSize);
             pin.Gaze = Filled(pin.Bead, rimRing, Frost, BeadSize * 1.55f);
+            AddPillar(pin);
             pins.Add(pin);
             return pin;
+        }
+
+        /// A soft column of light standing on the pin, sized in metres and turned about the vertical to face the eye.
+        void AddPillar(Mark pin)
+        {
+            pin.Pillar = new GameObject("ScanPillar", typeof(Canvas));
+            pin.Pillar.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            pin.PillarGroup = pin.Pillar.AddComponent<CanvasGroup>();
+            pin.PillarGroup.alpha = 0f;
+            pin.PillarGroup.interactable = false;
+            pin.PillarGroup.blocksRaycasts = false;
+            var root = (RectTransform)pin.Pillar.transform;
+            root.sizeDelta = Vector2.zero;
+            // A canvas unit is a millimetre.
+            root.localScale = Vector3.one * 0.001f;
+            var image = new GameObject("Beam", typeof(Image)).GetComponent<Image>();
+            image.sprite = beam;
+            image.color = Ice;
+            image.raycastTarget = false;
+            image.material = material;
+            image.rectTransform.SetParent(root, false);
+            image.rectTransform.pivot = new Vector2(0.5f, 0f);
+            image.rectTransform.sizeDelta = new Vector2(PillarWidthMetres, PillarHeightMetres) * 1000f;
+        }
+
+        /// Stands the pillar on the pin, faces it to the eye about the vertical, and fades it with the bead, with its
+        /// breath, and out as the eye comes close.
+        static void Pillar(Mark pin, Vector3 eye)
+        {
+            var away = pin.At - eye;
+            var flat = new Vector3(away.x, 0f, away.z);
+            if (flat.sqrMagnitude < 1e-6f) flat = Vector3.forward;
+            pin.Pillar.transform.SetPositionAndRotation(pin.At, Quaternion.LookRotation(flat, Vector3.up));
+            var near = Mathf.InverseLerp(PillarNearMeters, PillarFarMeters, flat.magnitude);
+            var breath = 0.85f + 0.15f * Mathf.Sin((Time.time * BreatheHz + pin.Phase) * 2f * Mathf.PI);
+            pin.PillarGroup.alpha = pin.Group.alpha * near * breath * (1f - 0.4f * pin.Look);
         }
 
         Image Disc(RectTransform root, Sprite sprite, Color color, float size)
@@ -182,10 +226,18 @@ namespace Edith.Scan
             for (var i = pins.Count - 1; i >= 0; i--)
             {
                 var pin = pins[i];
+                if (pin.Wait > 0f && pin.Target > 0f)
+                {
+                    pin.Wait -= Time.deltaTime;
+                    Step(pin, 0f, eye, 1f);
+                    continue;
+                }
                 Step(pin, step, eye, 1f);
                 Ripple(pin);
                 Breathe(pin);
+                Pillar(pin, eye);
                 if (pin.Target > 0f || pin.Fade > 0f) continue;
+                UnityEngine.Object.Destroy(pin.Pillar);
                 UnityEngine.Object.Destroy(pin.Go);
                 pins.RemoveAt(i);
             }
@@ -215,12 +267,16 @@ namespace Edith.Scan
 
         public void Dispose()
         {
-            foreach (var pin in pins) UnityEngine.Object.Destroy(pin.Go);
+            foreach (var pin in pins)
+            {
+                UnityEngine.Object.Destroy(pin.Pillar);
+                UnityEngine.Object.Destroy(pin.Go);
+            }
             pins.Clear();
             if (ring != null) UnityEngine.Object.Destroy(ring.Go);
             if (deck != null) UnityEngine.Object.Destroy(deck.Go);
             if (status != null) UnityEngine.Object.Destroy(status.Go);
-            foreach (var sprite in new[] { disc, thinRing, rimRing, glow, bead })
+            foreach (var sprite in new[] { disc, thinRing, rimRing, glow, bead, beam })
             {
                 UnityEngine.Object.Destroy(sprite.texture);
                 UnityEngine.Object.Destroy(sprite);
@@ -384,6 +440,27 @@ namespace Edith.Scan
             texture.SetPixels32(pixels);
             texture.Apply();
             return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        }
+
+        /// A column of light: soft at the sides with a brighter core, strongest at the base and fading to nothing at
+        /// the top.
+        static Sprite Beam(int width, int height)
+        {
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[width * height];
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var across = Mathf.Abs((x + 0.5f) / width * 2f - 1f);
+                var side = (1f - across) * (1f - across);
+                var core = Mathf.Clamp01(1f - across * 6f);
+                var up = (y + 0.5f) / height;
+                var fall = Mathf.Pow(1f - up, 1.6f);
+                pixels[y * width + x] = new Color(1f, 1f, 1f, Mathf.Clamp01((0.55f * side + 0.45f * core) * fall));
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            return Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0f));
         }
 
         static Sprite Baked(int size, Func<float, float, float, float> alpha)
