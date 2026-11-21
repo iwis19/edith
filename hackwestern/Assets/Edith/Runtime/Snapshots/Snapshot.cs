@@ -129,6 +129,12 @@ namespace Edith.Snapshots
             enabled = true;
         }
 
+        /// Moves the point a pocketed snapshot shrinks into, so it follows the hand that took it.
+        public void PocketToward(Vector3 point)
+        {
+            if (pocketing) pocketPoint = point;
+        }
+
         /// Shrinks and fades into `point`, then destroys the snapshot.
         public void Pocket(Vector3 point)
         {
