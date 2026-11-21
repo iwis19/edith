@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Edith.Ask;
+using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,15 +16,14 @@ namespace Edith.Bounty
         const float UnitsPerMetre = 4000f;
         const float WidthMetres = 0.24f, HeightMetres = 0.135f, PaddingMetres = 0.008f;
         const int FontSize = 46, LineHeight = 62;
+        const float RadiusMetres = 0.011f;
         /// Where the card's centre rests: tangents of the angle from the line of sight, up and to the right.
         static readonly Vector2 Spot = new Vector2(0.42f, 0.32f);
         const float Depth = 0.7f;
         const float FollowRate = 3f, TurnRate = 8f, FadeSeconds = 0.3f;
-        static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
+        static readonly Color Bright = Theme.Ice;
         static readonly Color Done = new Color(0.5f, 0.88f, 0.55f, 1f);
         static readonly Color Urgent = new Color(1f, 0.45f, 0.4f, 1f);
-        static readonly Color Back = new Color(0.04f, 0.05f, 0.08f, 0.72f);
-        static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
         const string DoneTag = "<color=#80e08c>";
 
         Transform eye;
@@ -50,16 +50,14 @@ namespace Edith.Bounty
             card.group.interactable = false;
             card.group.blocksRaycasts = false;
 
-            var back = new GameObject("Back", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-            back.color = Back;
-            back.raycastTarget = false;
-            back.material = material;
-            Stretch(back.rectTransform, rect, 0f);
+            Glass.Build(rect, "Glass", rect.sizeDelta, RadiusMetres * UnitsPerMetre, material);
 
             var pad = PaddingMetres * UnitsPerMetre;
-            card.header = Label("Header", rect, font, material, TextAnchor.UpperLeft, pad);
-            card.clock = Label("Clock", rect, font, material, TextAnchor.UpperRight, pad);
-            card.body = Label("Targets", rect, font, material, TextAnchor.UpperLeft, pad);
+            var regular = Theme.Regular(font);
+            var semiBold = Theme.SemiBold(font);
+            card.header = Label("Header", rect, semiBold, material, TextAnchor.UpperLeft, pad);
+            card.clock = Label("Clock", rect, semiBold, material, TextAnchor.UpperRight, pad);
+            card.body = Label("Targets", rect, regular, material, TextAnchor.UpperLeft, pad);
             card.body.supportRichText = true;
             card.body.rectTransform.offsetMax = new Vector2(-pad, -pad - LineHeight);
             card.transform.SetPositionAndRotation(card.Goal(), card.Facing(card.Goal()));
@@ -138,18 +136,8 @@ namespace Edith.Bounty
 
         static Text Label(string name, RectTransform parent, Font font, Material material, TextAnchor anchor, float pad)
         {
-            var text = new GameObject(name, typeof(RectTransform), typeof(Text), typeof(Shadow)).GetComponent<Text>();
-            text.font = font;
-            text.fontSize = FontSize;
-            text.alignment = anchor;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-            text.material = material;
+            var text = Theme.Label(parent, name, font, FontSize, Bright, anchor, material);
             text.lineSpacing = 1.05f;
-            var shadow = text.GetComponent<Shadow>();
-            shadow.effectColor = ShadowColor;
-            shadow.effectDistance = new Vector2(2f, -2f);
             Stretch(text.rectTransform, parent, pad);
             return text;
         }
