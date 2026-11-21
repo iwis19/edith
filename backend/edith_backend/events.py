@@ -39,11 +39,6 @@ class ScanReply(BaseModel):
     picks: list[ScanPick]
 
 
-class Source(BaseModel):
-    title: str
-    url: str
-
-
 class _Event(BaseModel):
     t_ms: int = 0
 
@@ -66,7 +61,6 @@ class Name(_Event):
 class Fact(_Event):
     type: Literal["fact"] = "fact"
     text: str
-    sources: list[Source]
 
 
 class RarityEvent(_Event):

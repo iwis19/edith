@@ -300,7 +300,7 @@ class CardModelAgent:
                 log.info("look %s second fact was also told before, so none is shown", meta.look_id)
                 return
         self._facts.add(profile_id, kind, fact)
-        yield Fact(text=fact, sources=[])
+        yield Fact(text=fact)
 
     async def _name(
         self, image: bytes, profile_id: UUID, fields: dict[str, str], found: Whereabouts | None

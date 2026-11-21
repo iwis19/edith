@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 log = logging.getLogger("edith.db")
@@ -28,7 +27,6 @@ class LookRecord:
     name: str | None
     confidence: float | None
     fact: str | None
-    fact_sources: list[dict]
     rarity: str | None
     duration_ms: int
     kind: str | None = None
@@ -42,7 +40,6 @@ class Memory:
     name: str
     kind: str | None
     fact: str | None
-    sources: list[dict]
     rarity: str | None
     place: str | None
     created_at: datetime
@@ -140,12 +137,12 @@ class PostgresStore:
                 )
                 await conn.execute(
                     """insert into looks (id, profile_id, client_look_id, source, captured_at, width, height, status,
-                           name, confidence, fact, fact_sources, rarity, duration_ms, kind, place)
-                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                           name, confidence, fact, rarity, duration_ms, kind, place)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         record.look_ref, record.profile_id, record.client_look_id, record.source, record.captured_at,
                         record.width, record.height, record.status, record.name, record.confidence, record.fact,
-                        Jsonb(record.fact_sources), record.rarity, record.duration_ms, record.kind, record.place,
+                        record.rarity, record.duration_ms, record.kind, record.place,
                     ),
                 )
         except Exception:
@@ -159,9 +156,8 @@ class PostgresStore:
                 # The fields are copied from the stored Look, so the client cannot supply card text. A repeat inserts
                 # nothing and the existing row is read back. A headset clock ahead of the server is capped at now().
                 cursor = await conn.execute(
-                    """insert into memories (profile_id, look_ref, name, kind, fact, sources, rarity, place, image,
-                                             created_at)
-                       select profile_id, id, name, kind, fact, fact_sources, rarity, place, %s,
+                    """insert into memories (profile_id, look_ref, name, kind, fact, rarity, place, image, created_at)
+                       select profile_id, id, name, kind, fact, rarity, place, %s,
                               least(coalesce(%s::timestamptz, now()), now()) from looks
                        where id = %s and profile_id = %s and status = 'done' and name is not null
                        on conflict (look_ref) do nothing
@@ -183,7 +179,7 @@ class PostgresStore:
         try:
             async with self._pool.connection(timeout=10) as conn:
                 cursor = await conn.execute(
-                    """select id, look_ref, name, kind, fact, sources, rarity, place, created_at from memories
+                    """select id, look_ref, name, kind, fact, rarity, place, created_at from memories
                        where profile_id = %s order by created_at desc, id desc limit %s""",
                     (profile_id, limit),
                 )

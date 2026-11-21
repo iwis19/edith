@@ -30,14 +30,14 @@ def schema_url():
 
 
 def test_migrate_applies_each_file_once(schema_url):
-    assert migrate(schema_url) == ["001_init", "002_collect"]
+    assert migrate(schema_url) == ["001_init", "002_collect", "003_drop_sources"]
     assert migrate(schema_url) == []
 
 
 def test_concurrent_migrations_take_turns(schema_url):
     with ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _: migrate(schema_url), range(4)))
-    assert sorted(results) == [[], [], [], ["001_init", "002_collect"]]
+    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_drop_sources"]]
 
 
 async def test_health_checks_share_one_query_while_cached(schema_url):
@@ -61,23 +61,22 @@ async def test_the_store_records_a_look_for_a_new_profile(schema_url):
         record = LookRecord(
             look_ref=uuid.uuid4(), profile_id=profile, client_look_id=1, source="pinch",
             captured_at=datetime.now(UTC), width=640, height=480, status="done", name="mug", confidence=0.9,
-            fact="Handles came late.", fact_sources=[{"title": "t", "url": "https://example.com"}], rarity="mythic",
-            duration_ms=812,
+            fact="Handles came late.", rarity="mythic", duration_ms=812,
         )
         await store.record_look(record)
         await store.record_look(LookRecord(**{**record.__dict__, "look_ref": uuid.uuid4()}))
     finally:
         await store.close()
     with psycopg.connect(schema_url) as conn:
-        rows = conn.execute("select name, rarity, fact_sources from looks where profile_id = %s", (profile,)).fetchall()
-    assert rows == [("mug", "mythic", record.fact_sources)] * 2
+        rows = conn.execute("select name, rarity, fact from looks where profile_id = %s", (profile,)).fetchall()
+    assert rows == [("mug", "mythic", "Handles came late.")] * 2
 
 
 def a_look(profile: uuid.UUID, **overrides) -> LookRecord:
     fields = dict(
         look_ref=uuid.uuid4(), profile_id=profile, client_look_id=1, source="pinch", captured_at=datetime.now(UTC),
         width=640, height=480, status="done", name="mug", confidence=0.9, fact="Handles came late.",
-        fact_sources=[{"title": "t", "url": "https://example.com"}], rarity="rare", duration_ms=812,
+        rarity="rare", duration_ms=812,
     )
     return LookRecord(**{**fields, **overrides})
 
@@ -104,7 +103,7 @@ async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(
 
         memories = await store.list_memories(profile, 10)
         assert [(m.id, m.name, m.rarity) for m in memories] == [(second_id, "lamp", "epic"), (first_id, "mug", "rare")]
-        assert memories[1].sources == first.fact_sources
+        assert memories[1].fact == first.fact
         assert memories[1].created_at == datetime(2026, 11, 21, 8, tzinfo=UTC)
         assert [(m.kind, m.place) for m in memories] == [(None, None), ("mug", "Waterloo, Ontario, Canada")]
         assert await store.list_memories(profile, 1) == memories[:1]

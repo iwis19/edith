@@ -22,7 +22,7 @@ class SlowAgent:
         await asyncio.sleep(STEP_S)
         yield Name(name="a ceramic mug", confidence=0.9)
         await asyncio.sleep(STEP_S)
-        yield Fact(text="Handles came late to European cups.", sources=[])
+        yield Fact(text="Handles came late to European cups.")
 
 
 def serve(settings, store):

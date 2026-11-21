@@ -129,7 +129,7 @@ namespace Edith.Tests
                 Line(response, "{\"type\":\"accepted\",\"look_id\":42,\"look_ref\":\"r\"}");
                 Line(response, "{\"type\":\"name\",\"name\":\"Red m\",\"confidence\":0,\"pending\":true}");
                 Line(response, "{\"type\":\"name\",\"name\":\"Red mug\",\"confidence\":0.9}");
-                Line(response, "{\"type\":\"fact\",\"text\":\"Old.\",\"sources\":[]}");
+                Line(response, "{\"type\":\"fact\",\"text\":\"Old.\"}");
                 Line(response, "{\"type\":\"rarity\",\"tier\":\"rare\"}");
                 Line(response, "{\"type\":\"done\"}");
             });

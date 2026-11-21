@@ -52,7 +52,7 @@ async def test_collecting_a_finished_look_saves_a_memory_from_the_stored_card(cl
     assert memory["id"] == memory_id
     assert memory["look_ref"] == ref
     assert (memory["name"], memory["fact"], memory["rarity"]) == (events[1]["name"], events[2]["text"], events[3]["tier"])
-    assert memory["sources"] == events[2]["sources"]
+    assert "sources" not in memory
     assert "image" not in memory
 
 

@@ -59,7 +59,7 @@ class RecordingStore:
             return None
         memory = Memory(
             id=len(self.memories) + 1, look_ref=look_ref, name=record.name, kind=record.kind, fact=record.fact,
-            sources=record.fact_sources, rarity=record.rarity, place=record.place,
+            rarity=record.rarity, place=record.place,
             created_at=min(collected_at or datetime.now(UTC), datetime.now(UTC)),
         )
         self.memories[memory.id] = (memory, profile_id, image)

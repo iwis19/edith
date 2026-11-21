@@ -60,7 +60,7 @@ class FakeStore:
 
 
 def memory(name: str, kind: str | None = None) -> Memory:
-    return Memory(id=1, look_ref=uuid.uuid4(), name=name, kind=kind, fact=None, sources=[], rarity=None, place=None,
+    return Memory(id=1, look_ref=uuid.uuid4(), name=name, kind=kind, fact=None, rarity=None, place=None,
                   created_at=datetime.now(UTC))
 
 

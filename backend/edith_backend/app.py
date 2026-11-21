@@ -303,7 +303,7 @@ def create_app(
         found = await _stored(store.list_memories(profile_id, limit))
         return {"memories": [
             {"id": m.id, "look_ref": m.look_ref.hex, "name": m.name, "kind": m.kind, "fact": m.fact,
-             "sources": m.sources, "rarity": m.rarity, "place": m.place, "created_at": m.created_at.isoformat()}
+             "rarity": m.rarity, "place": m.place, "created_at": m.created_at.isoformat()}
             for m in found
         ]}
 
@@ -465,7 +465,6 @@ def _record(
         name=name.name if isinstance(name, Name) else None,
         confidence=name.confidence if isinstance(name, Name) else None,
         fact=fact.text if isinstance(fact, Fact) else None,
-        fact_sources=[s.model_dump() for s in fact.sources] if isinstance(fact, Fact) else [],
         rarity=rarity.tier if isinstance(rarity, RarityEvent) else None,
         duration_ms=duration_ms,
         kind=details.kind if details else None,
