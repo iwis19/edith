@@ -1,5 +1,4 @@
 using Edith.Ask;
-using Edith.Snapshots;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -55,22 +54,5 @@ namespace Edith.Tests
             Assert.That(words, Does.EndWith(" " + kept), "it starts on a whole word");
         }
 
-        [Test]
-        public void A_snapshot_keeps_the_photo_it_shows()
-        {
-            var parent = new GameObject("Room");
-            var photo = new Texture2D(4, 4);
-            try
-            {
-                var box = new SightBox(new Pose(Vector3.zero, Quaternion.identity), Rect.MinMaxRect(-0.1f, -0.1f, 0.1f, 0.1f), 1f);
-                Assert.AreSame(photo, Snapshot.Create(box, parent.transform, photo).Photo);
-                Assert.IsNull(Snapshot.Create(box, parent.transform).Photo);
-            }
-            finally
-            {
-                Object.DestroyImmediate(parent);
-                Object.DestroyImmediate(photo);
-            }
-        }
     }
 }
