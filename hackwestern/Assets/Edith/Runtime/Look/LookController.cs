@@ -25,6 +25,8 @@ namespace Edith.Look
         /// Measures how far away the framed object is, so the crop lines up with it. Optional: without it, or when
         /// depth has no answer, the crop assumes the object is AssumedSubjectMeters away.
         [SerializeField] EnvironmentRaycastManager environmentRaycast;
+        /// Draws the photos so real objects in front of them hide them.
+        [SerializeField] Material occludedMaterial;
 
         const float AssumedSubjectMeters = 1.5f;
         const float MinSubjectMeters = 0.25f;
@@ -50,7 +52,7 @@ namespace Edith.Look
 
         void Awake()
         {
-            room = new SnapshotRoom(transform);
+            room = new SnapshotRoom(transform, occludedMaterial);
             grab.Bind(room);
             ask.Bind(room);
         }

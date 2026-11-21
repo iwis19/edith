@@ -968,6 +968,7 @@ MonoBehaviour:
   ask: {fileID: 1083127875}
   eye: {fileID: 578435152}
   environmentRaycast: {fileID: 1803563344}
+  occludedMaterial: {fileID: 2100000, guid: 536874e4d0911184dbf48aecb14b21f0, type: 2}
 --- !u!4 &1308650307
 Transform:
   m_ObjectHideFlags: 0

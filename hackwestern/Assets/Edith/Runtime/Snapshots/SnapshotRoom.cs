@@ -8,12 +8,18 @@ namespace Edith.Snapshots
     public sealed class SnapshotRoom
     {
         readonly Transform parent;
+        readonly Material material;
         readonly SnapshotShelf<Snapshot> shelf = new SnapshotShelf<Snapshot>();
         List<Snapshot> covered = new List<Snapshot>();
         List<Snapshot> under = new List<Snapshot>();
 
-        /// `parent` must have unit world scale.
-        public SnapshotRoom(Transform parent) => this.parent = parent;
+        /// `parent` must have unit world scale. `material`, when given, draws every photo so real objects in front of
+        /// it hide it.
+        public SnapshotRoom(Transform parent, Material material = null)
+        {
+            this.parent = parent;
+            this.material = material;
+        }
 
         /// Oldest first.
         public IReadOnlyList<(Snapshot item, SightBox box)> Snapshots => shelf.Items;
@@ -43,7 +49,7 @@ namespace Edith.Snapshots
         /// Hangs a snapshot in `box`. The ones it covers and the oldest past four fade out and are destroyed.
         public Snapshot Place(in SightBox box, Texture photo = null)
         {
-            var snapshot = Snapshot.Create(box, parent, photo);
+            var snapshot = Snapshot.Create(box, parent, photo, material);
             foreach (var gone in shelf.Add(snapshot, box))
                 gone.Leave();
             CancelPreview();

@@ -42,8 +42,9 @@ namespace Edith.Snapshots
         public int Id { get; private set; }
 
         /// Shows on the plane of `box`. `parent` must have unit world scale. A null `photo` shows a plain panel; any
-        /// other is destroyed with the snapshot.
-        public static Snapshot Create(in SightBox box, Transform parent, Texture photo = null)
+        /// other is destroyed with the snapshot. `material`, when given, draws the photo so real objects in front
+        /// of it hide it.
+        public static Snapshot Create(in SightBox box, Transform parent, Texture photo = null, Material material = null)
         {
             var root = new GameObject("Snapshot", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
             var rect = (RectTransform)root.transform;
@@ -61,6 +62,7 @@ namespace Edith.Snapshots
             imageRect.sizeDelta = Vector2.zero;
             var raw = image.GetComponent<RawImage>();
             raw.raycastTarget = false;
+            raw.material = material;
             raw.texture = photo;
             if (photo == null) raw.color = EmptyPhoto;
 
@@ -129,7 +131,7 @@ namespace Edith.Snapshots
 
         void Update()
         {
-            fade =Mathf.MoveTowards(fade, target, Time.deltaTime / FadeSeconds);
+            fade = Mathf.MoveTowards(fade, target, Time.deltaTime / FadeSeconds);
             group.alpha = fade * fade * (3f - 2f * fade);
             var settled = pocketing ? Shrink() : Follow();
             if (fade != target || !settled) return;
