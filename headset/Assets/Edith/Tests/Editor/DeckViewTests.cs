@@ -86,8 +86,9 @@ namespace Edith.Tests
             Assert.AreEqual(RarityColors.For(Rarity.Rare), Outline(Middle).color);
         }
 
+        // The outer glass panel's outline; the thin frame round the photo has its own.
         static Image Outline(GameObject card) =>
-            card.GetComponentsInChildren<Image>(true).Single(edge => edge.name == "Border");
+            Part(card, "Glass").GetComponentsInChildren<Image>(true).First(edge => edge.name == "Border");
 
         [Test]
         public void A_memory_without_a_rarity_has_a_plain_outline_and_ice_white_text()
