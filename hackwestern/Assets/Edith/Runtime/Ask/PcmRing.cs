@@ -3,10 +3,33 @@ using UnityEngine;
 namespace Edith.Ask
 {
     /// Answer speech waiting to play, as 16-bit samples. The socket's receive thread writes it and the audio thread
-    /// reads it, so every access takes the lock. Reading waits until `prebuffer` samples are in, at the start and
-    /// again after running dry, unless Finish says no more are coming.
+    /// reads it, so every access takes the lock. Speech goes in through a Feed. Reading waits until `prebuffer` samples
+    /// are in, at the start and again after running dry, unless the feed has finished.
     public sealed class PcmRing
     {
+        /// Writes one answer into the ring. It goes dead once the ring is cleared or another feed opens, so a closed
+        /// session cannot touch the next answer.
+        public sealed class Feed
+        {
+            readonly PcmRing ring;
+            readonly int generation;
+
+            internal Feed(PcmRing ring, int generation)
+            {
+                this.ring = ring;
+                this.generation = generation;
+            }
+
+            /// Appends 16-bit little-endian PCM. When it does not all fit, keeps what fits and returns false.
+            public bool Write(byte[] pcm) => ring.Write(generation, pcm);
+
+            /// No more speech is coming: what is waiting plays out to the end without waiting for the prebuffer.
+            public void Finish() => ring.Finish(generation);
+
+            /// Drops what is waiting, as when the answer is interrupted.
+            public void Drop() => ring.Drop(generation);
+        }
+
         const float Scale = 1f / 32768f;
 
         readonly short[] samples;
@@ -19,6 +42,7 @@ namespace Edith.Ask
         long played;
         int underruns;
         int readLength;
+        int generation;
 
         public PcmRing(int capacity, int prebuffer = 0)
         {
@@ -61,12 +85,22 @@ namespace Edith.Ask
             }
         }
 
-        /// Appends 16-bit little-endian PCM. When it does not all fit, keeps what fits and returns false.
-        public bool Write(byte[] pcm)
+        /// Clears the ring and opens the only feed that can write to it.
+        public Feed OpenFeed()
+        {
+            lock (gate)
+            {
+                Reset();
+                return new Feed(this, ++generation);
+            }
+        }
+
+        bool Write(int writer, byte[] pcm)
         {
             var incoming = pcm.Length / 2;
             lock (gate)
             {
+                if (writer != generation) return true;
                 var room = samples.Length - count;
                 var taken = Mathf.Min(incoming, room);
                 var tail = (head + count) % samples.Length;
@@ -80,10 +114,24 @@ namespace Edith.Ask
             }
         }
 
-        /// No more speech is coming: what is waiting plays out to the end without waiting for the prebuffer.
-        public void Finish()
+        void Finish(int writer)
         {
-            lock (gate) finished = true;
+            lock (gate)
+            {
+                if (writer == generation) finished = true;
+            }
+        }
+
+        void Drop(int writer)
+        {
+            lock (gate)
+            {
+                if (writer != generation) return;
+                head = 0;
+                count = 0;
+                flowing = false;
+                finished = false;
+            }
         }
 
         /// Fills `into` with what is waiting, then silence. Returns how many samples it took.
@@ -111,17 +159,24 @@ namespace Edith.Ask
             }
         }
 
+        /// Drops what is waiting and ends the open feed.
         public void Clear()
         {
             lock (gate)
             {
-                head = 0;
-                count = 0;
-                flowing = false;
-                finished = false;
-                played = 0;
-                underruns = 0;
+                Reset();
+                generation++;
             }
+        }
+
+        void Reset()
+        {
+            head = 0;
+            count = 0;
+            flowing = false;
+            finished = false;
+            played = 0;
+            underruns = 0;
         }
     }
 

@@ -49,7 +49,7 @@ namespace Edith.Ask
             public Failure(AskProblem problem, string detail) : base(detail) => Problem = problem;
         }
 
-        readonly PcmRing speech;
+        readonly PcmRing.Feed speech;
         readonly int chunkSamples;
         readonly CancellationTokenSource cancel = new CancellationTokenSource();
         readonly ConcurrentQueue<LiveEvent> events = new ConcurrentQueue<LiveEvent>();
@@ -61,7 +61,7 @@ namespace Edith.Ask
 
         LiveLink(PcmRing speech, int chunkSamples)
         {
-            this.speech = speech;
+            this.speech = speech.OpenFeed();
             this.chunkSamples = chunkSamples;
         }
 
@@ -217,8 +217,6 @@ namespace Edith.Ask
 
         void Handle(LiveMessage message, Action onReady)
         {
-            // The next question's link shares `speech`.
-            if (cancel.IsCancellationRequested) return;
             if (message.SetupComplete)
             {
                 Debug.Log($"[EDITH ask] setupComplete {clock.ElapsedMilliseconds} ms after the tap");
@@ -235,7 +233,7 @@ namespace Edith.Ask
             if (message.OutputText.Length > 0) Post(new LiveEvent(LiveEventKind.OutputText, message.OutputText));
             if (message.Interrupted)
             {
-                speech.Clear();
+                speech.Drop();
                 Post(new LiveEvent(LiveEventKind.Interrupted));
             }
             if (message.TurnComplete)
