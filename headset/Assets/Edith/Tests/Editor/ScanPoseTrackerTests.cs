@@ -30,8 +30,10 @@ namespace Edith.Tests
         }
 
         /// A hand with its fingers up and its wrist at `wrist`, turned by `turn` about the wrist. Unturned, its palm
-        /// faces +z. Each fingertip sits at `curl` times its knuckle's distance from the wrist.
-        static HandFrame Hand(Vector3 wrist, bool right, Quaternion turn, float curl = OpenCurl, bool visible = true)
+        /// faces +z. Each fingertip sits at `curl` times its knuckle's distance from the wrist. `sure` is false for a
+        /// hand seen with low confidence in its thumb or index.
+        static HandFrame Hand(Vector3 wrist, bool right, Quaternion turn, float curl = OpenCurl, bool visible = true,
+            bool sure = true)
         {
             var side = right ? 1f : -1f;
             Vector3 Knuckle(float x, float y) => wrist + turn * new Vector3(x * side, y, 0f);
@@ -41,6 +43,7 @@ namespace Edith.Tests
             return new HandFrame
             {
                 Visible = visible,
+                Tracked = visible && sure,
                 Wrist = wrist,
                 IndexKnuckle = index,
                 IndexTip = wrist + (index - wrist) * curl,
@@ -137,6 +140,14 @@ namespace Edith.Tests
         {
             Assert.AreEqual(0, Hold((Hand(LeftWrist, false, Away, visible: false), Hand(RightWrist, true, Away)), 2f));
             Assert.AreEqual(0, Hold((Hand(LeftWrist, false, Away), Hand(RightWrist, true, Away, visible: false)), 2f));
+        }
+
+        [Test]
+        public void A_hand_unsure_of_its_thumb_or_index_never_fires()
+        {
+            Assert.AreEqual(0, Hold((Hand(LeftWrist, false, Away, sure: false), Hand(RightWrist, true, Away)), 2f));
+            Assert.AreEqual(0, Hold((Hand(LeftWrist, false, Away), Hand(RightWrist, true, Away, sure: false)), 2f));
+            Assert.AreEqual(0f, last.Progress);
         }
 
         [Test]

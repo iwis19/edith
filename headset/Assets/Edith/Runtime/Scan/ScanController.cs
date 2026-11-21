@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Threading;
 using Edith.Backend;
 using Edith.Capture;
+using Edith.Grab;
 using Edith.Hands;
 using Edith.Snapshots;
 using Meta.XR;
@@ -66,6 +67,8 @@ namespace Edith.Scan
         readonly List<Placed> placed = new List<Placed>();
         readonly List<Vector3> points = new List<Vector3>();
         ScanPoseTracker tracker;
+        // On the right hand's object when Grab is set up.
+        GrabInput grab;
         ScanMarks marks;
         ScanClient client;
         AudioSource sound;
@@ -91,6 +94,7 @@ namespace Edith.Scan
         void Awake()
         {
             tracker = new ScanPoseTracker(tuning);
+            grab = rightHand.GetComponent<GrabInput>();
             marks = new ScanMarks(font, material);
             sound = gameObject.AddComponent<AudioSource>();
             sound.spatialBlend = 0f;
@@ -135,7 +139,10 @@ namespace Edith.Scan
         // After hand tracking has updated, like the pinch and the grab.
         void LateUpdate()
         {
-            var pose = tracker.Step(leftHand.Read(), rightHand.Read());
+            var right = rightHand.Read();
+            // A hand closing on, holding or letting go of a card is busy, so its open hand cannot pose.
+            if (grab != null && grab.Claimed) right.Tracked = false;
+            var pose = tracker.Step(leftHand.Read(), right);
             holdProgress = pose.Progress;
             if (pose.Progress > 0f) ringAt = pose.Between;
             if (pose.Fired)
