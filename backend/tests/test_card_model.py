@@ -374,3 +374,11 @@ async def test_the_fact_call_is_told_where_the_phone_is():
     assert "Western University, London, Ontario, Canada" in context
     assert "latitude 43.0096" in context
     assert "never say the photo shows a place in another city" in context
+
+
+async def test_the_same_thing_keeps_its_first_rarity():
+    first = "NAME: University College\nCONFIDENCE: 0.9\nKIND: building\nPLACE: unknown\nRARITY: rare\n"
+    again = "NAME: University College\nCONFIDENCE: 0.9\nKIND: building\nPLACE: unknown\nRARITY: common\n"
+    agent = CardModelAgent(FakeWriter(first, again), FakeWriter(MOKA_A, MOKA_B))
+    tiers = [[e.tier for e in await run(agent) if e.type == "rarity"] for _ in range(2)]
+    assert tiers == [["rare"], ["rare"]]
