@@ -69,6 +69,12 @@ async def test_unlabelled_lines_take_their_field_from_their_position():
     assert (events[0].name, events[0].confidence, events[1].tier) == ("Maybe a brass doorknob", 0.4, "uncommon")
 
 
+async def test_a_labelled_reply_missing_its_confidence_line_still_names_the_object():
+    events = await run(CardModelAgent(FakeWriter("NAME: a red mug\nKIND: mug\nRARITY: common\n"), FakeWriter("A fact.")))
+    assert [e.type for e in events] == ["name", "rarity", "fact"]
+    assert (events[0].name, events[0].confidence) == ("a red mug", 0.5)
+
+
 async def test_a_failed_fact_call_still_leaves_the_name_and_tier():
     events = await run(CardModelAgent(FakeWriter(NAMING), FakeWriter(fail=True)))
     assert [e.type for e in events] == ["name", "rarity"]

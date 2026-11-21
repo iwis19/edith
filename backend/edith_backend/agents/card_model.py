@@ -112,6 +112,11 @@ class LineParser:
             self._unlabelled += 1
             yield FIELDS[self._unlabelled - 1], text
 
+    @property
+    def lone_sentence(self) -> bool:
+        """True when the whole reply was one unlabelled line, which is how a refusal comes back."""
+        return not self._labelled and self._unlabelled == 1
+
     @staticmethod
     def _parse(line: str) -> tuple[str, str] | None:
         key, sep, value = line.partition(":")
@@ -299,9 +304,10 @@ class CardModelAgent:
             for event in updates():
                 yield event
         fields.update(parser.finish())
-        # A refusal comes back as one plain sentence, which the positional fallback would take for the name.
-        if "NAME" not in fields or "CONFIDENCE" not in fields:
+        # The positional fallback would take a refusal's one plain sentence for the name.
+        if "NAME" not in fields or parser.lone_sentence:
             raise ValueError("The naming reply was not in the line format.")
+        fields.setdefault("CONFIDENCE", "0.5")
         # A place already in the context is not kept again: on a crop with no clue, the model copies it onto the
         # PLACE line despite the prompt.
         if (place := parse_place(fields.get("PLACE", ""))) and place not in hinted:
@@ -324,7 +330,9 @@ class CardModelAgent:
         try:
             ask = FACT_ASK.format(name=name.rstrip("."))
             reply = [t async for t in self._fact_writer.stream(FACT_PROMPT, "\n\n".join(parts) or None, image, ask)]
-            return clean_fact("".join(reply))
+            if not (fact := clean_fact("".join(reply))):
+                log.warning("look %s fact call returned no text", meta.look_id)
+            return fact
         except Exception as exc:
             log.warning("look %s fact call failed: %s: %s", meta.look_id, type(exc).__name__, exc)
             return ""
