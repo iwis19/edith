@@ -154,7 +154,8 @@ namespace Edith.Grab
         float Reach(in HandFrame hand) =>
             Vector3.Distance(grip, hand.EyePosition + Vector3.down * tuning.pocketBelowEyeMeters);
 
-        static float Curl(in HandFrame hand) =>
+        /// The mean fingertip-to-wrist over knuckle-to-wrist distance of the index, middle and ring fingers.
+        public static float Curl(in HandFrame hand) =>
             (Extension(hand.Wrist, hand.IndexKnuckle, hand.IndexTip)
                 + Extension(hand.Wrist, hand.MiddleKnuckle, hand.MiddleTip)
                 + Extension(hand.Wrist, hand.RingKnuckle, hand.RingTip)) / 3f;
