@@ -96,7 +96,7 @@ namespace Edith.Tests
             Assert.That(text, Does.Contain("error    none"));
         }
 
-        [TestCase(PairPhase.Checking, "checking for a kept location")]
+        [TestCase(PairPhase.Confirming, "confirming the phone")]
         [TestCase(PairPhase.Requesting, "requesting a code")]
         [TestCase(PairPhase.Showing, "code on screen")]
         [TestCase(PairPhase.Connected, "phone connected")]

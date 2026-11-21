@@ -85,7 +85,7 @@ namespace Edith.Diagnostics
             if (!view.HasPairing) return "off, no backend";
             switch (view.Pairing)
             {
-                case PairPhase.Checking: return "checking for a kept location";
+                case PairPhase.Confirming: return "confirming the phone";
                 case PairPhase.Requesting: return "requesting a code";
                 case PairPhase.Showing: return "code on screen";
                 case PairPhase.Connected: return "phone connected";

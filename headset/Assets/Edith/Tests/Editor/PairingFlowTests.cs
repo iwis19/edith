@@ -8,17 +8,18 @@ namespace Edith.Tests
         static PairingFlow ShowingCode(out float now)
         {
             var flow = new PairingFlow(false, 0f);
-            Assert.AreEqual(PairCall.CheckLocation, flow.Next(0f));
-            flow.OnLocation(false, 0.2f);
-            Assert.AreEqual(PairCall.RequestCode, flow.Next(0.2f));
+            Assert.AreEqual(PairCall.RequestCode, flow.Next(0f));
             flow.OnCode("4821", "https://edith.example/phone", 0.5f);
             now = 0.5f;
             return flow;
         }
 
+        // A remembered pairing whose launch check found the phone position.
         static PairingFlow PairedAt(float now)
         {
             var flow = new PairingFlow(true, now);
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(now));
+            flow.OnLocation(true, now);
             Assert.IsFalse(flow.Locked);
             return flow;
         }
@@ -32,7 +33,7 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void ChecksThenRequestsThenShowsTheCode()
+        public void AnUnpairedHeadsetRequestsACodeAtOnceAndShowsIt()
         {
             var flow = ShowingCode(out _);
             Assert.AreEqual(PairPhase.Showing, flow.Phase);
@@ -43,21 +44,58 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void AKnownPhoneLocationUnlocksWithoutAskingForACode()
+        public void AnUnpairedHeadsetNeverAsksForAKeptPositionAndOnlyACodeUnlocksIt()
         {
             var flow = new PairingFlow(false, 0f);
-            flow.Next(0f);
+            Assert.AreEqual(PairCall.RequestCode, flow.Next(0f));
             flow.OnLocation(true, 0.1f);
+            Assert.IsTrue(flow.Locked);
+            flow.OnCode("4821", "https://edith.example/phone", 0.2f);
+            Assert.AreEqual(PairPhase.Showing, flow.Phase);
+        }
+
+        [Test]
+        public void ARememberedPairingStaysLockedWithNoPanelUntilTheLaunchCheck()
+        {
+            var flow = new PairingFlow(true, 0f);
+            Assert.AreEqual(PairPhase.Confirming, flow.Phase);
+            Assert.IsTrue(flow.Locked);
+            Assert.IsFalse(flow.Visible);
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(0f));
+            flow.OnLocation(true, 0.3f);
             Assert.AreEqual(PairPhase.Paired, flow.Phase);
             Assert.IsFalse(flow.Locked);
             Assert.IsFalse(flow.Visible);
         }
 
         [Test]
+        public void ARememberedPairingWithNoPhonePositionAtLaunchShowsACodeAtOnce()
+        {
+            var flow = new PairingFlow(true, 0f);
+            flow.Next(0f);
+            flow.OnLocation(false, 0.3f);
+            Assert.IsTrue(flow.Locked);
+            Assert.IsTrue(flow.Visible);
+            Assert.AreEqual(PairCall.RequestCode, flow.Next(0.3f));
+        }
+
+        [Test]
+        public void ARememberedPairingIsTrustedWhenTheBackendCannotBeReachedAtLaunch()
+        {
+            var flow = new PairingFlow(true, 0f);
+            flow.Next(0f);
+            flow.OnError(8f);
+            Assert.AreEqual(PairPhase.Paired, flow.Phase);
+            Assert.IsFalse(flow.Locked);
+            Assert.AreEqual(PairCall.None, flow.Next(17.9f));
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(18f));
+        }
+
+        [Test]
         public void OneCallIsInFlightAtATime()
         {
             var flow = new PairingFlow(false, 0f);
-            Assert.AreEqual(PairCall.CheckLocation, flow.Next(0f));
+            Assert.AreEqual(PairCall.RequestCode, flow.Next(0f));
             Assert.AreEqual(PairCall.None, flow.Next(1f));
         }
 
@@ -119,17 +157,15 @@ namespace Edith.Tests
         {
             var flow = new PairingFlow(false, 0f);
             flow.Next(0f);
-            flow.OnCode("1111", "https://edith.example/phone", 0.1f);
-            Assert.AreEqual(PairPhase.Checking, flow.Phase);
-            Assert.IsNull(flow.Code);
+            flow.OnStatus(true, false, 0.1f);
+            Assert.AreEqual(PairPhase.Requesting, flow.Phase);
+            Assert.IsTrue(flow.Locked);
         }
 
         [Test]
         public void ErrorsRetryTenSecondsApartForeverWhileLocked()
         {
             var flow = new PairingFlow(false, 0f);
-            flow.Next(0f);
-            flow.OnLocation(false, 0f);
             var now = 0f;
             for (var retry = 1; retry <= 20; retry++)
             {
@@ -147,12 +183,10 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void APairedHeadsetStartsUnlockedAndWatchesThePhonePosition()
+        public void APairedHeadsetWatchesThePhonePositionEveryThirtySeconds()
         {
-            var flow = PairedAt(0f);
+            var flow = PairedAt(0.1f);
             Assert.IsFalse(flow.Visible);
-            Assert.AreEqual(PairCall.CheckLocation, flow.Next(0f));
-            flow.OnLocation(true, 0.1f);
             Assert.AreEqual(PairCall.None, flow.Next(30f));
             Assert.AreEqual(PairCall.CheckLocation, flow.Next(30.1f));
             Assert.IsFalse(flow.Locked);
@@ -162,7 +196,7 @@ namespace Edith.Tests
         public void ALostPhonePositionLocksAgainAndAsksForANewCode()
         {
             var flow = PairedAt(0f);
-            var now = 0f;
+            var now = PairingFlow.WatchSeconds;
             for (var miss = 1; miss < PairingFlow.LostAfterMisses; miss++)
             {
                 Assert.AreEqual(PairCall.CheckLocation, flow.Next(now));
@@ -181,7 +215,7 @@ namespace Edith.Tests
         public void APositionComingBackClearsTheMisses()
         {
             var flow = PairedAt(0f);
-            var now = 0f;
+            var now = PairingFlow.WatchSeconds;
             for (var i = 0; i < 10; i++)
             {
                 flow.Next(now);
@@ -195,7 +229,7 @@ namespace Edith.Tests
         public void AnUnreachableBackendNeverLocksAPairedHeadset()
         {
             var flow = PairedAt(0f);
-            var now = 0f;
+            var now = PairingFlow.WatchSeconds;
             for (var i = 0; i < 20; i++)
             {
                 Assert.AreEqual(PairCall.CheckLocation, flow.Next(now));
