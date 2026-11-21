@@ -77,10 +77,15 @@ namespace Edith.Scrapbook
         Deck deck;
         (Lens lens, Rarity? filter, Place place, int count)? barShows;
         float fade;
-        /// What the pinch-drag under way moves, or null between drags.
+        /// What the pinch under way scrubs, or null while it has not scrubbed.
         DragTarget? dragging;
-        /// The dragging hand's pinch point in the deck's frame, a frame ago.
+        /// The scrubbing hand's pinch point in the deck's frame, a frame ago.
         Vector3 draggedTo;
+        /// The pinch under way, or null between pinches, with where and from what eye it was pressed.
+        PinchIntent intent;
+        Vector3 pressedAt, pressedEye;
+        /// Whether the pinch under way has already chosen something.
+        bool chosen;
 
         public bool Open { get; private set; }
 
@@ -274,6 +279,7 @@ namespace Edith.Scrapbook
             Open = false;
             gate.Held = false;
             dragging = null;
+            intent = null;
             session.Cancel();
             Debug.Log("[EDITH scrapbook] closed");
         }
@@ -288,36 +294,67 @@ namespace Edith.Scrapbook
 
         void OnPinch(PinchReading reading)
         {
-            if (!Open || content != Content.Browsing) return;
-            if (reading.Phase == PinchPhase.Dragging)
+            if (!Open || content != Content.Browsing)
             {
-                var hand = pinch.Owner == HandSide.Left ? leftHand.Read() : rightHand.Read();
-                // A hand lost mid-drag reads wherever its joints were left.
-                if (!hand.Tracked) return;
-                var at = frame.InverseTransformPoint(hand.PinchPoint);
-                if (dragging == null)
-                    dragging = PinchRoute.DragStart(places.GlobeSpins, eye.position, reading.Start, places.GlobePosition, GlobeView.Radius);
-                else if (dragging == DragTarget.Globe) places.Drag(at - draggedTo);
-                else deck.Scrub((draggedTo.x - at.x) / MetersPerCard);
-                draggedTo = at;
+                intent = null;
+                return;
             }
-            else if (dragging != null)
+            if (intent == null && reading.Phase == PinchPhase.Pressed && reading.Event == PinchEvent.None)
             {
-                dragging = null;
-                deck.Release();
+                pressedAt = reading.Start;
+                pressedEye = eye.position;
+                intent = new PinchIntent(frame.InverseTransformPoint(pressedAt));
+                chosen = false;
             }
-            if (reading.Event == PinchEvent.Tap) Tap(reading.Start);
+            if (intent == null) return;
+            if (reading.Phase == PinchPhase.Pressed || reading.Phase == PinchPhase.Dragging) Follow();
+            if (reading.Event == PinchEvent.Tap || reading.Event == PinchEvent.Completed || reading.Event == PinchEvent.Cancelled) End(reading.Event);
+            if (reading.Phase == PinchPhase.Idle) intent = null;
         }
 
-        void Tap(Vector3 point)
+        /// Moves the deck or the globe with the pinch once it has gone far enough sideways to scrub.
+        void Follow()
         {
-            if (bar.Hit(eye.position, point, out var chip))
+            var hand = pinch.Owner == HandSide.Left ? leftHand.Read() : rightHand.Read();
+            // A hand lost mid-drag reads wherever its joints were left.
+            if (chosen || !hand.Tracked) return;
+            var at = frame.InverseTransformPoint(hand.PinchPoint);
+            if (!intent.Move(at)) return;
+            if (dragging == null)
+                dragging = PinchRoute.DragStart(places.GlobeSpins, pressedEye, pressedAt, places.GlobePosition, GlobeView.Radius);
+            else if (dragging == DragTarget.Globe) places.Drag(at - draggedTo);
+            else deck.Scrub((draggedTo.x - at.x) / MetersPerCard);
+            draggedTo = at;
+        }
+
+        /// A pinch ends in a choice at the point it was pressed, unless it scrubbed.
+        void End(PinchEvent ended)
+        {
+            if (chosen) return;
+            var how = $"{ended}, {intent.Sideways * 100f:0.0} cm sideways";
+            if (intent.Scrubbing)
+            {
+                Debug.Log($"[EDITH scrapbook] scrubbed the {(dragging == DragTarget.Globe ? "globe" : "deck")} ({how})");
+                dragging = null;
+                deck.Release();
+                return;
+            }
+            chosen = true;
+            Debug.Log($"[EDITH scrapbook] {Pick(pressedEye, pressedAt) ?? "ignored pinch: nothing at the press point"} ({how})");
+        }
+
+        /// Does what the pinch pressed at `point` chose, and says what that was, or returns null when it chose nothing.
+        /// The chip or pin nearest the line of sight wins over a card.
+        string Pick(Vector3 from, Vector3 point)
+        {
+            var chipFound = bar.Hit(from, point, out var chip, out var chipDegrees);
+            var pin = places.HitPin(from, point, out var pinDegrees);
+            if (chipFound && (pin == null || chipDegrees <= pinDegrees))
             {
                 Choose(chip);
                 Play(1318.5f);
-                return;
+                return $"chose {chip.Kind.ToString().ToLowerInvariant()} \"{chip.Label}\"";
             }
-            var pin = places.HitPin(eye.position, point);
             if (pin != null)
             {
                 Narrow(() =>
@@ -326,10 +363,12 @@ namespace Edith.Scrapbook
                     else browse.ToggleSpot((Spot)pin);
                 });
                 Play(880f);
-                return;
+                return $"chose pin \"{pin.Label}\"";
             }
-            var card = deckView.Hit(eye.position, point);
-            if (card >= 0) deck.JumpTo(card);
+            var card = deckView.Hit(from, point, out _);
+            if (card < 0) return null;
+            deck.JumpTo(card);
+            return $"chose card {card} \"{browse.Visible[card].Name}\"";
         }
 
         void Choose(in Chip chip)

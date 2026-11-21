@@ -221,21 +221,31 @@ namespace Edith.Tests
         {
             view.Show(Memories(10), 5f, NoPhoto);
             var eye = parent.transform.position;
-            Assert.AreEqual(5, view.Hit(eye, Part(Middle, "Photo").position * 0.6f));
+            Assert.AreEqual(5, view.Hit(eye, Part(Middle, "Photo").position * 0.6f, out _));
             var right = Drawn.Single(card => Shown(card, "Fact") == "Fact 6.");
             var outer = Part(right, "Photo");
-            Assert.AreEqual(6, view.Hit(eye, (outer.position + outer.right * 0.03f) * 0.6f));
+            Assert.AreEqual(6, view.Hit(eye, (outer.position + outer.right * 0.03f) * 0.6f, out _));
             var left = Drawn.Single(card => Shown(card, "Fact") == "Fact 3.");
             var far = Part(left, "Photo");
-            Assert.AreEqual(3, view.Hit(eye, (far.position - far.right * 0.05f) * 0.6f));
+            Assert.AreEqual(3, view.Hit(eye, (far.position - far.right * 0.05f) * 0.6f, out _));
+        }
+
+        [Test]
+        public void A_pinch_two_centimetres_off_a_cards_photo_still_finds_it_and_four_does_not()
+        {
+            view.Show(Memories(10), 5f, NoPhoto);
+            var photo = Part(Middle, "Photo");
+            var edge = photo.position + photo.right * (photo.sizeDelta.x * 0.5f * photo.lossyScale.x);
+            Assert.AreEqual(5, view.Hit(Vector3.zero, (edge + photo.right * 0.015f) * 0.6f, out _));
+            Assert.AreNotEqual(5, view.Hit(Vector3.zero, (edge + photo.right * 0.04f) * 0.6f, out _));
         }
 
         [Test]
         public void A_pinch_off_every_card_finds_none()
         {
             view.Show(Memories(10), 5f, NoPhoto);
-            Assert.AreEqual(-1, view.Hit(Vector3.zero, new Vector3(0f, 0.3f, 0.4f)));
-            Assert.AreEqual(-1, view.Hit(Vector3.zero, new Vector3(0.5f, -0.03f, 0.3f)));
+            Assert.AreEqual(-1, view.Hit(Vector3.zero, new Vector3(0f, 0.3f, 0.4f), out _));
+            Assert.AreEqual(-1, view.Hit(Vector3.zero, new Vector3(0.5f, -0.03f, 0.3f), out _));
         }
 
         [Test]
@@ -245,8 +255,8 @@ namespace Edith.Tests
             var first = Part(Drawn.Single(card => Shown(card, "Fact") == "Fact 6."), "Photo");
             // The inner half of the second card on a side lies behind the first.
             var second = Part(Drawn.Single(card => Shown(card, "Fact") == "Fact 7."), "Photo");
-            Assert.AreEqual(6, view.Hit(Vector3.zero, (second.position - second.right * 0.02f) * 0.6f));
-            Assert.AreEqual(6, view.Hit(Vector3.zero, first.position * 0.6f));
+            Assert.AreEqual(6, view.Hit(Vector3.zero, (second.position - second.right * 0.02f) * 0.6f, out _));
+            Assert.AreEqual(6, view.Hit(Vector3.zero, first.position * 0.6f, out _));
         }
 
         [Test]
@@ -259,7 +269,7 @@ namespace Edith.Tests
             StringAssert.Contains("Nothing collected yet", said);
             StringAssert.Contains("Grab a snapshot.", said);
             Assert.IsFalse(Part(Middle, "Photo").gameObject.activeSelf);
-            Assert.AreEqual(-1, view.Hit(Vector3.zero, Part(Middle, "Photo").position * 0.6f));
+            Assert.AreEqual(-1, view.Hit(Vector3.zero, Part(Middle, "Photo").position * 0.6f, out _));
         }
 
         [Test]

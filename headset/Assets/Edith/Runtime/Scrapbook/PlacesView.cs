@@ -105,13 +105,14 @@ namespace Edith.Scrapbook
         /// Turns the globe with a hand that has moved by `metres` in the deck's frame.
         public void Drag(Vector2 metres) => spin = spin.Dragged(metres, GlobeView.Radius);
 
-        /// The city or the spot whose pin the line from `eye` through `through` passes, or null. Pins take no pinch
-        /// while the dive is under way.
-        public Place HitPin(Vector3 eye, Vector3 through)
+        /// The city or the spot whose pin the line from `eye` through `through` passes nearest, or null, and how many
+        /// degrees off the line it is. Pins take no pinch while the dive is under way.
+        public Place HitPin(Vector3 eye, Vector3 through, out float degrees)
         {
+            degrees = float.MaxValue;
             if (lens < 1f) return null;
-            if (dive == 0f) return globe.HitPin(eye, through);
-            return dive == 1f ? map.HitPin(eye, through) : null;
+            if (dive == 0f) return globe.HitPin(eye, through, out degrees);
+            return dive == 1f ? map.HitPin(eye, through, out degrees) : null;
         }
 
         public void Release()

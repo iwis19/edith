@@ -52,6 +52,8 @@ namespace Edith.Tests
 
         void Draw(Browse browse, float seconds = 0.02f) => places.Draw(browse, 1f, Eye, seconds, null, session);
 
+        Place Pin(Vector3 through) => places.HitPin(Eye, through, out _);
+
         string[] Texts => frame.GetComponentsInChildren<Text>().Select(text => text.text).ToArray();
 
         [Test]
@@ -70,7 +72,7 @@ namespace Edith.Tests
         {
             var browse = Home();
             Draw(browse);
-            Assert.AreSame(browse.Atlas.Cities.Single(), places.HitPin(Eye, GlobeView.Centre * 0.6f));
+            Assert.AreSame(browse.Atlas.Cities.Single(), Pin(GlobeView.Centre * 0.6f));
         }
 
         [Test]
@@ -78,8 +80,8 @@ namespace Edith.Tests
         {
             var browse = Home();
             Draw(browse);
-            Assert.IsNull(places.HitPin(Eye, (GlobeView.Centre + Vector3.right * 0.07f) * 0.6f));
-            Assert.IsNull(places.HitPin(Eye, DeckLayout.Pose(0f).Position * 0.6f));
+            Assert.IsNull(Pin((GlobeView.Centre + Vector3.right * 0.2f) * 0.6f));
+            Assert.IsNull(Pin(DeckLayout.Pose(0f).Position * 0.6f));
         }
 
         [Test]
@@ -87,11 +89,11 @@ namespace Edith.Tests
         {
             var browse = new Browse(new[] { Made(2, WesternPlace, Western), Made(1, "Somewhere, Far, Away", Antipode) });
             Draw(browse);
-            Assert.AreEqual("London", places.HitPin(Eye, GlobeView.Centre * 0.6f)?.Label);
+            Assert.AreEqual("London", Pin(GlobeView.Centre * 0.6f)?.Label);
 
             var turned = new Browse(new[] { Made(2, "Somewhere, Far, Away", Opposite), Made(1, WesternPlace, Western) });
             Draw(turned);
-            Assert.AreEqual("Far", places.HitPin(Eye, GlobeView.Centre * 0.6f)?.Label);
+            Assert.AreEqual("Far", Pin(GlobeView.Centre * 0.6f)?.Label);
         }
 
         [Test]
@@ -102,7 +104,7 @@ namespace Edith.Tests
             Assert.IsTrue(places.GlobeSpins);
             places.Drag(new Vector2(0.03f, 0f));
             Draw(browse);
-            Assert.IsNull(places.HitPin(Eye, GlobeView.Centre * 0.6f));
+            Assert.IsNull(Pin(GlobeView.Centre * 0.6f));
         }
 
         [Test]
@@ -125,8 +127,8 @@ namespace Edith.Tests
             browse.Dive(browse.Atlas.Cities.Single());
             Draw(browse, DivePose.Seconds);
             // The only spot is at the middle of its city's map.
-            Assert.AreSame(browse.City.Spots.Single(), places.HitPin(Eye, CityMapView.Centre * 0.6f));
-            Assert.IsNull(places.HitPin(Eye, (CityMapView.Centre + Vector3.right * 0.08f) * 0.6f));
+            Assert.AreSame(browse.City.Spots.Single(), Pin(CityMapView.Centre * 0.6f));
+            Assert.IsNull(Pin((CityMapView.Centre + Vector3.right * 0.2f) * 0.6f));
         }
 
         [Test]
@@ -145,8 +147,8 @@ namespace Edith.Tests
             }
             var western = city.Spots.Single(spot => spot.Label == "Western University");
             var park = city.Spots.Single(spot => spot.Label == "Victoria Park");
-            Assert.AreSame(western, places.HitPin(Eye, On(western) * 0.6f));
-            Assert.AreSame(park, places.HitPin(Eye, On(park) * 0.6f));
+            Assert.AreSame(western, Pin(On(western) * 0.6f));
+            Assert.AreSame(park, Pin(On(park) * 0.6f));
             Assert.That(On(park).x, Is.GreaterThan(On(western).x), "the park is east of the university");
             Assert.That(On(park).y, Is.LessThan(On(western).y), "and south of it, so nearer the eye and lower");
             Assert.That(Vector3.Distance(On(park), CityMapView.Centre), Is.LessThan(CityMapView.Width * 0.5f));
@@ -159,8 +161,8 @@ namespace Edith.Tests
             Draw(browse);
             browse.Dive(browse.Atlas.Cities.Single());
             Draw(browse, DivePose.Seconds * 0.5f);
-            Assert.IsNull(places.HitPin(Eye, GlobeView.Centre * 0.6f));
-            Assert.IsNull(places.HitPin(Eye, CityMapView.Centre * 0.6f));
+            Assert.IsNull(Pin(GlobeView.Centre * 0.6f));
+            Assert.IsNull(Pin(CityMapView.Centre * 0.6f));
             Assert.IsFalse(places.GlobeSpins);
         }
 
@@ -176,7 +178,7 @@ namespace Edith.Tests
             browse.Surface();
             Draw(browse, DivePose.Seconds);
             Assert.IsTrue(places.GlobeSpins);
-            Assert.AreSame(city, places.HitPin(Eye, GlobeView.Centre * 0.6f));
+            Assert.AreSame(city, Pin(GlobeView.Centre * 0.6f));
         }
 
         [Test]
@@ -187,7 +189,7 @@ namespace Edith.Tests
             browse.SetLens(Lens.Rarity);
             Draw(browse, 1f);
             Assert.IsFalse(places.GlobeSpins);
-            Assert.IsNull(places.HitPin(Eye, GlobeView.Centre * 0.6f));
+            Assert.IsNull(Pin(GlobeView.Centre * 0.6f));
             Assert.IsFalse(frame.GetComponentsInChildren<MeshRenderer>().Any());
         }
     }

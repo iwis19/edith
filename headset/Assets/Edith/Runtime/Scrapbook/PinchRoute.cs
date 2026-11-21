@@ -8,8 +8,9 @@ namespace Edith.Scrapbook
     /// Which part of the Scrapbook a pinch acts on, judged along the line from the eye through the pinch point.
     public static class PinchRoute
     {
-        /// A tap this many degrees off a pin still chooses it.
-        public const float PinDegrees = 2.5f;
+        /// A pinch this many degrees off a pin still chooses it. The globe's cities and the map's spots can sit this
+        /// close, and the nearest one wins.
+        public const float PinDegrees = 6f;
         // A pin this close to the globe's edge is seen too side-on to pick out.
         const float EdgeCosine = 0.15f;
 
@@ -31,16 +32,16 @@ namespace Edith.Scrapbook
             Vector3.Dot((pin - centre).normalized, (eye - pin).normalized) > EdgeCosine;
 
         /// The index of the pin nearest the line from `eye` through `through`, among those within PinDegrees of it,
-        /// or -1.
-        public static int NearestPin(Vector3 eye, Vector3 through, IReadOnlyList<Vector3> pins)
+        /// or -1. `degrees` is how far off the line that pin is.
+        public static int NearestPin(Vector3 eye, Vector3 through, IReadOnlyList<Vector3> pins, out float degrees)
         {
             var nearest = -1;
-            var least = PinDegrees;
+            degrees = PinDegrees;
             for (var i = 0; i < pins.Count; i++)
             {
-                var degrees = Vector3.Angle(through - eye, pins[i] - eye);
-                if (degrees > least) continue;
-                least = degrees;
+                var off = Vector3.Angle(through - eye, pins[i] - eye);
+                if (off > degrees) continue;
+                degrees = off;
                 nearest = i;
             }
             return nearest;

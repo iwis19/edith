@@ -147,10 +147,11 @@ namespace Edith.Scrapbook
             heads.Clear();
         }
 
-        /// The spot whose pin, as last drawn, the line from `eye` through `through` passes.
-        public Spot HitPin(Vector3 eye, Vector3 through)
+        /// The spot whose pin, as last drawn, the line from `eye` through `through` passes nearest, within
+        /// PinchRoute.PinDegrees, and how far off the line it is.
+        public Spot HitPin(Vector3 eye, Vector3 through, out float degrees)
         {
-            var at = PinchRoute.NearestPin(eye, through, heads);
+            var at = PinchRoute.NearestPin(eye, through, heads, out degrees);
             return at < 0 ? null : city.Spots[at];
         }
 

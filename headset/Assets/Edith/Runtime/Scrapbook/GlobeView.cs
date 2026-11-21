@@ -102,10 +102,11 @@ namespace Edith.Scrapbook
             seenCities.Clear();
         }
 
-        /// The city whose pin, on the side last drawn toward the eye, the line from `eye` through `through` passes.
-        public City HitPin(Vector3 eye, Vector3 through)
+        /// The city whose pin, on the side last drawn toward the eye, the line from `eye` through `through` passes
+        /// nearest, within PinchRoute.PinDegrees, and how far off the line it is.
+        public City HitPin(Vector3 eye, Vector3 through, out float degrees)
         {
-            var at = PinchRoute.NearestPin(eye, through, seen);
+            var at = PinchRoute.NearestPin(eye, through, seen, out degrees);
             return at < 0 ? null : seenCities[at];
         }
 

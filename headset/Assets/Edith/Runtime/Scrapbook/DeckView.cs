@@ -9,6 +9,8 @@ namespace Edith.Scrapbook
     public sealed class DeckView
     {
         const int Cards = 2 * DeckLayout.Reach + 1;
+        /// A pinch this near a card's photo still chooses the card.
+        const float CardSlack = 0.02f;
 
         readonly MemoryCard[] cards = new MemoryCard[Cards];
         readonly Memory[] bound = new Memory[Cards];
@@ -68,17 +70,39 @@ namespace Edith.Scrapbook
         }
 
         /// The index of the memory whose photo the line from `eye` through `through` crosses, or -1. Where cards
-        /// overlap, the one nearer the middle wins, as it is the one drawn on top.
-        public int Hit(Vector3 eye, Vector3 through)
+        /// overlap, the one nearer the middle wins, as it is the one drawn on top. A line that crosses no photo
+        /// still finds the card whose photo it passes within CardSlack of, nearest the line first, and `degrees` is
+        /// how far off the line that card's centre is.
+        public int Hit(Vector3 eye, Vector3 through, out float degrees)
         {
-            for (var away = 0; away <= DeckLayout.Reach; away++)
+            degrees = float.MaxValue;
+            var found = -1;
+            for (var away = 0; away <= DeckLayout.Reach && found < 0; away++)
                 for (var side = -1; side <= 1; side += 2)
                 {
-                    var at = middle + side * away;
-                    var slot = (at % Cards + Cards) % Cards;
-                    if (bound[slot] != null && index[slot] == at && cards[slot].Shown && cards[slot].InLine(eye, through)) return at;
+                    var slot = SlotAt(middle + side * away);
+                    if (slot < 0 || !cards[slot].InLine(eye, through)) continue;
+                    found = index[slot];
+                    degrees = SightLine.Offset(eye, through, cards[slot].Centre);
+                    break;
                 }
-            return -1;
+            if (found >= 0) return found;
+            for (var slot = 0; slot < Cards; slot++)
+            {
+                if (bound[slot] == null || !cards[slot].Shown || !cards[slot].InLine(eye, through, CardSlack)) continue;
+                var off = SightLine.Offset(eye, through, cards[slot].Centre);
+                if (off >= degrees) continue;
+                degrees = off;
+                found = index[slot];
+            }
+            return found;
+        }
+
+        /// The slot of the card drawn for memory index `at`, or -1 when none is.
+        int SlotAt(int at)
+        {
+            var slot = (at % Cards + Cards) % Cards;
+            return bound[slot] != null && index[slot] == at && cards[slot].Shown ? slot : -1;
         }
     }
 }

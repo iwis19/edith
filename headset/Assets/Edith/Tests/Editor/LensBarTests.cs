@@ -47,7 +47,7 @@ namespace Edith.Tests
 
         Color Ink(string label) => parent.GetComponentsInChildren<Text>().Single(text => text.text == label).color;
 
-        bool Pinch(string label, out Chip chip) => bar.Hit(Vector3.zero, At(label) * 0.7f, out chip);
+        bool Pinch(string label, out Chip chip) => bar.Hit(Vector3.zero, At(label) * 0.7f, out chip, out _);
 
         [Test]
         public void The_rarity_lens_shows_all_six_tiers_with_their_counts()
@@ -140,11 +140,35 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_pinch_a_centimetre_off_a_chip_still_chooses_it_and_three_centimetres_off_does_not()
+        {
+            Show();
+            var rect = parent.GetComponentsInChildren<Text>().Single(text => text.text == "Rarity").GetComponentInParent<Image>().rectTransform;
+            var edge = rect.position + rect.up * (rect.sizeDelta.y * 0.5f * rect.lossyScale.x);
+            Assert.IsTrue(bar.Hit(Vector3.zero, (edge + rect.up * 0.01f) * 0.7f, out var chip, out _));
+            Assert.AreEqual(Lens.Rarity, chip.Lens);
+            Assert.IsFalse(bar.Hit(Vector3.zero, (edge + rect.up * 0.03f + rect.right * 0.3f) * 0.7f, out _, out _));
+        }
+
+        [Test]
+        public void Between_two_chips_the_one_nearer_the_line_of_sight_wins()
+        {
+            browse.SetLens(Lens.Rarity);
+            Show();
+            var common = At("Common 1");
+            var epic = At("Epic 2");
+            Assert.IsTrue(bar.Hit(Vector3.zero, Vector3.Lerp(common, epic, 0.3f), out var near, out _));
+            Assert.AreEqual(Rarity.Common, near.Tier);
+            Assert.IsTrue(bar.Hit(Vector3.zero, Vector3.Lerp(common, epic, 0.7f), out var far, out _));
+            Assert.AreEqual(Rarity.Epic, far.Tier);
+        }
+
+        [Test]
         public void A_pinch_off_the_bar_chooses_nothing()
         {
             Show();
-            Assert.IsFalse(bar.Hit(Vector3.zero, new Vector3(0f, 0f, 0.3f), out _), "straight ahead is the deck, not the bar");
-            Assert.IsFalse(bar.Hit(Vector3.zero, new Vector3(0.3f, -0.15f, 0.3f), out _));
+            Assert.IsFalse(bar.Hit(Vector3.zero, new Vector3(0f, 0f, 0.3f), out _, out _), "straight ahead is the deck, not the bar");
+            Assert.IsFalse(bar.Hit(Vector3.zero, new Vector3(0.3f, -0.15f, 0.3f), out _, out _));
         }
 
         [Test]
@@ -190,7 +214,7 @@ namespace Edith.Tests
             Show();
             var at = At("Rarity");
             bar.Hide();
-            Assert.IsFalse(bar.Hit(Vector3.zero, at * 0.7f, out _));
+            Assert.IsFalse(bar.Hit(Vector3.zero, at * 0.7f, out _, out _));
             CollectionAssert.IsEmpty(bar.Labels);
         }
     }

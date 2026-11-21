@@ -140,12 +140,13 @@ namespace Edith.Tests
         static Vector3 Off(Vector3 target, float degrees) => Quaternion.AngleAxis(degrees, Vector3.up) * target;
 
         [Test]
-        public void A_tap_within_two_and_a_half_degrees_of_a_pin_chooses_it()
+        public void A_tap_within_six_degrees_of_a_pin_chooses_it()
         {
             var pin = new Vector3(0f, 0f, 0.5f);
-            Assert.AreEqual(0, PinchRoute.NearestPin(Eye, Off(pin, 2f) * 0.6f, new[] { pin }));
-            Assert.AreEqual(-1, PinchRoute.NearestPin(Eye, Off(pin, 3f) * 0.6f, new[] { pin }));
-            Assert.AreEqual(-1, PinchRoute.NearestPin(Eye, pin, Array.Empty<Vector3>()));
+            Assert.AreEqual(0, PinchRoute.NearestPin(Eye, Off(pin, 5.5f) * 0.6f, new[] { pin }, out var off));
+            Assert.AreEqual(5.5f, off, 0.01f);
+            Assert.AreEqual(-1, PinchRoute.NearestPin(Eye, Off(pin, 6.5f) * 0.6f, new[] { pin }, out _));
+            Assert.AreEqual(-1, PinchRoute.NearestPin(Eye, pin, Array.Empty<Vector3>(), out _));
         }
 
         [Test]
@@ -153,8 +154,8 @@ namespace Edith.Tests
         {
             var pin = new Vector3(0f, 0f, 0.5f);
             var pins = new[] { Off(pin, -1.5f), Off(pin, 1f) };
-            Assert.AreEqual(1, PinchRoute.NearestPin(Eye, pin * 0.6f, pins));
-            Assert.AreEqual(0, PinchRoute.NearestPin(Eye, Off(pin, -1f) * 0.6f, pins));
+            Assert.AreEqual(1, PinchRoute.NearestPin(Eye, pin * 0.6f, pins, out _));
+            Assert.AreEqual(0, PinchRoute.NearestPin(Eye, Off(pin, -1f) * 0.6f, pins, out _));
         }
 
         [Test]

@@ -14,8 +14,9 @@ namespace Edith.Scrapbook
         // In the deck's frame, under the card's text.
         static readonly Vector3 TabsCentre = ScrapbookPlacement.BarCentre + Vector3.up * (ScrapbookPlacement.BarRowGap * 0.5f);
         static readonly Vector3 ChipsCentre = ScrapbookPlacement.BarCentre - Vector3.up * (ScrapbookPlacement.BarRowGap * 0.5f);
-        // A pinch this near a chip still chooses it: a fingertip is about this much wider than the chip's gap.
-        const float HitMargin = 0.002f;
+        // A pinch this near a chip's box still chooses it. Chips are nearer each other than this, so the one nearest
+        // the line of sight wins.
+        const float HitMargin = 0.015f;
         // The alpha of a chip that offers nothing, relative to a live one.
         const float DimmedAlpha = 0.4f;
         static readonly Color Unchosen = new Color(0.04f, 0.05f, 0.07f, 0.8f);
@@ -79,9 +80,13 @@ namespace Edith.Scrapbook
 
         public void Hide() => Show(System.Array.Empty<Chip>(), System.Array.Empty<Chip>());
 
-        /// The enabled tab or chip the line from `eye` through `through` crosses.
-        public bool Hit(Vector3 eye, Vector3 through, out Chip chip)
+        /// The enabled tab or chip nearest the line from `eye` through `through`, among those it crosses or passes
+        /// within HitMargin of, and how many degrees off the line its centre is.
+        public bool Hit(Vector3 eye, Vector3 through, out Chip chip, out float degrees)
         {
+            chip = default;
+            degrees = float.MaxValue;
+            var found = false;
             foreach (var row in new[] { tabs, chips })
                 for (var i = 0; i < row.Shown; i++)
                 {
@@ -89,11 +94,13 @@ namespace Edith.Scrapbook
                     if (!pill.Chip.Enabled) continue;
                     var rect = pill.Backing.rectTransform;
                     if (!SightLine.Hits(eye, through, rect.position, rect.rotation, rect.sizeDelta * rect.lossyScale.x, HitMargin)) continue;
+                    var off = SightLine.Offset(eye, through, rect.position);
+                    if (off >= degrees) continue;
+                    degrees = off;
                     chip = pill.Chip;
-                    return true;
+                    found = true;
                 }
-            chip = default;
-            return false;
+            return found;
         }
 
         Row NewRow(Transform parent, string name, Vector3 centre, Vector2 size, float gap, float inset, int fontSize)

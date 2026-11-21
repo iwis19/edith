@@ -86,5 +86,8 @@ namespace Edith.Scrapbook
             var at = origin + direction * along;
             return Mathf.Abs(at.x) <= size.x * 0.5f + margin && Mathf.Abs(at.y) <= size.y * 0.5f + margin;
         }
+
+        /// How many degrees the line from `eye` through `through` is off the one from `eye` to `target`.
+        public static float Offset(Vector3 eye, Vector3 through, Vector3 target) => Vector3.Angle(through - eye, target - eye);
     }
 }
