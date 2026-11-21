@@ -1,11 +1,19 @@
 import asyncio
+import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Protocol
 from uuid import UUID
 
+import httpx
+from openai import AsyncOpenAI
+
 from ..config import Settings
 from ..events import CardEvent, Fact, LookMeta, Name, RarityEvent, Source
+from .card_model import CardModelAgent
+from .writers import GeminiWriter, OpenAIWriter
+
+log = logging.getLogger("edith")
 
 
 class CardAgent(Protocol):
@@ -50,3 +58,22 @@ class StubCardAgent:
         yield Fact(text=fact, sources=[source])
         await at(self._settings.stub_rarity_ms)
         yield RarityEvent(tier=tier)
+
+
+def make_card_agent(settings: Settings) -> CardAgent:
+    """The writers come from card_provider. Without that provider's key the stub answers, so the pipe works with no
+    keys at all."""
+    if settings.card_provider == "openai" and settings.openai_api_key:
+        client = AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value(),
+                             timeout=settings.look_timeout_s, max_retries=1)
+        return CardModelAgent(
+            name_writer=OpenAIWriter(client, settings.openai_name_model),
+            fact_writer=OpenAIWriter(client, settings.openai_fact_model, settings.openai_fact_reasoning_effort),
+        )
+    if settings.card_provider == "gemini" and settings.gemini_api_key:
+        writer = GeminiWriter(httpx.AsyncClient(timeout=settings.look_timeout_s),
+                              settings.gemini_api_key.get_secret_value(), settings.gemini_card_model,
+                              settings.gemini_thinking_level)
+        return CardModelAgent(name_writer=writer, fact_writer=writer)
+    log.warning("no %s key, so Looks get canned stub cards", settings.card_provider)
+    return StubCardAgent(settings)

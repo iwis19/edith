@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,6 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", env_file_encoding="utf-8", extra="ignore")
 
     gemini_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
     database_url: str | None = None
     # Shared with the headset build. When set, every endpoint but /health answers only requests carrying it in
     # X-Edith-Token, so nobody else can spend the API keys.
@@ -17,7 +19,18 @@ class Settings(BaseSettings):
     # Set by the Dockerfile: a public backend must not start without device_token.
     public_server: bool = False
 
-    card_model: str = "gemini-3.5-flash-lite"
+    # Which provider writes the card. Without that provider's key the stub card agent answers instead.
+    card_provider: Literal["openai", "gemini"] = "openai"
+    # gpt-4o names objects more specifically than gpt-5.4-mini with fewer false facts, at about 0.6 s to the first
+    # name.
+    openai_name_model: str = "gpt-4o"
+    # gpt-5.4-mini's facts beat gpt-4o's in blind comparison, at the same length and speed.
+    openai_fact_model: str = "gpt-5.4-mini"
+    openai_fact_reasoning_effort: str = "none"
+    # Writes both the name and the fact when card_provider is gemini.
+    gemini_card_model: str = "gemini-3.5-flash-lite"
+    # Larger Gemini models reject "minimal" and think for seconds before writing, which is too slow for a Look.
+    gemini_thinking_level: str = "minimal"
     scan_model: str = "gemini-3.5-flash"
     live_model: str = "gemini-3.8-live"
     embedding_model: str = "gemini-embedding-2"

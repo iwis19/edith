@@ -10,11 +10,12 @@ dependencies = [
     "python-multipart",
     "psycopg[binary]",
     "psycopg-pool",
+    "openai>=3.57.0",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx",
     "pytest",
     "pytest-asyncio",
 ]

@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import VERSION
-from .agents.card import CardAgent, StubCardAgent
+from .agents.card import CardAgent, make_card_agent
 from .config import Settings
 from .db import LookRecord, Store, make_store
 from .events import Accepted, Done, ErrorEvent, Fact, LookEvent, LookMeta, Name, RarityEvent
@@ -109,7 +109,7 @@ def create_app(settings: Settings | None = None, agent: CardAgent | None = None,
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
         raise RuntimeError("PUBLIC_SERVER is set but DEVICE_TOKEN is empty, so anyone could spend the API keys.")
-    agent = agent or StubCardAgent(settings)
+    agent = agent or make_card_agent(settings)
     store = store or make_store(settings.database_url, settings.db_pool_max)
 
     @asynccontextmanager
