@@ -51,6 +51,8 @@ namespace Edith.Scan
         // The backend gives up at 7 s and says why; past this the person is told EDITH could not be reached.
         const float ReplySeconds = 8f;
         const float NearLogSeconds = 1f;
+        // About half the bytes of the full 1280x960 frame, so the upload stays short on slow Wi-Fi.
+        const int FrameLongSide = 960;
         // The depth remembered for a scan: cells about 4 degrees across, a few sight lines measured each frame so
         // the whole frame is covered several times a second.
         const int DepthColumns = 16, DepthRows = 12, DepthRaysPerFrame = 24;
@@ -187,7 +189,7 @@ namespace Edith.Scan
             try
             {
                 var capturedAt = DateTime.UtcNow;
-                var frame = await headsetCamera.CaptureFullAsync();
+                var frame = await headsetCamera.CaptureFullAsync(FrameLongSide);
                 if (this == null) return;
                 Debug.Log($"[EDITH scan] {id} captured {frame.Size.x}x{frame.Size.y}, {frame.Jpeg.Length / 1024} KB, {Ms()} ms in");
                 if (environmentRaycast != null)
