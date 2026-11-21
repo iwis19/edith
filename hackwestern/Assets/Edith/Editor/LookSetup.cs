@@ -83,6 +83,7 @@ namespace Edith.Editor
             PinchSetup.SetObject(look, "ask", ask);
             PinchSetup.SetObject(look, "eye", rig.centerEyeAnchor);
             PinchSetup.SetObject(look, "environmentRaycast", raycast);
+            PinchSetup.SetObject(look, "font", Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
             PinchSetup.SetObject(look, "occludedMaterial",
                 AssetDatabase.LoadAssetAtPath<Material>(DepthSetup.OccludedUIMaterialPath)
                 ?? throw new InvalidOperationException($"Missing {DepthSetup.OccludedUIMaterialPath}; run DepthSetup first"));
