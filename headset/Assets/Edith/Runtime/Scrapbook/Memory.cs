@@ -19,10 +19,8 @@ namespace Edith.Scrapbook
         public readonly string Place;
         /// The local calendar day it was collected, with no time of day.
         public readonly DateTime Date;
-        /// The centre of its place, or null when the place has none.
-        public readonly GeoPoint? Point;
 
-        public Memory(int id, string name, string fact, Rarity? tier, string place, DateTime date, GeoPoint? point = null)
+        public Memory(int id, string name, string fact, Rarity? tier, string place, DateTime date)
         {
             Id = id;
             Name = name;
@@ -30,7 +28,6 @@ namespace Edith.Scrapbook
             Tier = tier;
             Place = place;
             Date = date.Date;
-            Point = point;
         }
     }
 
@@ -52,7 +49,6 @@ namespace Edith.Scrapbook
             public string rarity;
             public string place;
             public string date;
-            public double[] point;
         }
 
         /// The memories in the backend's order, newest first. An entry whose date cannot be read is left out, and a
@@ -77,16 +73,9 @@ namespace Edith.Scrapbook
                 if (!DateTime.TryParseExact(entry.date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
                     continue;
                 memories.Add(new Memory(entry.id, entry.name ?? "", Text(entry.fact),
-                    LookEvent.TryTier(entry.rarity, out var tier) ? tier : (Rarity?)null, Text(entry.place), date, Point(entry.point)));
+                    LookEvent.TryTier(entry.rarity, out var tier) ? tier : (Rarity?)null, Text(entry.place), date));
             }
             return memories;
-        }
-
-        /// `[lat, lon]` as a point. Anything else, a JSON null included, is no point.
-        static GeoPoint? Point(double[] pair)
-        {
-            if (pair == null || pair.Length != 2 || Math.Abs(pair[0]) > 90 || Math.Abs(pair[1]) > 180) return null;
-            return new GeoPoint(pair[0], pair[1]);
         }
 
         // JsonUtility reads a JSON null as an empty string.

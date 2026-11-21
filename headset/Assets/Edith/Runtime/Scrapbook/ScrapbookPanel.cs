@@ -16,10 +16,9 @@ namespace Edith.Scrapbook
     /// The Scrapbook: the collected memories as a deck of cards to scroll through. Both palms held up side by side
     /// open it in front of the user, where it stays put in the room, and the palms brought together close it. A
     /// thumb swipe moves one card. A pinch chooses what was under the line of sight when it was pressed, once it
-    /// ends, unless the pinch point moved 6 cm or more sideways, which scrubs the deck. The tabs under the deck pick
-    /// the lens, and the chips under them narrow the deck to a rarity or pick a place on the map: a city's pin
-    /// zooms the map to that city, and a spot's pin narrows the deck to that spot. The chip or pin nearest the line of sight wins over a card. While it is open it holds the hand gate, so
-    /// pinches make no Looks and palms start no Scan.
+    /// ends, unless the pinch point moved 6 cm or more sideways, which scrubs the deck. The rarity chips under the
+    /// deck narrow it to one tier, and the chip nearest the line of sight wins over a card. While it is open it holds
+    /// the hand gate, so pinches make no Looks and palms start no Scan.
     public sealed class ScrapbookPanel : MonoBehaviour
     {
         [SerializeField] LeftHandSource leftHand;
@@ -48,7 +47,7 @@ namespace Edith.Scrapbook
 
         readonly HashSet<int> photosLoading = new HashSet<int>();
         readonly HashSet<int> photosFailed = new HashSet<int>();
-        readonly List<Chip> tabs = new List<Chip>(), chips = new List<Chip>();
+        readonly List<Chip> chips = new List<Chip>();
         RecentCache<Texture2D> photos;
         Func<int, Texture> photoOf;
         ScrapbookClient client;
@@ -64,15 +63,13 @@ namespace Edith.Scrapbook
         readonly List<Memory> replaced = new List<Memory>();
         float replacedAt;
         Memory kept;
-        LensBar bar;
-        MapImages maps;
-        PlacesView places;
+        TierBar bar;
         AudioSource sound;
         CancellationTokenSource session;
         Content content;
         Browse browse;
         Deck deck;
-        (Lens lens, Rarity? filter, Place place, int count)? barShows;
+        (Rarity? filter, int count)? barShows;
         float fade;
         /// The scrubbing hand's pinch point in the deck's frame, a frame ago.
         Vector3 draggedTo;
@@ -93,9 +90,7 @@ namespace Edith.Scrapbook
             frame.SetParent(transform, false);
             frame.gameObject.SetActive(false);
             deckView = new DeckView(frame, font, material);
-            bar = new LensBar(frame, font, material);
-            maps = new MapImages();
-            places = new PlacesView(frame, font, material, maps);
+            bar = new TierBar(frame, font, material);
             photos = new RecentCache<Texture2D>(PhotosKept, Destroy);
             photoOf = id => photos.TryGet(id, out var photo) ? photo : null;
             sound = gameObject.AddComponent<AudioSource>();
@@ -126,7 +121,6 @@ namespace Edith.Scrapbook
         {
             session?.Cancel();
             photos.Clear();
-            maps.Clear();
             ring.Dispose();
         }
 
@@ -152,7 +146,6 @@ namespace Edith.Scrapbook
                 HideLeaving();
                 var (title, body) = Notice(content);
                 deckView.ShowNotice(title, body, eased);
-                places.Hide();
                 return;
             }
 
@@ -160,13 +153,11 @@ namespace Edith.Scrapbook
             if (Open) LoadPhotosInReach();
             deckView.Show(browse.Visible, deck.Position, photoOf, eased, deck.Form, kept);
             DrawLeaving(eased);
-            places.Draw(browse, eased, Time.deltaTime, Open ? client : null, session);
-            var shows = (browse.Lens, browse.Filter, (Place)browse.Spot ?? browse.City, browse.Visible.Count);
+            var shows = (browse.Filter, browse.Visible.Count);
             if (barShows is { } had && had.Equals(shows)) return;
             barShows = shows;
-            browse.Tabs(tabs);
             browse.Chips(chips);
-            bar.Show(tabs, chips);
+            bar.Show(chips);
         }
 
         void DrawLeaving(float eased)
@@ -240,7 +231,6 @@ namespace Edith.Scrapbook
             barShows = null;
             bar.Hide();
             photosFailed.Clear();
-            maps.Retry();
             var at = DeckLayout.Frame(new Pose(eye.position, eye.rotation));
             frame.SetPositionAndRotation(at.position, at.rotation);
             frame.gameObject.SetActive(true);
@@ -338,47 +328,19 @@ namespace Edith.Scrapbook
         }
 
         /// Does what the pinch pressed at `point` chose, and says what that was, or returns null when it chose nothing.
-        /// The chip or pin nearest the line of sight wins over a card.
+        /// A chip wins over a card.
         string Pick(Vector3 from, Vector3 point)
         {
-            var chipFound = bar.Hit(from, point, out var chip, out var chipDegrees);
-            var pin = places.HitPin(from, point, out var pinDegrees);
-            if (chipFound && (pin == null || chipDegrees <= pinDegrees))
+            if (bar.Hit(from, point, out var chip, out _))
             {
-                Choose(chip);
+                Narrow(() => browse.ToggleFilter(chip.Tier));
                 Play(1318.5f);
-                return $"chose {chip.Kind.ToString().ToLowerInvariant()} \"{chip.Label}\"";
-            }
-            if (pin != null)
-            {
-                Narrow(() =>
-                {
-                    if (pin is City city) browse.ZoomIn(city);
-                    else browse.ToggleSpot((Spot)pin);
-                });
-                Play(880f);
-                return $"chose pin \"{pin.Label}\"";
+                return $"chose tier \"{chip.Label}\"";
             }
             var card = deckView.Hit(from, point, out _);
             if (card < 0) return null;
             deck.JumpTo(card);
             return $"chose card {card} \"{browse.Visible[card].Name}\"";
-        }
-
-        void Choose(in Chip chip)
-        {
-            var chosen = chip;
-            Narrow(() =>
-            {
-                switch (chosen.Kind)
-                {
-                    case ChipKind.Tab: browse.SetLens(chosen.Lens); break;
-                    case ChipKind.City: browse.ZoomIn(chosen.City); break;
-                    case ChipKind.World: browse.ZoomOut(); break;
-                    case ChipKind.Spot: browse.ToggleSpot(chosen.Spot); break;
-                    case ChipKind.Tier: browse.ToggleFilter(chosen.Tier); break;
-                }
-            });
         }
 
         /// Changes what the deck is narrowed to. The card in the middle stays there when it is still in the deck, and
@@ -394,8 +356,7 @@ namespace Edith.Scrapbook
             var at = browse.IndexOf(middle.Id);
             kept = at >= 0 ? middle : null;
             deck = new Deck(browse.Visible.Count, Mathf.Max(0, at), true);
-            Debug.Log($"[EDITH scrapbook] {browse.Lens} lens, {(browse.Filter is Rarity tier ? tier.ToString() : "every")} tier, " +
-                      $"{((Place)browse.Spot ?? browse.City)?.Label ?? "every place"}, {browse.Visible.Count} cards");
+            Debug.Log($"[EDITH scrapbook] {(browse.Filter is Rarity tier ? tier.ToString() : "every")} tier, {browse.Visible.Count} cards");
         }
 
         void LoadPhotosInReach()

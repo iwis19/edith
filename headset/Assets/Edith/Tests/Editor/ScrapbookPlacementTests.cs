@@ -45,57 +45,25 @@ namespace Edith.Tests
             Assert.AreEqual(0.2875f, DeckLayout.Pose(2f).Position.x, 1e-5f);
         }
 
-        // The fact under the photo hangs about this far below the photo's bottom edge, and the lens bar's two rows
-        // reach about this far above and below its centre.
-        const float TextDropDegrees = 6.5f, BarHalfDegrees = 2.5f;
+        // The fact under the photo hangs about this far below the photo's bottom edge, and the chip row reaches about
+        // this far above and below its centre.
+        const float TextDropDegrees = 6.5f, ChipHalfDegrees = 1.5f;
 
         static float PhotoBottom => Elevation(ScrapbookPlacement.CardCentre - new Vector3(0f, DeckLayout.CardHeight * 0.5f, 0f));
 
         [Test]
-        public void The_lens_bar_sits_under_the_card_text_without_touching_it()
+        public void The_chip_row_sits_under_the_card_text_without_touching_it()
         {
-            Assert.AreEqual(13f, Elevation(ScrapbookPlacement.BarCentre), 0.01f);
-            Assert.That(ScrapbookPlacement.BarCentre.magnitude, Is.GreaterThanOrEqualTo(MinMeters));
-            Assert.That(PhotoBottom + TextDropDegrees, Is.LessThan(Elevation(ScrapbookPlacement.BarCentre) - BarHalfDegrees));
-        }
-
-        static Vector3 MapPoint(float x, float y) =>
-            ScrapbookPlacement.MapCentre + ScrapbookPlacement.MapRotation * new Vector3(x * ScrapbookPlacement.MapWidth * 0.5f, y * ScrapbookPlacement.MapHeight * 0.5f, 0f);
-
-        [Test]
-        public void The_map_sits_under_the_lens_bar_without_touching_it()
-        {
-            var barBottom = Elevation(ScrapbookPlacement.BarCentre) + BarHalfDegrees;
-            foreach (var x in new[] { -1f, 0f, 1f })
-                Assert.That(Elevation(MapPoint(x, 1f)), Is.GreaterThan(barBottom), $"top edge at {x}");
-        }
-
-        [Test]
-        public void The_map_is_a_5_by_3_panel_facing_the_eye_and_leaned_back()
-        {
-            Assert.AreEqual(0.30f, ScrapbookPlacement.MapWidth, 1e-6f);
-            Assert.AreEqual(0.18f, ScrapbookPlacement.MapHeight, 1e-6f);
-            Assert.AreEqual(23f, Elevation(ScrapbookPlacement.MapCentre), 0.01f);
-            Assert.AreEqual(0.80f, ScrapbookPlacement.MapCentre.z, 1e-6f);
-            var normal = ScrapbookPlacement.MapRotation * Vector3.forward;
-            Assert.AreEqual(ScrapbookPlacement.MapLean, Vector3.Angle(normal, ScrapbookPlacement.MapCentre), 0.01f);
-            Assert.That(normal.y, Is.LessThan(ScrapbookPlacement.MapCentre.normalized.y), "the front looks up, so the top is leaned away from the eye");
-        }
-
-        [Test]
-        public void Nothing_of_the_map_is_nearer_than_the_minimum()
-        {
-            foreach (var x in new[] { -1f, 0f, 1f })
-                foreach (var y in new[] { -1f, 0f, 1f })
-                    Assert.That(MapPoint(x, y).magnitude, Is.GreaterThanOrEqualTo(MinMeters), $"point {x}, {y}");
+            Assert.AreEqual(13f, Elevation(ScrapbookPlacement.ChipsCentre), 0.01f);
+            Assert.That(ScrapbookPlacement.ChipsCentre.magnitude, Is.GreaterThanOrEqualTo(MinMeters));
+            Assert.That(PhotoBottom + TextDropDegrees, Is.LessThan(Elevation(ScrapbookPlacement.ChipsCentre) - ChipHalfDegrees));
         }
 
         [Test]
         public void Nothing_is_centred_more_than_26_degrees_below_the_eye()
         {
             Assert.That(Elevation(ScrapbookPlacement.CardCentre), Is.LessThanOrEqualTo(26f));
-            Assert.That(Elevation(ScrapbookPlacement.BarCentre), Is.LessThanOrEqualTo(26f));
-            Assert.That(Elevation(ScrapbookPlacement.MapCentre), Is.LessThanOrEqualTo(26f));
+            Assert.That(Elevation(ScrapbookPlacement.ChipsCentre), Is.LessThanOrEqualTo(26f));
         }
     }
 }
