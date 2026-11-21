@@ -30,15 +30,15 @@ namespace Edith.Welcome
         /// The phone paired or the person skipped pairing.
         public event Action Finished;
 
-        // The screen is laid out in 1280 by 820 design units. 2800 units to the metre makes it 46 cm wide, held 0.55 m
-        // out, which fills about 45 degrees of view.
-        const float UnitsPerMetre = 2800f;
+        // The screen is laid out in 1280 by 820 design units. 2500 units to the metre makes it 51 cm wide, held 0.55 m
+        // out, which fills about 50 degrees of view.
+        const float UnitsPerMetre = 2500f;
         const float Ahead = 0.55f, FollowRate = 6f, FadeSeconds = 0.35f;
         const float ScreenWidth = 1280f, ScreenHeight = 820f;
-        // The pairing pane, in design units, and where it is held: 15 cm wide, 0.45 m out and 6 cm below the line of
-        // sight, as PhonePairing holds its panel.
+        // The pairing pane, in design units, and where it is held: 0.45 m out and 6 cm below the line of sight, as
+        // PhonePairing holds its panel, and a tenth wider than that panel's 15 cm.
         static readonly Rect PairPane = new Rect(500f, 93f, 720f, 455f);
-        const float PairWidthMetres = 0.15f, PairAhead = 0.45f, PairBelow = 0.06f;
+        const float PairWidthMetres = 0.165f, PairAhead = 0.45f, PairBelow = 0.06f;
         const float TapMargin = 10f;
         const float TypeCharsPerSecond = 55f;
 
@@ -288,6 +288,7 @@ namespace Edith.Welcome
 
             canvas = gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            Theme.Sharpen(gameObject);
             group = gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0f;
             group.interactable = false;
@@ -321,66 +322,76 @@ namespace Edith.Welcome
 
         void BuildInterests()
         {
-            var card = Panel(stepOne, "Interests", 500f, 60f, 720f, 505f, 44f);
+            const float left = 500f, top = 60f, width = 720f, innerLeft = 525f, innerWidth = 670f;
+            const float chipHeight = 43f, rowStep = 54f, chipsLeft = 546f, chipsRight = 1176f;
+            var card = Panel(stepOne, "Interests", left, top, width, 505f, 44f);
             card.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Cyan, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.3f));
-            var first = Panel(stepOne, "Pick", 525f, 83f, 670f, 187f, 28f);
+            var first = Panel(stepOne, "Pick", innerLeft, 83f, innerWidth, 187f, 28f);
             first.SetLook(new Color(0.03f, 0.15f, 0.15f, 0.3f), new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f), Color.clear);
             Label(stepOne, "Title", semibold, 29, Theme.Ice, TextAnchor.MiddleLeft, 546f, 104f, 400f, 40f).text = "What are you into?";
             counterOne = Label(stepOne, "Counter", semibold, 14, Theme.Cyan, TextAnchor.MiddleRight, 1000f, 108f, 175f, 24f);
 
             var measure = Label(stepOne, "Measure", regular, 21, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, 10f, 10f);
             measure.horizontalOverflow = HorizontalWrapMode.Overflow;
-            float x = 546f, y = 160f;
+            float x = chipsLeft, y = 160f;
             foreach (var name in WelcomeFlow.AllInterests)
             {
                 measure.text = name;
-                var width = Mathf.Ceil(measure.preferredWidth) + 38f;
-                if (x + width > 1176f)
+                var chipWidth = Mathf.Ceil(measure.preferredWidth) + 38f;
+                if (x + chipWidth > chipsRight)
                 {
-                    x = 546f;
-                    y += 54f;
+                    x = chipsLeft;
+                    y += rowStep;
                 }
-                var chip = new Chip { Name = name, Glass = Panel(stepOne, "Chip", x, y, width, 43f, 21.5f) };
-                chip.Label = Label(chip.Glass.Rect, "Label", regular, 21, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, width, 43f, centred: true);
+                var chip = new Chip { Name = name, Glass = Panel(stepOne, "Chip", x, y, chipWidth, chipHeight, chipHeight * 0.5f) };
+                chip.Label = Label(chip.Glass.Rect, "Label", regular, 21, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, chipWidth, chipHeight, centred: true);
                 chip.Label.text = name;
                 chip.Label.horizontalOverflow = HorizontalWrapMode.Overflow;
                 chips.Add(chip);
                 var picked = name;
                 AddTarget(chip.Glass.Rect, WelcomeStep.Interests, () => flow.Toggle(picked));
-                x += width + 12f;
+                x += chipWidth + 12f;
             }
             Destroy(measure.gameObject);
+            var pickBottom = y + chipHeight + 24f;
+            Reframe(first, innerLeft, 83f, innerWidth, pickBottom - 83f);
 
-            var second = Panel(stepOne, "Voice", 525f, 287f, 670f, 190f, 28f);
+            var voiceTop = pickBottom + 17f;
+            var voiceCards = voiceTop + 64f;
+            var voiceBottom = voiceCards + VoiceHeight + 20f;
+            var second = Panel(stepOne, "Voice", innerLeft, voiceTop, innerWidth, voiceBottom - voiceTop, 28f);
             second.SetLook(new Color(0.03f, 0.15f, 0.15f, 0.3f), new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f), Color.clear);
-            Label(stepOne, "VoiceTitle", semibold, 27, Theme.Ice, TextAnchor.MiddleLeft, 546f, 306f, 400f, 38f).text = "How should I sound?";
-            AddVoice(VoiceStyle.Enthusiastic, "Enthusiastic", "Big energy. Every find is the best find.", 545f);
-            AddVoice(VoiceStyle.Calm, "Calm", "Slow, warm, museum-guide quiet.", 759f);
-            AddVoice(VoiceStyle.Light, "Light", "Easygoing and a little cheeky.", 973f);
+            Label(stepOne, "VoiceTitle", semibold, 27, Theme.Ice, TextAnchor.MiddleLeft, 546f, voiceTop + 19f, 400f, 38f).text = "How should I sound?";
+            AddVoice(VoiceStyle.Enthusiastic, "Enthusiastic", 545f, voiceCards);
+            AddVoice(VoiceStyle.Calm, "Calm", 759f, voiceCards);
+            AddVoice(VoiceStyle.Light, "Light", 973f, voiceCards);
 
-            Label(stepOne, "Hint", regular, 16, Theme.Ice, TextAnchor.MiddleLeft, 530f, 506f, 420f, 24f).text = "Pinch to pick, or say them out loud";
-            var next = Panel(stepOne, "Next", 1100f, 494f, 96f, 52f, 26f);
+            var nextTop = voiceBottom + 17f;
+            Label(stepOne, "Hint", regular, 16, Theme.Ice, TextAnchor.MiddleLeft, 530f, nextTop + 14f, 420f, 24f).text = "Pinch to pick, or say them out loud";
+            var next = Panel(stepOne, "Next", 1100f, nextTop, 96f, 52f, 26f);
             next.SetLook(Theme.Cyan, Color.clear, Theme.Cyan, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.45f));
             var nextLabel = Label(next.Rect, "Label", semibold, 21, Theme.OnCyan, TextAnchor.MiddleCenter, 0f, 0f, 96f, 52f, centred: true);
             nextLabel.text = "Next";
             AddTarget(next.Rect, WelcomeStep.Interests, NextTapped);
+            Reframe(card, left, top, width, nextTop + 52f + 19f - top);
         }
 
-        void AddVoice(VoiceStyle style, string title, string description, float x)
+        const float VoiceWidth = 202f, VoiceHeight = 64f;
+
+        /// A voice card at design position (x, y): its name and a play button.
+        void AddVoice(VoiceStyle style, string title, float x, float y)
         {
-            const float y = 354f, w = 202f, h = 108f;
+            const float w = VoiceWidth, h = VoiceHeight;
             var glass = Panel(stepOne, "Voice " + title, x, y, w, h, 22f);
-            Label(glass.Rect, "Title", semibold, 21, Theme.Ice, TextAnchor.MiddleLeft, 16f, 12f, 120f, 28f, centred: false, within: new Vector2(w, h)).text = title;
+            Label(glass.Rect, "Title", semibold, 21, Theme.Ice, TextAnchor.MiddleLeft, 16f, 18f, 130f, 28f, centred: false, within: new Vector2(w, h)).text = title;
             var play = Glass.Build(glass.Rect, "Play", new Vector2(34f, 34f), 17f, material);
             play.SetLook(new Color(0.04f, 0.2f, 0.22f, 0.4f), Color.clear, Theme.Ice, Color.clear);
-            play.Rect.anchoredPosition = new Vector2(w * 0.5f - 34f, h * 0.5f - 29f);
+            play.Rect.anchoredPosition = new Vector2(w * 0.5f - 32f, 0f);
             // Jost has no play glyph, so the triangle is drawn. Nudged right so it looks centred in the circle.
             var triangle = Theme.Pixels(play.Rect, "Triangle", PlayTriangle, material);
             triangle.color = Theme.Ice;
             triangle.rectTransform.sizeDelta = new Vector2(11f, 13f);
             triangle.rectTransform.anchoredPosition = new Vector2(1.5f, 0f);
-            var body = Label(glass.Rect, "Description", regular, 16, Theme.Muted, TextAnchor.UpperLeft, 16f, 50f, w - 32f, 50f, centred: false, within: new Vector2(w, h));
-            body.text = description;
             voices.Add(new VoiceCard { Style = style, Glass = glass, Play = play });
             AddTarget(play.Rect, WelcomeStep.Interests, () =>
             {
@@ -438,6 +449,13 @@ namespace Edith.Welcome
             rect.anchoredPosition = centred
                 ? new Vector2(x - ScreenWidth * 0.5f, ScreenHeight * 0.5f - y)
                 : new Vector2(x + w * 0.5f - ScreenWidth * 0.5f, ScreenHeight * 0.5f - (y + h * 0.5f));
+        }
+
+        /// Moves and resizes a panel built before its size was known.
+        static void Reframe(Glass glass, float x, float y, float w, float h)
+        {
+            glass.Resize(new Vector2(w, h));
+            Place(glass.Rect, x, y, w, h);
         }
 
         Glass Panel(Transform parent, string name, float x, float y, float w, float h, float radius)

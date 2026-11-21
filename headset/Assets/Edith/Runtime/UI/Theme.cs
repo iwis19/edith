@@ -152,6 +152,18 @@ namespace Edith.UI
                 SpriteMeshType.FullRect, new Vector4(border, border, border, border));
         }
 
+        /// How many times its size text is rasterised at on a world-space canvas, so it stays sharp in the headset.
+        public const float TextSharpness = 3f;
+
+        /// Makes the world-space canvas on `canvas` rasterise its text at TextSharpness times its size. Layout and
+        /// sprites are unchanged.
+        public static void Sharpen(GameObject canvas)
+        {
+            var scaler = canvas.GetComponent<CanvasScaler>();
+            if (scaler == null) scaler = canvas.AddComponent<CanvasScaler>();
+            scaler.dynamicPixelsPerUnit = TextSharpness;
+        }
+
         /// A text label with a soft shadow and a faint cyan glow so it stays readable over any room.
         public static Text Label(Transform parent, string name, Font font, int size, Color color, TextAnchor anchor,
             Material material, bool shadow = true)

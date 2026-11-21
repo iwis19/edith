@@ -75,6 +75,7 @@ namespace Edith.Ask
             rect.localScale = Vector3.one / UnitsPerMetre;
             var canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            Theme.Sharpen(root);
             // Drawn after the snapshots whatever the distances, since transparent UI sorts by distance otherwise.
             canvas.sortingOrder = 1;
 

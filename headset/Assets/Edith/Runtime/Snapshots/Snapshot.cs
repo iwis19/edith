@@ -1,4 +1,5 @@
 using Edith.Look;
+using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -62,6 +63,7 @@ namespace Edith.Snapshots
             rect.localScale = Vector3.one / UnitsPerMetre;
             rect.sizeDelta = box.Size * UnitsPerMetre;
             root.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            Theme.Sharpen(root);
 
             var image = new GameObject("Photo", typeof(RectTransform), typeof(RawImage));
             var imageRect = (RectTransform)image.transform;

@@ -173,6 +173,7 @@ namespace Edith.Pairing
         {
             canvas = gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            Theme.Sharpen(gameObject);
             group = gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0f;
             canvas.enabled = false;
