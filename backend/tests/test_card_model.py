@@ -362,3 +362,15 @@ async def test_a_repeated_fact_is_shown_as_written_with_no_retry():
     assert (await run(agent))[-1].text == MOKA_A
     assert len(facts.calls) == 2, "one fact call per Look"
     assert facts.calls[1]["context"] is None, "earlier facts are not sent"
+
+
+async def test_the_fact_call_is_told_where_the_phone_is():
+    from edith_backend.location import Whereabouts
+    facts = FakeWriter(MOKA_A)
+    western = Whereabouts(place="Western University, London, Ontario, Canada", sights=[], lat=43.0096, lon=-81.2737)
+    agent = CardModelAgent(FakeWriter(NAMING), facts, whereabouts=lambda profile_id: western)
+    await run(agent)
+    context = facts.calls[0]["context"]
+    assert "Western University, London, Ontario, Canada" in context
+    assert "latitude 43.0096" in context
+    assert "never say the photo shows a place in another city" in context
