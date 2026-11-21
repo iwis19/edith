@@ -18,3 +18,6 @@
 # Meta DevAgent stores a local access token and this machine's LAN address.
 Assets/Resources/DevAgentSettings.asset
 Assets/Resources/DevAgentSettings.asset.meta
+
+# Hand recordings pulled off the headset.
+/Recordings/
