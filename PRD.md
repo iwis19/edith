@@ -93,6 +93,7 @@ A curved panel at arm's length. Memories sit on pages grouped by topic, framed i
 The headset has no GPS, so the phone that runs the hotspot shares its position with the backend.
 
 - **Pairing:** the headset shows a 4-digit code and a short link; the person opens the page on the phone, types the code and taps Share location.
+- **Lock:** until a phone is paired, every feature stays off. If the phone disconnects later (the backend stops hearing its position), the headset locks every feature again and shows the pairing panel, and nothing works until the phone is paired once more.
 - **What it feeds:** the place and the nearest named sights go to the Scan, the Look's place context and Ask. With no fix, the Look's photo-based place guess is the fallback.
 - **Privacy:** the position is kept in memory only, for six hours, never written to the database, and never shown to anyone else.
 - There is no hand-written list of sights: a new place needs nothing from us.
