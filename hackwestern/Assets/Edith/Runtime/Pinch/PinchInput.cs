@@ -1,4 +1,5 @@
 using System;
+using Edith.Grab;
 using Edith.Hands;
 using UnityEngine;
 
@@ -9,6 +10,8 @@ namespace Edith.Pinch
     {
         [SerializeField] RightHandSource hand;
         [SerializeField] PinchTuning tuning = new PinchTuning();
+        /// While a fist holds or has just pocketed a card the hand is not pinching.
+        [SerializeField] GrabInput grab;
 
         PinchTracker tracker;
         PinchPhase loggedPhase;
@@ -21,7 +24,9 @@ namespace Edith.Pinch
 
         void LateUpdate()
         {
-            var reading = tracker.Step(hand.Read());
+            var frame = hand.Read();
+            if (grab != null && grab.Claimed) frame.Pinching = false;
+            var reading = tracker.Step(frame);
             Log(reading);
             Stepped?.Invoke(reading);
         }

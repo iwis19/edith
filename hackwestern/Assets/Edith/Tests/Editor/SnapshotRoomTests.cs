@@ -91,5 +91,29 @@ namespace Edith.Tests
             Assert.IsFalse(room.Dismiss(snapshot));
             Assert.AreEqual(0, room.Snapshots.Count);
         }
+
+        [Test]
+        public void Pocket_takes_a_snapshot_off_the_shelf_and_announces_it_once()
+        {
+            var kept = room.Place(Box(-0.5f));
+            var snapshot = room.Place(Box(0.5f));
+            var pocketed = new System.Collections.Generic.List<Snapshot>();
+            room.Pocketed += pocketed.Add;
+
+            Assert.IsTrue(room.Pocket(snapshot, Vector3.down));
+            Assert.IsFalse(room.Pocket(snapshot, Vector3.down));
+
+            CollectionAssert.AreEqual(new[] { snapshot }, pocketed);
+            Assert.IsTrue(snapshot.Leaving);
+            Assert.AreEqual(1, room.Snapshots.Count);
+            Assert.AreSame(kept, room.Snapshots[0].item);
+            Assert.IsFalse(room.Dismiss(snapshot));
+        }
+
+        [Test]
+        public void Snapshots_have_distinct_ids()
+        {
+            Assert.AreNotEqual(room.Place(Box(-0.5f)).Id, room.Place(Box(0.5f)).Id);
+        }
     }
 }

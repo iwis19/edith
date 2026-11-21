@@ -80,6 +80,7 @@ namespace Edith.Editor
             DepthSetup.EnableFeatures();
             DepthSetup.AddToScene(ScenePath);
             PinchSetup.AddToScene(ScenePath);
+            GrabSetup.AddToScene(ScenePath);
             // Meta's fixes enable rules that only pass after an earlier fix, so one pass is not enough.
             for (var pass = 0; pass < 3; pass++)
                 await OVRProjectSetup.FixAllAsync(BuildTargetGroup.Android);
