@@ -7,7 +7,7 @@ import pytest
 from pydantic import SecretStr
 
 from edith_backend.agents.card import StubCardAgent, make_card_agent
-from edith_backend.agents.card_model import FACT_PROMPT, NAME_PROMPT, CardModelAgent, is_same_fact
+from edith_backend.agents.card_model import FACT_PROMPT, NAME_PROMPT, CardModelAgent, ProfileLists, is_same_fact
 from edith_backend.agents.writers import GeminiError, gemini_text
 from edith_backend.config import Settings
 from edith_backend.events import LookMeta
@@ -132,3 +132,15 @@ def test_gemini_text_skips_thoughts_and_raises_on_a_block():
 ])
 def test_the_card_provider_picks_the_agent_and_a_missing_key_falls_back_to_the_stub(provider, keys, expected):
     assert type(make_card_agent(Settings(_env_file=None, card_provider=provider, **keys))) is expected
+
+
+def test_profile_lists_never_grow_on_reads_and_keep_only_the_latest_profiles():
+    lists = ProfileLists(max_kept=2, max_profiles=2)
+    a, b, c = (uuid.UUID(int=i) for i in range(3))
+    assert lists.get(a) == []
+    for item in (1, 2, 3):
+        lists.append(a, item)
+    lists.append(b, 9)
+    lists.append(a, 4)
+    lists.append(c, 7)
+    assert (lists.get(a), lists.get(b), lists.get(c)) == ([3, 4], [], [7])

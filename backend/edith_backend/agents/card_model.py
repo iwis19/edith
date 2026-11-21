@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 import time
-from collections import defaultdict
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Iterator
 from typing import Protocol
 from uuid import UUID
@@ -166,24 +166,41 @@ def is_same_fact(a: str, b: str, ignore: frozenset[str] = frozenset(), threshold
     return bool(wa and wb) and len(wa & wb) / min(len(wa), len(wb)) >= threshold
 
 
+class ProfileLists[T]:
+    """A bounded list per profile, keeping only the most recently written profiles. Reads never add a profile."""
+
+    def __init__(self, max_kept: int, max_profiles: int = 1000) -> None:
+        self._lists: OrderedDict[UUID, list[T]] = OrderedDict()
+        self._max_kept, self._max_profiles = max_kept, max_profiles
+
+    def get(self, profile_id: UUID) -> list[T]:
+        return self._lists.get(profile_id, [])
+
+    def append(self, profile_id: UUID, item: T) -> None:
+        items = self._lists.pop(profile_id, [])
+        items.append(item)
+        del items[: -self._max_kept]
+        self._lists[profile_id] = items
+        while len(self._lists) > self._max_profiles:
+            self._lists.popitem(last=False)
+
+
 class FactHistory:
     """Facts already told, per profile, with the kind of object each was about. Repeats are checked against every
     kind, because one object's kind is named differently from Look to Look ("moka pot", "stovetop espresso maker")."""
 
     def __init__(self, max_kept: int = 50, max_shown: int = 30) -> None:
-        self._told: dict[UUID, list[tuple[str, str]]] = defaultdict(list)
-        self._max_kept, self._max_shown = max_kept, max_shown
+        self._told: ProfileLists[tuple[str, str]] = ProfileLists(max_kept)
+        self._max_shown = max_shown
 
     def add(self, profile_id: UUID, kind: str, fact: str) -> None:
-        told = self._told[profile_id]
-        told.append((kind, fact))
-        del told[: -self._max_kept]
+        self._told.append(profile_id, (kind, fact))
 
     def render(self, profile_id: UUID) -> str:
-        return "\n".join(f"- {kind}: {fact}" for kind, fact in self._told[profile_id][-self._max_shown :])
+        return "\n".join(f"- {kind}: {fact}" for kind, fact in self._told.get(profile_id)[-self._max_shown :])
 
     def is_repeat(self, profile_id: UUID, fact: str, ignore: frozenset[str]) -> bool:
-        return any(is_same_fact(fact, told, ignore) for _, told in self._told[profile_id])
+        return any(is_same_fact(fact, told, ignore) for _, told in self._told.get(profile_id))
 
 
 class PlaceHistory:
@@ -191,19 +208,17 @@ class PlaceHistory:
     model copied from this context, so an old place fades out instead of keeping itself alive."""
 
     def __init__(self, keep_s: float = 6 * 3600, max_kept: int = 20, clock=time.time) -> None:
-        self._seen: dict[UUID, list[tuple[float, str]]] = defaultdict(list)
-        self._keep_s, self._max_kept, self._clock = keep_s, max_kept, clock
+        self._seen: ProfileLists[tuple[float, str]] = ProfileLists(max_kept)
+        self._keep_s, self._clock = keep_s, clock
 
     def add(self, profile_id: UUID, place: str) -> None:
-        seen = self._seen[profile_id]
-        seen.append((self._clock(), place))
-        del seen[: -self._max_kept]
+        self._seen.append(profile_id, (self._clock(), place))
 
     def recent(self, profile_id: UUID) -> list[tuple[str, int, float]]:
         """(place, photos, minutes since the latest), latest first, within the keep window."""
         now = self._clock()
         by_place: dict[str, tuple[int, float]] = {}
-        for at, place in self._seen[profile_id]:
+        for at, place in self._seen.get(profile_id):
             if now - at <= self._keep_s:
                 count, _ = by_place.get(place, (0, at))
                 by_place[place] = (count + 1, at)
@@ -234,15 +249,17 @@ class CardModelAgent:
                 if isinstance(event, Name):
                     fact_task = asyncio.create_task(self._write_fact(image, profile_id, meta, event.name))
                 yield event
-            assert fact_task is not None
+            if fact_task is None:
+                raise RuntimeError("The naming call ended without a name.")
             fact = await fact_task
         finally:
             if fact_task is not None:
                 fact_task.cancel()
 
         kind = normalize_kind(fields.get("KIND", "")) or normalize_kind(fields["NAME"])
-        log.info("look %s kind %r place %r rarity %r", meta.look_id, kind, fields.get("PLACE", "-"),
-                 fields.get("RARITY", "-"))
+        # The inferred place stays out of the logs.
+        log.info("look %s kind %r place %s rarity %r", meta.look_id, kind,
+                 "found" if parse_place(fields.get("PLACE", "")) else "none", fields.get("RARITY", "-"))
         if not fact:
             return
         ignore = content_words(fields["NAME"], fields.get("KIND", ""))
