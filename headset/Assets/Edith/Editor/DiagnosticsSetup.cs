@@ -58,7 +58,8 @@ namespace Edith.Editor
             PinchSetup.SetObject(panel, "headsetCamera", Find<HeadsetCamera>(nameof(LookSetup)));
             PinchSetup.SetObject(panel, "pairing", Find<PhonePairing>(nameof(PairingSetup)));
             PinchSetup.SetObject(panel, "scan", Find<ScanController>(nameof(ScanSetup)));
-            PinchSetup.SetObject(panel, "leftHand", Find<LeftHandSource>(nameof(ScanSetup)));
+            PinchSetup.SetObject(panel, "leftHand", Find<LeftHandSource>(nameof(PinchSetup)));
+            PinchSetup.SetObject(panel, "rightHand", Find<RightHandSource>(nameof(PinchSetup)));
             PinchSetup.SetObject(panel, "eye", rig.centerEyeAnchor);
             PinchSetup.SetObject(panel, "font", Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
             PinchSetup.SetObject(panel, "material",

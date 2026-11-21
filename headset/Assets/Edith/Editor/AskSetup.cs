@@ -8,8 +8,8 @@ using UnityEngine.SceneManagement;
 
 namespace Edith.Editor
 {
-    /// Ask in the scene: the right hand's microgestures, the voice and the controller, next to the pinch it shares the
-    /// hand with. Every step converges, so running it again is safe.
+    /// Ask in the scene: both hands' microgestures, the voice and the controller, next to the pinch it shares the
+    /// hands with. Every step converges, so running it again is safe.
     public static class AskSetup
     {
         const string PinchObjectName = "Pinch";
@@ -43,16 +43,18 @@ namespace Edith.Editor
 
             var pinch = Array.Find(scene.GetRootGameObjects(), go => go.name == PinchObjectName)
                 ?? throw new InvalidOperationException($"{scenePath} has no {PinchObjectName} object; run PinchSetup first");
-            var hand = new SerializedObject(pinch.GetComponent<RightHandSource>()).FindProperty("hand").objectReferenceValue as OVRHand
-                ?? throw new InvalidOperationException("RightHandSource has no hand");
             var rig = UnityEngine.Object.FindAnyObjectByType<OVRCameraRig>()
                 ?? throw new InvalidOperationException($"{scenePath} has no OVRCameraRig");
 
             var ask = Array.Find(scene.GetRootGameObjects(), go => go.name == AskObjectName) ?? new GameObject(AskObjectName);
-            var source = PinchSetup.Ensure<OVRMicrogestureEventSource>(ask);
-            PinchSetup.SetObject(source, "_hand", hand);
+            // One event source per hand, the right hand's first.
+            while (ask.GetComponents<OVRMicrogestureEventSource>().Length < 2) ask.AddComponent<OVRMicrogestureEventSource>();
+            var sources = ask.GetComponents<OVRMicrogestureEventSource>();
+            PinchSetup.SetObject(sources[0], "_hand", PinchSetup.HandOf<RightHandSource>(pinch));
+            PinchSetup.SetObject(sources[1], "_hand", PinchSetup.HandOf<LeftHandSource>(pinch));
             var gestures = PinchSetup.Ensure<ThumbGestures>(ask);
-            PinchSetup.SetObject(gestures, "source", source);
+            PinchSetup.SetObject(gestures, "right", sources[0]);
+            PinchSetup.SetObject(gestures, "left", sources[1]);
             var voice = PinchSetup.Ensure<AskVoice>(ask);
 
             var controller = PinchSetup.Ensure<AskController>(ask);

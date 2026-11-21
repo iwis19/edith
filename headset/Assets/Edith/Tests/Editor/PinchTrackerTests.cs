@@ -25,7 +25,7 @@ namespace Edith.Tests
         }
 
         /// A right hand with its palm facing away from an eye at the origin looking down +z.
-        static HandFrame Hand(float t, Vector3 point, bool pinching, float gap = 0.01f, bool tracked = true, bool palmTowardEye = false)
+        internal static HandFrame Hand(float t, Vector3 point, bool pinching, float gap = 0.01f, bool tracked = true, bool palmTowardEye = false)
         {
             var wrist = point + new Vector3(0.01f, -0.1f, -0.03f);
             var index = wrist + new Vector3(-0.03f, 0.08f, 0f);

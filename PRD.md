@@ -106,10 +106,10 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 
 | Action | Gesture |
 | --- | --- |
-| Look | Pinch empty space, drag at least about 5 cm, let go; a shorter pinch is a tap |
-| Collect | Fist on the snapshot, pull toward the chest; open the hand first to let it float back |
-| Ask | Thumb tap on the side of the index finger; stops on silence |
-| Page or dismiss cards | Thumb swipe left or right |
+| Look | Pinch empty space with either hand, drag at least about 5 cm, let go; a shorter pinch is a tap |
+| Collect | Fist of either hand on the snapshot, pull toward the chest; open the hand first to let it float back |
+| Ask | Thumb tap on the side of the index finger of either hand; stops on silence |
+| Page or dismiss cards | Thumb swipe left or right with either hand |
 | Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |
 | App menu | Turn the left wrist inward and poke with the right index |
 | Scrapbook | Thumb swipe to flip; pinch to open; grab to pull closer |
@@ -118,6 +118,8 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 **Rules**
 
 - Never use a pinch with the palm facing you: that is Quest's system menu gesture.
+- Every gesture works with either hand. One hand pinches at a time: the hand that pinches first owns the pinch until its tap or its box is done, and a pinch the other hand makes meanwhile is ignored until that hand lets go. The right hand wins a tie.
+- Each hand can carry its own card, so one hand can hold a card while the other pinches. A card one hand holds cannot be grabbed by the other.
 - Keep gestures in front of the chest and under a second long.
 - A grab only counts when the hand was clearly open within the last second before it closes into a fist, so a hand relaxing after a pinch never grabs.
 - Every gesture gets visual or audio feedback.

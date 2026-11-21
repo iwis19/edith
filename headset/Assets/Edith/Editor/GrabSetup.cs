@@ -40,7 +40,8 @@ namespace Edith.Editor
                 ?? throw new InvalidOperationException($"{scenePath} has no {PinchObjectName} object; run PinchSetup first");
 
             var input = PinchSetup.Ensure<GrabInput>(pinch);
-            PinchSetup.SetObject(input, "hand", pinch.GetComponent<RightHandSource>());
+            PinchSetup.SetObject(input, "right", pinch.GetComponent<RightHandSource>());
+            PinchSetup.SetObject(input, "left", pinch.GetComponent<LeftHandSource>());
             PinchSetup.SetObject(PinchSetup.Ensure<SnapshotGrab>(pinch), "input", input);
             PinchSetup.SetObject(pinch.GetComponent<PinchInput>(), "grab", input);
 

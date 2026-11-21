@@ -1,24 +1,30 @@
 using System.Collections.Generic;
+using Edith.Hands;
 using Edith.Look;
 using Edith.Snapshots;
 using UnityEngine;
 
 namespace Edith.Grab
 {
-    /// Applies grab readings to the snapshots of a room: a fist carries one, opening floats it back, and pulling it to
-    /// the chest pockets it.
+    /// Applies grab readings to the snapshots of a room: a fist of either hand carries one, opening floats it back,
+    /// and pulling it to the chest pockets it. Each hand carries its own snapshot.
     public sealed class SnapshotGrab : MonoBehaviour, IGrabTargets
     {
         [SerializeField] GrabInput input;
 
+        sealed class Carried
+        {
+            public Snapshot Held;
+            // Destroyed once it has shrunk away, which Unity's null check sees.
+            public Snapshot Pocketing;
+            public Vector3 GripAtGrab;
+            public Quaternion HandAtGrab;
+            public Vector3 CardPositionAtGrab;
+            public Quaternion CardRotationAtGrab;
+        }
+
+        readonly Carried[] hands = { new Carried(), new Carried() };
         SnapshotRoom room;
-        Snapshot held;
-        // Destroyed once it has shrunk away, which Unity's null check sees.
-        Snapshot pocketing;
-        Vector3 gripAtGrab;
-        Quaternion handAtGrab;
-        Vector3 cardPositionAtGrab;
-        Quaternion cardRotationAtGrab;
 
         /// The room whose snapshots a fist can grab. Call before the first frame with a hand.
         public void Bind(SnapshotRoom room) => this.room = room;
@@ -49,53 +55,55 @@ namespace Edith.Grab
         /// one that failed never moves.
         public static bool CanCarry(Snapshot snapshot) => snapshot.Card.Phase == LookPhase.Done;
 
-        void OnStepped(GrabReading reading)
+        void OnStepped(HandSide side, GrabReading reading)
         {
+            var hand = hands[(int)side];
             switch (reading.Event)
             {
                 case GrabEvent.Grabbed:
-                    Pick(reading);
+                    Pick(hand, reading);
                     break;
                 case GrabEvent.Dropped:
-                    if (held != null) held.FloatBack();
-                    held = null;
+                    if (hand.Held != null) hand.Held.FloatBack();
+                    hand.Held = null;
                     return;
                 case GrabEvent.Pocketed:
-                    if (held != null && room.Pocket(held, reading.Grip)) pocketing = held;
-                    held = null;
+                    if (hand.Held != null && room.Pocket(hand.Held, reading.Grip))
+                        hand.Pocketing = hand.Held;
+                    hand.Held = null;
                     return;
             }
-            if (held != null && reading.Phase == GrabPhase.Holding && reading.HasGrip) Carry(reading);
+            if (hand.Held != null && reading.Phase == GrabPhase.Holding && reading.HasGrip) Carry(hand, reading);
             // Reads as going into the hand, rather than into the spot where the pull ended.
-            else if (pocketing != null && reading.HasGrip) pocketing.PocketToward(reading.Grip);
+            else if (hand.Pocketing != null && reading.HasGrip) hand.Pocketing.PocketToward(reading.Grip);
         }
 
-        void Pick(in GrabReading reading)
+        void Pick(Carried hand, in GrabReading reading)
         {
-            held = null;
+            hand.Held = null;
             if (room == null) return;
             var snapshots = room.Snapshots;
             for (var i = 0; i < snapshots.Count; i++)
-                if (snapshots[i].item.Id == reading.CardId) held = snapshots[i].item;
-            if (held == null) return;
-            if (!CanCarry(held))
+                if (snapshots[i].item.Id == reading.CardId) hand.Held = snapshots[i].item;
+            if (hand.Held == null) return;
+            if (!CanCarry(hand.Held))
             {
-                Debug.Log($"[EDITH grab] snapshot {held.Id} is {held.Card.Phase}, so it stays put");
-                held = null;
+                Debug.Log($"[EDITH grab] snapshot {hand.Held.Id} is {hand.Held.Card.Phase}, so it stays put");
+                hand.Held = null;
                 return;
             }
 
-            gripAtGrab = reading.Grip;
-            handAtGrab = reading.Rotation;
-            cardPositionAtGrab = held.transform.position;
-            cardRotationAtGrab = held.transform.rotation;
+            hand.GripAtGrab = reading.Grip;
+            hand.HandAtGrab = reading.Rotation;
+            hand.CardPositionAtGrab = hand.Held.transform.position;
+            hand.CardRotationAtGrab = hand.Held.transform.rotation;
         }
 
         /// Keeps the card where the fist took it, turning with the wrist about the grip.
-        void Carry(in GrabReading reading)
+        static void Carry(Carried hand, in GrabReading reading)
         {
-            var turn = reading.Rotation * Quaternion.Inverse(handAtGrab);
-            held.Hold(reading.Grip + turn * (cardPositionAtGrab - gripAtGrab), turn * cardRotationAtGrab);
+            var turn = reading.Rotation * Quaternion.Inverse(hand.HandAtGrab);
+            hand.Held.Hold(reading.Grip + turn * (hand.CardPositionAtGrab - hand.GripAtGrab), turn * hand.CardRotationAtGrab);
         }
     }
 }
