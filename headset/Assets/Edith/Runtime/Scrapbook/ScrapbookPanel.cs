@@ -55,6 +55,7 @@ namespace Edith.Scrapbook
         Vector3 ringAt;
         float ringProgress, nearLoggedAt;
         Transform frame;
+        FrameFollow follow = new FrameFollow();
         DeckView deckView, leaving;
         bool leavingShown;
         /// The deck a change replaced, drawn fading out while the new one forms, and the card that stays in the middle.
@@ -147,6 +148,12 @@ namespace Edith.Scrapbook
                 return;
             }
 
+            if (Open)
+            {
+                var placed = follow.Step(new Pose(frame.position, frame.rotation), new Pose(eye.position, eye.rotation),
+                    Time.deltaTime, intent != null);
+                frame.SetPositionAndRotation(placed.position, placed.rotation);
+            }
             deck.Advance(Time.deltaTime);
             if (Open) LoadPhotosInReach();
             deckView.Show(browse.Visible, deck.Position, photoOf, eased, deck.Form, kept);
@@ -229,6 +236,7 @@ namespace Edith.Scrapbook
             barShows = null;
             bar.Hide();
             photosFailed.Clear();
+            follow = new FrameFollow();
             var at = DeckLayout.Frame(new Pose(eye.position, eye.rotation));
             frame.SetPositionAndRotation(at.position, at.rotation);
             frame.gameObject.SetActive(true);
