@@ -29,6 +29,7 @@ from .events import (
 )
 from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
+from .maps import MapError, TileMap
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
 from .resolve import HttpResolver, PlaceLocator
 
@@ -137,13 +138,16 @@ def create_app(
     pairings: Pairings | None = None,
     scanner: ScanAgent | None = None,
     geocoder: PlaceLocator | None = None,
+    tile_map: TileMap | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
         raise RuntimeError("PUBLIC_SERVER is set but DEVICE_TOKEN is empty, so anyone could spend the API keys.")
     # Made here and not per request. The geocoder is the same resolver, so reverse and search lookups share one
     # Nominatim rate limit.
-    resolver = HttpResolver(httpx.AsyncClient())
+    http = httpx.AsyncClient()
+    resolver = HttpResolver(http)
+    tile_map = tile_map or TileMap(http)
     locations = locations or Locations(resolver)
     geocoder = geocoder or resolver
     pairings = pairings or Pairings()
@@ -332,7 +336,28 @@ def create_app(
             raise ApiError(404, "unknown_memory", "This profile has no memory with that id.")
         return Response(data, media_type="image/jpeg")
 
+    @app.get("/map/world")
+    async def map_world(_: UUID = Depends(profile)) -> Response:
+        return await _map_png(tile_map.world())
+
+    @app.get("/map/area")
+    async def map_area(
+        lat: float = Query(allow_inf_nan=False),
+        lon: float = Query(allow_inf_nan=False),
+        zoom: int = Query(),
+        _: UUID = Depends(profile),
+    ) -> Response:
+        return await _map_png(tile_map.area(lat, lon, zoom))
+
     return app
+
+
+async def _map_png(image: Awaitable[bytes]) -> Response:
+    try:
+        return Response(await image, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
+    except MapError as exc:
+        log.warning("map failed: %s", exc)
+        raise ApiError(502, "map_failed", "The map tiles could not be fetched.")
 
 
 async def _locate_place(store: Store, geocoder: PlaceLocator, profile_id: UUID, memory_id: int) -> None:
