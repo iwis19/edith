@@ -114,7 +114,7 @@ namespace Edith.Scan
             tracker = new ScanPoseTracker(tuning);
             grab = rightHand.GetComponent<GrabInput>();
             marks = new ScanMarks(font, material);
-            ping = ScanPing.Create(gameObject, eye);
+            ping = ScanPing.Create(gameObject, material);
             sound = gameObject.AddComponent<AudioSource>();
             sound.spatialBlend = 0f;
             sound.playOnAwake = false;
@@ -227,7 +227,7 @@ namespace Edith.Scan
                     Debug.Log($"[EDITH scan] {id} dropped, the view was recentred while it was read");
                     return;
                 }
-                // A second ping goes out with the answer, and each pin lands as it reaches the pin's thing.
+                // A second wave goes out with the answer, and each pin lands as the wave passes under it.
                 ping.Burst(eye.position);
                 Place(id, frame.CameraPose, picks);
                 if (pins.Count > 0)
@@ -415,7 +415,7 @@ namespace Edith.Scan
                 var far = source == PinSource.Far;
                 var pin = new ScanPin(onObject - ray.direction * LiftMeters, pick.Name, pick.Hook, far);
                 pins.Add(pin);
-                var reached = Vector3.Distance(eye.position, pin.Point) / ScanPing.Speed;
+                var reached = ScanPing.Reach(eye.position, pin.Point);
                 placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point, reached) });
                 Debug.Log($"[EDITH scan] {id} pin \"{pick.Name}\" {meters:F2} m away ({source}, depth {answer}), hook \"{pick.Hook}\"");
             }

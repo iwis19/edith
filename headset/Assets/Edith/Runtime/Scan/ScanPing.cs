@@ -1,123 +1,132 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Edith.Scan
 {
-    /// The scan's ping across the room: a burst of shells that grow out from a point and light up real surfaces as
-    /// they pass, drawn by the Edith/ScanPing shader from Meta's environment depth. Fire one with Burst; a shell
-    /// reaches a thing `distance / Speed` seconds after it leaves, which is when a pin on that thing should appear.
+    /// The scan's wave: flat rings of light that spread out level with the person's waist, through the air, like a
+    /// ripple on a pond at waist height. Fire one with Burst. A ring reaches a thing `HorizontalDistance / Speed`
+    /// seconds after it leaves, which is when a pin on that thing should appear.
     public sealed class ScanPing : MonoBehaviour
     {
-        /// How fast a shell grows, in metres per second, and how far it goes before it has faded out.
+        /// How fast a ring grows, in metres per second, and how far it goes before it has faded out.
         public const float Speed = 2.5f, MaxRadius = 4.5f;
-        // A burst is three shells this far apart, each dimmer than the last.
-        const int Shells = 3;
-        const float ShellGap = 0.15f, ShellDimming = 0.5f;
-        // The quad sits this far in front of the eye and is wide enough to fill the view.
-        const float QuadAhead = 0.4f, QuadSize = 3f;
+        // The wave lies this far below the eyes, about waist height.
+        const float BelowEyesMetres = 0.6f;
+        // A burst is three rings this far apart, each dimmer than the last.
+        const int Rings = 3;
+        const float RingGap = 0.18f, RingDimming = 0.55f, StartRadius = 0.25f;
 
-        static readonly int PingDataId = Shader.PropertyToID("_PingData");
-        static readonly int PingBrightId = Shader.PropertyToID("_PingBright");
-        static readonly int ReprojectionId = Shader.PropertyToID("_EnvironmentDepthReprojectionMatrices");
-        static readonly int InverseId = Shader.PropertyToID("_EdithDepthInverse");
-
-        struct Shell
+        struct Ring
         {
-            public Vector3 Origin;
+            public Image Image;
             public float Born, Brightness;
         }
 
-        readonly Shell[] shells = new Shell[Shells];
-        readonly Vector4[] data = new Vector4[Shells];
-        readonly Vector4[] bright = new Vector4[Shells];
-        readonly Matrix4x4[] inverse = new Matrix4x4[2];
-        Transform eye;
-        Material material;
-        MeshRenderer quad;
+        readonly Ring[] rings = new Ring[Rings];
+        GameObject plane;
+        Sprite sprite;
         float busyUntil = -1f;
 
-        /// Builds the ping in front of `eye`. Without the shader in the build it stays silent.
-        public static ScanPing Create(GameObject host, Transform eye)
+        /// Builds the wave's flat canvas, hidden until the first burst. `material` lets real objects hide it.
+        public static ScanPing Create(GameObject host, Material material)
         {
             var ping = host.AddComponent<ScanPing>();
-            ping.eye = eye;
-            var shader = Resources.Load<Shader>("EdithScanPing");
-            if (shader == null)
+            ping.sprite = Band(512);
+            ping.plane = new GameObject("ScanWave", typeof(Canvas));
+            ping.plane.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            var root = (RectTransform)ping.plane.transform;
+            root.sizeDelta = Vector2.zero;
+            // A canvas unit is a millimetre; the canvas lies flat, facing up.
+            root.localScale = Vector3.one * 0.001f;
+            root.rotation = Quaternion.Euler(90f, 0f, 0f);
+            for (var i = 0; i < Rings; i++)
             {
-                Debug.LogWarning("[EDITH scan] the ping shader is missing from the build");
-                return ping;
+                var image = new GameObject("Ring", typeof(Image)).GetComponent<Image>();
+                image.sprite = ping.sprite;
+                image.raycastTarget = false;
+                image.material = material;
+                image.rectTransform.SetParent(root, false);
+                image.enabled = false;
+                ping.rings[i] = new Ring { Image = image, Born = -100f };
             }
-            ping.material = new Material(shader);
-            var go = new GameObject("ScanPing", typeof(MeshFilter), typeof(MeshRenderer));
-            go.transform.SetParent(eye, false);
-            go.transform.localPosition = Vector3.forward * QuadAhead;
-            go.transform.localScale = Vector3.one * QuadSize;
-            go.GetComponent<MeshFilter>().sharedMesh = Quad();
-            ping.quad = go.GetComponent<MeshRenderer>();
-            ping.quad.sharedMaterial = ping.material;
-            ping.quad.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            ping.quad.receiveShadows = false;
-            ping.quad.enabled = false;
-            for (var i = 0; i < Shells; i++) ping.shells[i].Born = -100f;
+            ping.plane.SetActive(false);
             return ping;
         }
 
-        /// Sends a burst of shells out from `origin`.
-        public void Burst(Vector3 origin)
+        /// How long a ring takes to reach `point` from `eye`, across the floor plan.
+        public static float Reach(Vector3 eye, Vector3 point)
         {
-            if (quad == null) return;
-            for (var i = 0; i < Shells; i++)
-                shells[i] = new Shell { Origin = origin, Born = Time.time + i * ShellGap, Brightness = Mathf.Pow(ShellDimming, i) };
-            busyUntil = Time.time + (Shells - 1) * ShellGap + MaxRadius / Speed;
-            quad.enabled = true;
-            Debug.Log($"[EDITH scan] ping from {origin}");
+            var across = point - eye;
+            across.y = 0f;
+            return Mathf.Max(0f, across.magnitude - StartRadius) / Speed;
         }
 
-        void OnEnable() => Application.onBeforeRender += Invert;
-        void OnDisable() => Application.onBeforeRender -= Invert;
-
-        void OnDestroy()
+        /// Sends a burst of rings out at waist height under `eye`.
+        public void Burst(Vector3 eye)
         {
-            if (material != null) Destroy(material);
-            if (quad != null) Destroy(quad.gameObject);
+            if (plane == null) return;
+            plane.transform.position = eye + Vector3.down * BelowEyesMetres;
+            for (var i = 0; i < Rings; i++)
+            {
+                rings[i].Born = Time.time + i * RingGap;
+                rings[i].Brightness = Mathf.Pow(RingDimming, i);
+            }
+            busyUntil = Time.time + (Rings - 1) * RingGap + (MaxRadius - StartRadius) / Speed;
+            plane.SetActive(true);
+            Debug.Log($"[EDITH scan] wave from {plane.transform.position}");
         }
 
         void Update()
         {
-            if (quad == null || !quad.enabled) return;
+            if (plane == null || !plane.activeSelf) return;
             if (Time.time > busyUntil)
             {
-                quad.enabled = false;
+                plane.SetActive(false);
                 return;
             }
-            for (var i = 0; i < Shells; i++)
+            for (var i = 0; i < Rings; i++)
             {
-                var age = Time.time - shells[i].Born;
-                var radius = age < 0f ? -1f : age * Speed;
-                data[i] = new Vector4(shells[i].Origin.x, shells[i].Origin.y, shells[i].Origin.z, radius > MaxRadius ? -1f : radius);
-                bright[i] = new Vector4(shells[i].Brightness, 0f, 0f, 0f);
+                var age = Time.time - rings[i].Born;
+                var radius = StartRadius + age * Speed;
+                var image = rings[i].Image;
+                image.enabled = age >= 0f && radius < MaxRadius;
+                if (!image.enabled) continue;
+                image.rectTransform.sizeDelta = Vector2.one * (radius * 2000f);
+                var fade = 1f - radius / MaxRadius;
+                image.color = new Color(1f, 1f, 1f, rings[i].Brightness * fade * fade);
             }
-            material.SetVectorArray(PingDataId, data);
-            material.SetVectorArray(PingBrightId, bright);
         }
 
-        /// The shader needs to go from environment depth back to the world, so it gets the inverse of Meta's
-        /// world-to-depth matrices, which Meta sets just before each frame renders.
-        void Invert()
+        void OnDestroy()
         {
-            if (quad == null || !quad.enabled) return;
-            var forward = Shader.GetGlobalMatrixArray(ReprojectionId);
-            if (forward == null || forward.Length < 2) return;
-            for (var i = 0; i < 2; i++) inverse[i] = forward[i].inverse;
-            Shader.SetGlobalMatrixArray(InverseId, inverse);
+            if (plane != null) Destroy(plane);
+            if (sprite != null)
+            {
+                Destroy(sprite.texture);
+                Destroy(sprite);
+            }
         }
 
-        static Mesh Quad()
+        /// A ring of light: a crisp bright edge at the rim and a glow trailing inward behind it, clear in the middle.
+        static Sprite Band(int size)
         {
-            var mesh = new Mesh { name = "Scan ping quad" };
-            mesh.vertices = new[] { new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f), new Vector3(0.5f, 0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f) };
-            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
-            mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100f);
-            return mesh;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[size * size];
+            var centre = (size - 1) * 0.5f;
+            var half = size * 0.5f;
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                float dx = x - centre, dy = y - centre;
+                var r = Mathf.Sqrt(dx * dx + dy * dy) / half;
+                var edge = Mathf.Clamp01((1f - r) * half * 0.5f);
+                var trail = Mathf.Pow(Mathf.Clamp01(1f - (1f - r) / 0.12f), 2f);
+                var line = Mathf.Clamp01(1f - Mathf.Abs(r - 0.985f) / 0.012f);
+                pixels[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(edge * (0.45f * trail + line)));
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
         }
     }
 }
