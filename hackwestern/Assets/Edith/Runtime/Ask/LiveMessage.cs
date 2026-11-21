@@ -1,0 +1,106 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using UnityEngine;
+
+namespace Edith.Ask
+{
+    /// One server message of a Gemini Live session, reduced to what Ask uses. Safe to parse off the main thread.
+    public sealed class LiveMessage
+    {
+        public bool SetupComplete;
+        /// The server will close the session soon.
+        public bool GoAway;
+        /// Pieces of the answer's speech, 16-bit little-endian mono PCM at 24 kHz, in arrival order.
+        public readonly List<byte[]> Audio = new List<byte[]>();
+        /// New pieces of what the person said and of what Gemini said, each to append to the pieces before it.
+        public string InputText = "", OutputText = "";
+        public bool TurnComplete, Interrupted;
+
+        [Serializable] sealed class Wire { public ServerContent serverContent; }
+
+        [Serializable] sealed class ServerContent
+        {
+            public ModelTurn modelTurn;
+            public Transcription inputTranscription, outputTranscription;
+            public bool turnComplete, interrupted;
+        }
+
+        [Serializable] sealed class ModelTurn { public Part[] parts; }
+        [Serializable] sealed class Part { public InlineData inlineData; }
+        [Serializable] sealed class InlineData { public string mimeType, data; }
+        [Serializable] sealed class Transcription { public string text; }
+
+        /// Never throws: a message it cannot read comes back empty.
+        public static LiveMessage Parse(string json)
+        {
+            var message = new LiveMessage();
+            if (string.IsNullOrEmpty(json)) return message;
+            // JsonUtility fills a missing object field with an empty instance, so these two are found by key.
+            message.SetupComplete = HasKey(json, "setupComplete");
+            message.GoAway = HasKey(json, "goAway");
+
+            Wire wire;
+            try
+            {
+                wire = JsonUtility.FromJson<Wire>(json);
+            }
+            catch (ArgumentException)
+            {
+                return message;
+            }
+            var content = wire?.serverContent;
+            if (content == null) return message;
+
+            message.TurnComplete = content.turnComplete;
+            message.Interrupted = content.interrupted;
+            message.InputText = content.inputTranscription?.text ?? "";
+            message.OutputText = content.outputTranscription?.text ?? "";
+            var parts = content.modelTurn?.parts;
+            if (parts == null) return message;
+            foreach (var part in parts)
+            {
+                var data = part?.inlineData;
+                if (data?.mimeType == null || string.IsNullOrEmpty(data.data)) continue;
+                if (!data.mimeType.StartsWith("audio/pcm", StringComparison.Ordinal)) continue;
+                try
+                {
+                    message.Audio.Add(Convert.FromBase64String(data.data));
+                }
+                catch (FormatException)
+                {
+                }
+            }
+            return message;
+        }
+
+        static bool HasKey(string json, string key)
+        {
+            var quoted = "\"" + key + "\"";
+            for (var at = json.IndexOf(quoted, StringComparison.Ordinal); at >= 0;
+                 at = json.IndexOf(quoted, at + 1, StringComparison.Ordinal))
+            {
+                var i = at + quoted.Length;
+                while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+                if (i < json.Length && json[i] == ':') return true;
+            }
+            return false;
+        }
+    }
+
+    /// Client messages for a Gemini Live session.
+    public static class LiveRequest
+    {
+        /// Tells automatic activity detection that the microphone has stopped.
+        public const string AudioStreamEnd = "{\"realtimeInput\":{\"audioStreamEnd\":true}}";
+
+        /// The first `byteCount` bytes of `pcm`, 16-bit little-endian mono microphone audio.
+        public static string Audio(byte[] pcm, int byteCount, int sampleRate) =>
+            "{\"realtimeInput\":{\"audio\":{\"data\":\"" + Convert.ToBase64String(pcm, 0, byteCount) +
+            "\",\"mimeType\":\"audio/pcm;rate=" + sampleRate.ToString(CultureInfo.InvariantCulture) + "\"}}}";
+
+        /// A still photo for the question, sent as a realtime video frame.
+        public static string Image(byte[] jpeg) =>
+            "{\"realtimeInput\":{\"video\":{\"data\":\"" + Convert.ToBase64String(jpeg) + "\",\"mimeType\":\"image/jpeg\"}}}";
+    }
+}
