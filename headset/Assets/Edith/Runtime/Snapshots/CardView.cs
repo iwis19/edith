@@ -13,7 +13,7 @@ namespace Edith.Snapshots
         const float TextUnitsPerMm = 4f;
         const float BorderMm = 3f;
         const float GapMm = 6f;
-        const float MinTextWidthMm = 90f;
+        const float MinTextWidthMm = 180f;
         const float FactHeight = 360f;
         const int FactSize = 36;
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
