@@ -232,7 +232,7 @@ namespace Edith.Look
         Release Framed(Release release, float? subjectDepth)
         {
             var depth = subjectDepth ?? SubjectDepth(release.Box);
-            release.Shown = release.Box.WidenedTo(CardView.MinPhotoTangent);
+            release.Shown = release.Box.WidenedTo(CardWidth.MinPhotoTangent);
             release.Frame = Capture(release.Box, depth);
             release.ShownFrame = release.Shown.Tangent == release.Box.Tangent ? release.Frame : Capture(release.Shown, depth);
             return release;

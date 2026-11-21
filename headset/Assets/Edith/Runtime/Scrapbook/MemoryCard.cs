@@ -15,7 +15,7 @@ namespace Edith.Scrapbook
         static readonly Vector2 Room = new Vector2(DeckLayout.CardWidth, DeckLayout.CardHeight) * UnitsPerMetre;
         // A tall photo is widened to at least this, growing taller up to MaxPhotoMm, so its fact wraps into a few
         // readable lines rather than a thin column. Millimetres.
-        public const float MinPhotoMm = CardView.MinPhotoTangent * ScrapbookPlacement.CardAhead * UnitsPerMetre, MaxPhotoMm = 260f;
+        public const float MinPhotoMm = CardWidth.MinPhotoTangent * ScrapbookPlacement.CardAhead * UnitsPerMetre, MaxPhotoMm = 260f;
         const int NoticeTitleSize = 44, NoticeBodySize = 30;
         static readonly Color EmptyPhoto = new Color(1f, 1f, 1f, 0.35f);
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
