@@ -107,7 +107,7 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 | Action | Gesture |
 | --- | --- |
 | Look | Pinch empty space with either hand, drag at least about 5 cm, let go; a shorter pinch is a tap |
-| Collect | Fist of either hand on the snapshot, pull toward the chest; open the hand first to let it float back |
+| Collect | Fist of either hand on the snapshot, pull toward the chest; open the hand first to let it float back. A sound that grows brighter and longer with the rarity plays as it goes in |
 | Ask | Thumb tap on the side of the index finger of either hand; stops on silence |
 | Page or dismiss cards | Thumb swipe left or right with either hand |
 | Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |

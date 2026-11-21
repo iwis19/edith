@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Edith.Grab
 {
     /// Applies grab readings to the snapshots of a room: a fist of either hand carries one, opening floats it back,
-    /// and pulling it to the chest pockets it. Each hand carries its own snapshot.
+    /// and pulling it to the chest pockets it with the sound of its rarity. Each hand carries its own snapshot.
     public sealed class SnapshotGrab : MonoBehaviour, IGrabTargets
     {
         [SerializeField] GrabInput input;
@@ -69,7 +69,10 @@ namespace Edith.Grab
                     return;
                 case GrabEvent.Pocketed:
                     if (hand.Held != null && room.Pocket(hand.Held, reading.Grip))
+                    {
                         hand.Pocketing = hand.Held;
+                        Play(hand.Held.Card.Tier, reading.Grip);
+                    }
                     hand.Held = null;
                     return;
             }
@@ -104,6 +107,17 @@ namespace Edith.Grab
         {
             var turn = reading.Rotation * Quaternion.Inverse(hand.HandAtGrab);
             hand.Held.Hold(reading.Grip + turn * (hand.CardPositionAtGrab - hand.GripAtGrab), turn * hand.CardRotationAtGrab);
+        }
+
+        // A clip made in code plays nothing after AudioSettings.Reset, which Ask runs when focus returns, so every
+        // pocket gets a new one.
+        static void Play(Rarity? tier, Vector3 point)
+        {
+            var samples = RaritySounds.Render(RaritySounds.For(tier));
+            var clip = AudioClip.Create("EDITH pocket", samples.Length, 1, RaritySounds.Rate, false);
+            clip.SetData(samples, 0);
+            AudioSource.PlayClipAtPoint(clip, point);
+            Destroy(clip, clip.length + 1f);
         }
     }
 }
