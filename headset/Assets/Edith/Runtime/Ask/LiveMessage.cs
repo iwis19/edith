@@ -6,11 +6,15 @@ using UnityEngine;
 
 namespace Edith.Ask
 {
+    /// What runs a function EDITH calls: the backend's map search, the hunt, or one of the actions the hands can do.
+    public enum AskTool { Unknown, Navigation, Hunt, Scan, Collect, Clear }
+
     /// A function EDITH asks the headset to run: its call id, its name and the arguments Ask knows how to read.
     public sealed class LiveToolCall
     {
         public const string StartHunt = "start_hunt", StopHunt = "stop_hunt";
         public const string FindPlace = "find_place", StopNavigation = "stop_navigation";
+        public const string Scan = "scan", CollectSnapshot = "collect_snapshot", ClearSnapshots = "clear_snapshots";
 
         public readonly string Id, Name;
         /// `start_hunt`'s optional `interests`; empty for any other call.
@@ -26,6 +30,25 @@ namespace Edith.Ask
             Interests = interests ?? new string[0];
             Category = category ?? "";
             PlaceName = placeName ?? "";
+        }
+
+        public AskTool Tool => ToolFor(Name);
+
+        public static AskTool ToolFor(string name)
+        {
+            switch (name)
+            {
+                case FindPlace:
+                case StopNavigation:
+                    return AskTool.Navigation;
+                case StartHunt:
+                case StopHunt:
+                    return AskTool.Hunt;
+                case Scan: return AskTool.Scan;
+                case CollectSnapshot: return AskTool.Collect;
+                case ClearSnapshots: return AskTool.Clear;
+                default: return AskTool.Unknown;
+            }
         }
     }
 
