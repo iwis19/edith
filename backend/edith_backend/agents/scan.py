@@ -33,16 +33,14 @@ HOOKS_KEPT = 40
 PROMPT_SIGHTS = 12
 
 SCAN_PROMPT = """You look at one frame from the camera of a person exploring somewhere new to them, such as a room, \
-a campus or a city, and pick the 2 or 3 things in it that make the most fun dares, best first. Each pick gets a pin \
-with a dare the person can do right there.
+a campus or a city, and pick the 1 to 3 most interesting things in it, best first. Each pick gets a pin with a fun dare \
+to do right there, or, when the thing has no good dare, a fun fact.
 
 Order the picks like this:
 1. A named landmark, building, monument, statue, artwork, mural or distinctive sign in view is always pick #1.
-2. Then whatever makes the most fun dare: an unusual, old or handmade object, an instrument, a plant or animal, a \
-machine or product with something odd about it, a striking architectural detail, a pattern worth counting, a view.
-Never pick a person or a face, or the person's own hands or body. Skip plain clutter (bins, parked cars, cables, \
-blank walls and floors) unless it carries a really good dare. Give at least one pick whenever anything in view can \
-carry a fun dare; an empty list is only for a blank wall or darkness.
+2. Then only things a curious explorer would really stop for: an unusual, old or handmade object, an instrument, a \
+plant or animal, a striking architectural detail, a distinctive product, a view.
+Skip everyday clutter (bins, bikes, parked cars, lamp posts, traffic signs, benches, generic trees, grass or sky, plain furniture, cables, ceiling lights, ducts, pens, bottles and cups, laptops, phones and screens, plain walls, floors, ceilings, doors, windows, packaging) unless something about it is unusual or it carries a really great dare. Never pick a person or a face, or the person's own hands or body. One great pick beats three dull ones; an empty list is only for a view with truly nothing worth stopping for.
 
 For each pick give:
 name: the thing named as specifically as the photo lets you, in at most 10 words, with a short article. Include the \
@@ -53,22 +51,25 @@ the photo or its design is unmistakable to an expert; naming the brand does not 
 building, monument or artwork only when it is on the list of named sights you are given and what you see matches its \
 description, or when its name is readable in the frame. Otherwise describe it ("a sandstone Gothic tower with a clock \
 face"). Never invent a building name. A plain right name beats a specific wrong one.
-hook: a dare of at most 14 words, in the second person, playful and a little cheeky, like a friend egging them on. \
-It is something they can do right there in under a minute with their eyes, hands, feet or phone camera: find, spot, \
-count, guess, match, compare, trace, race, hunt, pose or listen for something specific on that thing. It has a clear \
-win, so they know when they have done it, and it only makes sense for this thing. It is never a description, a fact \
-or a compliment. Keep it safe and polite: nothing that climbs, breaks, opens or moves things, touches art, exhibits \
-or other people's belongings, enters closed areas, involves strangers or costs money. Never open it with Check, Look, \
-See, Grab, Read, Take, Notice or Don't miss. The hooks of one scan must each start with a different word. Open with a \
-verb like Find, Spot, Count, Guess, Match, Race, Hunt, Trace or Pose, with "Bet you can't", or with a question.
-Bad hooks describe; good hooks dare:
-- Bad: "Glowing red panels frame the beverage slots." Good: "Find the one drink in there you've never heard of."
-- Bad: "Parallel wooden slats create a rhythmic canopy overhead." Good: "Count the ceiling slats before you reach that \
-far wall."
-- Bad: "Check out that old stone tower." Good: "Guess the time on that clock face, then check your phone."
-- Bad: "Take a look at this statue." Good: "Strike that bronze figure's pose and hold it for five seconds."
-- Bad: "Look at this colourful mural." Good: "Hunt down the fox hiding somewhere in that mural."
-- Bad: "See this plant." Good: "Bet you can't find one leaf on it without a hole."
+hook: at most 14 words, in the second person, cheeky and warm, like a fun friend. Give a dare whenever the \
+thing has a good one, and a fun fact only when it really does not.
+A dare is a little game they can do right there in under a minute with their eyes, feet, voice or phone camera, \
+that only makes sense for this thing and has a clear win: a bet, a guess they can check, a silly pose, a race \
+against a count, a pick-your-favourite, a tiny bit of make-believe. A plain chore ("Count the windows") is not a \
+dare; give it a twist. Keep it safe and polite: nothing that touches, uses, climbs, opens or moves things, nothing \
+with other people's belongings, art or exhibits, no closed areas, no strangers, nothing that costs money.
+A fun fact is one surprising, specific thing about this exact thing that makes them want a closer look, and that you \
+are sure is true; never a description of what is plainly visible, never a lecture.
+Never open a hook with Check, Look, See, Grab, Read, Take, Notice or Don't miss, and the hooks of one scan must each \
+start with a different word. Open a dare with a verb like Find, Spot, Pick, Guess, Match, Race, Hunt, Copy, Name or \
+Pretend, with "Bet you can't", or with a question.
+Bad hooks describe; good hooks dare, or surprise when there is no dare:
+- Bad: "Glowing red panels frame the beverage slots." Good: "Pick the drink you'd buy your worst enemy."
+- Bad: "Check out that old stone tower." Good: "Guess the time on that clock, then see how close you got."
+- Bad: "Take a look at this statue." Good: "Copy that bronze figure's pose and snap a side-by-side."
+- Bad: "Look at this colourful mural." Good: "Find the fox hiding in that mural before you count to ten."
+- Bad: "See this plant." Good: "Bet you can't spot one leaf on it without a hole."
+- Bad: "That cactus is very spiky." Good fun fact: "Those spines are its leaves; the green stem does all the eating."
 Spread the picks over different things. The box is loose around the whole thing, and the point is one spot on the \
 thing itself, where a pin can sit.
 
