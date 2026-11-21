@@ -10,7 +10,7 @@ from openai import AsyncOpenAI
 
 from ..config import Settings
 from ..db import Store
-from ..events import CardEvent, Fact, LookMeta, Name, RarityEvent, Source
+from ..events import CardEvent, Fact, LookMeta, Name, Rarity, RarityEvent, Source
 from ..location import Whereabouts
 from .card_model import CardModelAgent, FactHistory
 from .embeddings import GeminiEmbedder, KindEmbedder
@@ -70,7 +70,7 @@ def make_embedder(settings: Settings) -> KindEmbedder | None:
                           settings.embedding_dimensions, settings.embedding_timeout_s)
 
 
-def make_card_agent(
+def _make_card_agent(
     settings: Settings, whereabouts: Callable[[UUID], Whereabouts | None] = lambda _: None, store: Store | None = None
 ) -> CardAgent:
     """The writers come from card_provider. Without that provider's key the stub answers, so the pipe works with no
@@ -93,3 +93,27 @@ def make_card_agent(
         return CardModelAgent(name_writer=writer, fact_writer=writer, **history)
     log.warning("no %s key, so Looks get canned stub cards", settings.card_provider)
     return StubCardAgent(settings)
+
+
+_TOUR: tuple[Rarity, ...] = ("common", "uncommon", "rare", "epic", "legendary", "mythic")
+
+
+class RarityTour:
+    """Demo only: gives each Look the next tier in turn, so every rarity sound and glow can be seen in one session."""
+
+    def __init__(self, inner: CardAgent) -> None:
+        self._inner = inner
+        self._count = 0
+
+    async def run(self, image: bytes, meta: LookMeta, profile_id: UUID) -> AsyncIterator[CardEvent]:
+        tier = _TOUR[self._count % len(_TOUR)]
+        self._count += 1
+        async for event in self._inner.run(image, meta, profile_id):
+            yield RarityEvent(tier=tier) if isinstance(event, RarityEvent) else event
+
+
+def make_card_agent(
+    settings: Settings, whereabouts: Callable[[UUID], Whereabouts | None] = lambda _: None, store: Store | None = None
+) -> CardAgent:
+    agent = _make_card_agent(settings, whereabouts, store)
+    return RarityTour(agent) if settings.demo_rarity_tour else agent

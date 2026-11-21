@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # which on a hosted domain can be too long to type, so it can be set to a short link that redirects there.
     phone_link: str = ""
 
+    # Demo only: every Look's rarity steps through common to mythic in turn, whatever the model judged.
+    demo_rarity_tour: bool = False
+
     # Which provider writes the card. Without that provider's key the stub card agent answers instead.
     card_provider: Literal["openai", "gemini"] = "openai"
     # gpt-4o names objects more specifically than gpt-5.4-mini with fewer false facts, at about 0.6 s to the first
