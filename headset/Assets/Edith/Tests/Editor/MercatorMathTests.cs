@@ -1,3 +1,4 @@
+using System;
 using Edith.Scrapbook;
 using NUnit.Framework;
 using UnityEngine;
@@ -10,6 +11,14 @@ namespace Edith.Tests
 
         /// `metres` north of `from`: a degree of latitude is 111.2 km.
         static GeoPoint North(GeoPoint from, double metres) => new GeoPoint(from.Lat + metres / 111195.0, from.Lon);
+
+        static readonly Vector2 Crop = new Vector2(409.6f, 245.76f);
+
+        static int Fit(GeoPoint[] points) => MercatorMath.ZoomToFit(Western, points, Crop, MercatorMath.MinCityZoom, MercatorMath.MaxCityZoom);
+
+        /// `metres` east of `from` along its parallel: a degree of longitude is 111.2 km times the cosine of the latitude.
+        static GeoPoint East(GeoPoint from, double metres) =>
+            new GeoPoint(from.Lat, from.Lon + metres / (111195.0 * Math.Cos(from.Lat * Math.PI / 180.0)));
 
         [Test]
         public void The_middle_of_the_world_is_the_middle_of_the_zoom_2_image()
@@ -101,22 +110,39 @@ namespace Edith.Tests
         [Test]
         public void A_city_with_one_spot_gets_the_closest_zoom()
         {
-            Assert.AreEqual(16, MercatorMath.ZoomToFit(Western, new[] { Western }, 409.6));
+            Assert.AreEqual(16, Fit(new[] { Western }));
         }
 
         [Test]
-        public void The_zoom_is_the_closest_that_keeps_every_spot_within_the_radius()
+        public void The_zoom_is_the_closest_that_keeps_every_spot_within_the_crop()
         {
-            // 409.6 pixels at this latitude are 715 m at zoom 16, 1431 m at zoom 15 and 2862 m at zoom 14.
-            Assert.AreEqual(16, MercatorMath.ZoomToFit(Western, new[] { Western, North(Western, 600) }, 409.6));
-            Assert.AreEqual(15, MercatorMath.ZoomToFit(Western, new[] { Western, North(Western, 1000) }, 409.6));
-            Assert.AreEqual(14, MercatorMath.ZoomToFit(Western, new[] { North(Western, -2000), North(Western, 300) }, 409.6));
+            // The half crop is 409.6 pixels across and 245.8 down. At this latitude 245.8 pixels are 429 m at zoom 16,
+            // 859 m at zoom 15 and 1717 m at zoom 14.
+            Assert.AreEqual(16, Fit(new[] { Western, North(Western, 400) }));
+            Assert.AreEqual(15, Fit(new[] { Western, North(Western, 600) }));
+            Assert.AreEqual(14, Fit(new[] { North(Western, -1500), North(Western, 300) }));
+        }
+
+        [Test]
+        public void A_spot_far_to_the_side_counts_against_the_wider_crop()
+        {
+            // 409.6 pixels across are 715 m at zoom 16 and 1431 m at zoom 15.
+            Assert.AreEqual(16, Fit(new[] { East(Western, 700) }));
+            Assert.AreEqual(15, Fit(new[] { East(Western, 800) }));
+        }
+
+        [Test]
+        public void Points_either_side_of_the_date_line_are_close_together()
+        {
+            var at = new GeoPoint(-16.8, 180);
+            Assert.AreEqual(12, MercatorMath.ZoomToFit(at, new[] { new GeoPoint(-16.8, 179.99), new GeoPoint(-16.8, -179.99) },
+                new Vector2(409.6f, 245.8f), 2, 12));
         }
 
         [Test]
         public void Spots_too_far_apart_for_any_zoom_get_the_widest()
         {
-            Assert.AreEqual(12, MercatorMath.ZoomToFit(Western, new[] { North(Western, 25000) }, 409.6));
+            Assert.AreEqual(12, Fit(new[] { North(Western, 25000) }));
         }
 
         [Test]

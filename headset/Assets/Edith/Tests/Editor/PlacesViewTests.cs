@@ -142,7 +142,7 @@ namespace Edith.Tests
             var rotation = Quaternion.Euler(CityMapView.Lean, 0f, 0f);
             Vector3 On(Spot spot)
             {
-                var at = CityMapView.OnDisc(city.OnMap(spot));
+                var at = CityMapView.OnDisc(city.Frame.OnImage(spot.Centre));
                 return CityMapView.Centre + rotation * new Vector3(at.x, at.y, 0f);
             }
             var western = city.Spots.Single(spot => spot.Label == "Western University");

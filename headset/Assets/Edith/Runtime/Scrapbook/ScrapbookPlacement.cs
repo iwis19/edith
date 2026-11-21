@@ -34,5 +34,7 @@ namespace Edith.Scrapbook
         public const float MapWidth = 0.34f;
         /// The map leans back this far from upright.
         public const float MapLean = 45f;
+        /// A map image is square, and a map panel shows its full width and this share of its height, centred.
+        public const float MapVisibleShare = 0.6f;
     }
 }

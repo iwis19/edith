@@ -37,18 +37,17 @@ namespace Edith.Scrapbook
 
         public bool WorldFailed => world == null && failed.Contains(World);
 
-        /// The street map of `city`, or null while it has not arrived. Asks `client` for it when it has not been
-        /// asked yet.
-        public Texture AreaImage(City city, ScrapbookClient client, CancellationTokenSource session)
+        /// The map of `frame`, or null while it has not arrived. Asks `client` for it when it has not been asked yet.
+        public Texture AreaImage(MapFrame frame, ScrapbookClient client, CancellationTokenSource session)
         {
-            var key = Key(city);
+            var key = Key(frame);
             if (areas.TryGet(key, out var area)) return area;
             if (Wanted(key))
-                Load(key, () => client.AreaMap(city.MapCentre, city.Zoom, session.Token), session, texture => areas.Put(key, texture));
+                Load(key, () => client.AreaMap(frame.Centre, frame.Zoom, session.Token), session, texture => areas.Put(key, texture));
             return null;
         }
 
-        public bool AreaFailed(City city) => failed.Contains(Key(city));
+        public bool AreaFailed(MapFrame frame) => failed.Contains(Key(frame));
 
         /// Drops the street maps. The world image stays.
         public void Clear() => areas.Clear();
@@ -56,7 +55,7 @@ namespace Edith.Scrapbook
         bool Wanted(int key) => !loading.Contains(key) && !failed.Contains(key);
 
         // Odd, so no city has the world image's key.
-        static int Key(City city) => HashCode.Combine(city.MapCentre.Lat, city.MapCentre.Lon, city.Zoom) | 1;
+        static int Key(MapFrame frame) => HashCode.Combine(frame.Centre.Lat, frame.Centre.Lon, frame.Zoom) | 1;
 
         async void Load(int key, Func<Task<byte[]>> fetch, CancellationTokenSource session, Action<Texture2D> keep)
         {

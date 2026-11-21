@@ -97,7 +97,7 @@ namespace Edith.Scrapbook
                 pin.Backing.gameObject.SetActive(used);
                 if (!used) continue;
                 var spot = city.Spots[i];
-                var at = Vector2.ClampMagnitude(OnDisc(city.OnMap(spot)), PinReach);
+                var at = Vector2.ClampMagnitude(OnDisc(city.Frame.OnImage(spot.Centre)), PinReach);
                 pin.Head.transform.localPosition = new Vector3(at.x, at.y, -HeadHeight);
                 pin.Stalk.transform.localPosition = new Vector3(at.x, at.y, -HeadHeight * 0.5f);
                 pin.Label.text = $"{spot.Label} {spot.Count}";

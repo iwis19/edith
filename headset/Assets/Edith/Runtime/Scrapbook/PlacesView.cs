@@ -98,8 +98,8 @@ namespace Edith.Scrapbook
                 map.Hide();
                 return;
             }
-            var area = client != null ? images.AreaImage(city, client, session) : null;
-            map.Draw(pose.MapScale, shown * pose.MapAlpha, area, browse.Spot, Note(area != null, images.AreaFailed(city)));
+            var area = client != null ? images.AreaImage(city.Frame, client, session) : null;
+            map.Draw(pose.MapScale, shown * pose.MapAlpha, area, browse.Spot, Note(area != null, images.AreaFailed(city.Frame)));
         }
 
         /// Turns the globe with a hand that has moved by `metres` in the deck's frame.
