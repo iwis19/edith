@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Edith.Scrapbook
 {
-    /// One collected memory, as its card shows it.
+    /// One collected memory.
     public sealed class Memory
     {
         public readonly int Id;
@@ -32,11 +32,6 @@ namespace Edith.Scrapbook
             Date = date.Date;
             Point = point;
         }
-
-        /// The card's place line, "Spot, City", or null without a place.
-        public string PlaceLine => Place == null ? null : Atlas.Line(Place);
-
-        public static string Day(DateTime date) => date.ToString("M/d", CultureInfo.InvariantCulture);
     }
 
     /// The body of GET /memories.

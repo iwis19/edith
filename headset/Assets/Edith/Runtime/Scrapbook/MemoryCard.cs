@@ -1,40 +1,29 @@
-using Edith.Look;
+using Edith.Snapshots;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace Edith.Scrapbook
 {
-    /// One card of the deck: the photo at its own shape inside a thin border of the rarity's colour, with the rarity's
-    /// name in a box on the photo's top-right corner, and under it the fun fact and a line with the place on the left
-    /// and the day on the right, like a snapshot's card. The name shows only when there is no fact. Also draws the
-    /// Scrapbook's notices, which are cards with no photo.
+    /// One card of the deck, drawn like a snapshot's card: the photo at its own shape, a thin border in the rarity's
+    /// colour, and the fun fact under it in the same colour. The name stands in when there is no fact. A memory's
+    /// text is already typed out. Also draws the Scrapbook's notices, which are text with no photo.
     public sealed class MemoryCard
     {
-        // Four canvas units per millimetre, so the font is rasterised sharply enough at this size.
-        const float UnitsPerMetre = 4000f;
-        const float Width = DeckLayout.CardWidth * UnitsPerMetre;
-        const float FrameHeight = 600f, TextHeight = 240f;
-        const float FrameInset = 8f, Gap = 12f;
-        const int NameSize = 44, FactSize = 30, CaptionSize = 28, BadgeSize = 22;
-        const float NameHeight = 52f, FactLineHeight = 35f, FactMaxHeight = 4f * FactLineHeight, CaptionHeight = 36f;
-        // The day, "11/21", takes this much of the last line, and the place the rest.
-        const float DayWidth = 110f;
-        // The badge sits 4 mm in from the photo's corner.
-        const float BadgeInset = 16f, BadgeHeight = 36f, BadgePad = 12f;
-        static readonly Color BadgeInk = new Color(0.04f, 0.05f, 0.07f, 1f);
+        // The canvas is laid out in millimetres, as a snapshot's is.
+        const float UnitsPerMetre = 1000f;
+        // The photo is fitted into this room, in millimetres.
+        static readonly Vector2 Room = new Vector2(DeckLayout.CardWidth, DeckLayout.CardHeight) * UnitsPerMetre;
+        const int NoticeTitleSize = 44, NoticeBodySize = 30;
+        static readonly Color EmptyPhoto = new Color(1f, 1f, 1f, 0.35f);
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
-        static readonly Color Quiet = new Color(0.78f, 0.8f, 0.85f, 0.8f);
         static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
-        /// The frame of a memory that has no rarity, and of a notice.
-        public static readonly Color Untiered = new Color(0.95f, 0.95f, 0.97f, 0.35f);
 
         RectTransform root;
         Canvas canvas;
-        CanvasGroup group, textGroup;
-        Image frame;
+        CanvasGroup group;
         RawImage photo;
-        Image badge;
-        Text name, fact, place, day, badgeLabel;
+        CardView view;
+        Text notice;
         bool fitted;
 
         public static MemoryCard Build(Transform parent, Font font, Material material)
@@ -43,97 +32,58 @@ namespace Edith.Scrapbook
             var go = new GameObject("Card", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
             card.root = (RectTransform)go.transform;
             card.root.SetParent(parent, false);
-            card.root.sizeDelta = new Vector2(Width, FrameHeight + TextHeight);
+            card.root.sizeDelta = Room;
             card.canvas = go.GetComponent<Canvas>();
             card.canvas.renderMode = RenderMode.WorldSpace;
-            card.group = Passive(go.GetComponent<CanvasGroup>());
+            card.group = go.GetComponent<CanvasGroup>();
+            card.group.interactable = false;
+            card.group.blocksRaycasts = false;
 
-            card.frame = New<Image>("Frame", card.root, material);
-            card.photo = New<RawImage>("Photo", card.frame.rectTransform, material);
-            card.badge = New<Image>("BadgeBox", card.photo.rectTransform, material);
-            var corner = new Vector2(1f, 1f);
-            card.badge.rectTransform.anchorMin = card.badge.rectTransform.anchorMax = card.badge.rectTransform.pivot = corner;
-            card.badge.rectTransform.anchoredPosition = new Vector2(-BadgeInset, -BadgeInset);
-            card.badgeLabel = New<Text>("Badge", card.badge.rectTransform, material);
-            card.badgeLabel.font = font;
-            card.badgeLabel.fontSize = BadgeSize;
-            card.badgeLabel.fontStyle = FontStyle.Bold;
-            card.badgeLabel.color = BadgeInk;
-            card.badgeLabel.alignment = TextAnchor.MiddleCenter;
-            card.badgeLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
-            card.badgeLabel.verticalOverflow = VerticalWrapMode.Overflow;
-
-            var text = new GameObject("Text", typeof(RectTransform), typeof(CanvasGroup));
-            var column = (RectTransform)text.transform;
-            column.SetParent(card.root, false);
-            column.pivot = new Vector2(0.5f, 1f);
-            Anchor(column, new Vector2(Width, TextHeight), new Vector2(0f, TextHeight * 0.5f - FrameHeight * 0.5f - Gap));
-            card.textGroup = Passive(text.GetComponent<CanvasGroup>());
-            card.name = Label("Name", column, font, material, NameSize, FontStyle.Bold, NameHeight, TextAnchor.UpperLeft);
-            card.name.horizontalOverflow = HorizontalWrapMode.Overflow;
-            card.fact = Label("Fact", column, font, material, FactSize, FontStyle.Normal, FactMaxHeight, TextAnchor.UpperLeft);
-            card.fact.verticalOverflow = VerticalWrapMode.Truncate;
-            card.place = Label("Place", column, font, material, CaptionSize, FontStyle.Normal, CaptionHeight, TextAnchor.UpperLeft);
-            card.place.rectTransform.sizeDelta = new Vector2(Width - DayWidth, CaptionHeight);
-            card.place.verticalOverflow = VerticalWrapMode.Truncate;
-            card.place.color = Quiet;
-            card.day = Label("Day", column, font, material, CaptionSize, FontStyle.Normal, CaptionHeight, TextAnchor.UpperRight);
-            card.day.rectTransform.sizeDelta = new Vector2(DayWidth, CaptionHeight);
-            card.day.color = Quiet;
+            var image = new GameObject("Photo", typeof(RectTransform), typeof(RawImage));
+            var rect = (RectTransform)image.transform;
+            rect.SetParent(card.root, false);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+            card.photo = image.GetComponent<RawImage>();
+            card.photo.raycastTarget = false;
+            card.photo.material = material;
+            card.view = CardView.Build(rect, Room, DeckLayout.Ahead, font, material);
+            card.notice = NewNotice(card.root, font, material);
             card.SetPhoto(null);
             card.Hide();
             return card;
         }
 
-        public void Show(Memory memory) => Show(string.IsNullOrEmpty(memory.Fact) ? memory.Name : null, memory.Fact, memory.PlaceLine,
-            Memory.Day(memory.Date), memory.Tier is Rarity tier ? RarityColors.For(tier) : Untiered, memory.Tier);
-
-        /// `where` and `when` share the card's last line, and a null `tier` shows no badge.
-        public void Show(string title, string body, string where, string when, Color frameColor, Rarity? tier = null)
+        /// Shows `memory`: its fact, or its name when it has none.
+        public void Show(Memory memory)
         {
-            frame.color = frameColor;
-            name.text = title ?? "";
-            fact.text = body ?? "";
-            place.text = where ?? "";
-            day.text = when ?? "";
-            badge.gameObject.SetActive(tier != null);
-            if (tier is Rarity badged)
-            {
-                badge.color = RarityColors.For(badged);
-                badgeLabel.text = badged.ToString().ToUpperInvariant();
-                var size = new Vector2(badgeLabel.preferredWidth + 2f * BadgePad, BadgeHeight);
-                badge.rectTransform.sizeDelta = size;
-                badgeLabel.rectTransform.sizeDelta = size;
-            }
-            // The fact sits under the title when there is one, and the last line follows the fact, however many lines
-            // it wraps to.
-            var titleHeight = string.IsNullOrEmpty(title) ? 0f : NameHeight;
-            fact.rectTransform.anchoredPosition = new Vector2(0f, -titleHeight);
-            var factHeight = string.IsNullOrEmpty(body) ? 0f : Mathf.Clamp(fact.preferredHeight, FactLineHeight, FactMaxHeight);
-            var line = new Vector2(0f, -(titleHeight + factHeight + (factHeight > 0f ? Gap : 0f)));
-            place.rectTransform.anchoredPosition = day.rectTransform.anchoredPosition = line;
+            photo.gameObject.SetActive(true);
+            notice.gameObject.SetActive(false);
+            view.Show(memory.Tier, string.IsNullOrEmpty(memory.Fact) ? memory.Name : memory.Fact);
         }
 
-        /// Shows `texture` at its own shape, as large as fits the card, with the border hugging it. Null hides the
-        /// photo and its border until there is one.
+        /// Shows `title` and `body` as plain text with no photo.
+        public void Show(string title, string body)
+        {
+            photo.gameObject.SetActive(false);
+            notice.gameObject.SetActive(true);
+            notice.text = $"<size={NoticeTitleSize}><b>{title}</b></size>" + (string.IsNullOrEmpty(body) ? "" : $"\n<size={NoticeBodySize}>{body}</size>");
+        }
+
+        /// Shows `texture` at its own shape, as large as fits the card. Null shows a plain panel until there is one.
         public void SetPhoto(Texture texture)
         {
             if (fitted && photo.texture == texture) return;
             fitted = true;
             photo.texture = texture;
-            frame.gameObject.SetActive(texture != null);
-            var room = new Vector2(Width, FrameHeight) - 2f * FrameInset * Vector2.one;
-            var size = room;
+            photo.color = texture == null ? EmptyPhoto : Color.white;
+            var size = Room;
             if (texture != null && texture.width > 0 && texture.height > 0)
             {
                 var shape = texture.width / (float)texture.height;
-                size = shape > room.x / room.y ? new Vector2(room.x, room.x / shape) : new Vector2(room.y * shape, room.y);
+                size = shape > Room.x / Room.y ? new Vector2(Room.x, Room.x / shape) : new Vector2(Room.y * shape, Room.y);
             }
-            Anchor(photo.rectTransform, size, Vector2.zero);
-            var rect = frame.rectTransform;
-            rect.sizeDelta = size + 2f * FrameInset * Vector2.one;
-            // The frame grows up from a fixed bottom edge, so the text under it stays put whatever the photo's shape.
-            rect.anchoredPosition = new Vector2(0f, TextHeight * 0.5f - FrameHeight * 0.5f + rect.sizeDelta.y * 0.5f);
+            photo.rectTransform.sizeDelta = size;
+            view.Fit(size);
         }
 
         /// `pose` is in the frame of the card's parent. `fade` scales the whole card's opacity.
@@ -144,7 +94,7 @@ namespace Edith.Scrapbook
             root.localRotation = pose.Rotation;
             root.localScale = Vector3.one * (pose.Scale / UnitsPerMetre);
             group.alpha = pose.Alpha * fade;
-            textGroup.alpha = pose.TextAlpha;
+            view.TextAlpha = pose.TextAlpha;
             // Cards overlap as they fold, and the one nearer the middle is drawn over its neighbour.
             canvas.sortingOrder = -Mathf.RoundToInt(Mathf.Abs(pose.Position.x) * 1000f);
         }
@@ -155,54 +105,36 @@ namespace Edith.Scrapbook
 
         public Texture Photo => photo.texture;
 
-        /// True when the line from `eye` through `through` crosses the card's photo frame.
-        public bool InLine(Vector3 eye, Vector3 through)
+        /// True when the line from `eye` through `through` crosses the card's photo, or passes within `margin` metres of it.
+        public bool InLine(Vector3 eye, Vector3 through, float margin = 0f)
         {
-            var rect = frame.rectTransform;
-            return SightLine.Hits(eye, through, rect.position, rect.rotation, rect.sizeDelta * rect.lossyScale.x);
+            var rect = photo.rectTransform;
+            return SightLine.Hits(eye, through, rect.position, rect.rotation, rect.sizeDelta * rect.lossyScale.x, margin);
         }
 
-        static CanvasGroup Passive(CanvasGroup canvasGroup)
-        {
-            canvasGroup.interactable = false;
-            canvasGroup.blocksRaycasts = false;
-            return canvasGroup;
-        }
+        /// The photo's centre in the room.
+        public Vector3 Centre => photo.rectTransform.position;
 
-        static T New<T>(string name, RectTransform parent, Material material) where T : MaskableGraphic
+        static Text NewNotice(RectTransform parent, Font font, Material material)
         {
-            var graphic = new GameObject(name, typeof(RectTransform), typeof(T)).GetComponent<T>();
-            graphic.raycastTarget = false;
-            graphic.material = material;
-            graphic.rectTransform.SetParent(parent, false);
-            return graphic;
-        }
-
-        static Text Label(string name, RectTransform column, Font font, Material material, int fontSize, FontStyle style, float height, TextAnchor alignment)
-        {
-            var text = New<Text>(name, column, material);
+            var column = new GameObject("Notice", typeof(RectTransform)).GetComponent<RectTransform>();
+            column.SetParent(parent, false);
+            column.localScale = Vector3.one * (CardView.ScaleAt(DeckLayout.Ahead) / CardView.TextUnitsPerMm);
+            var text = new GameObject("Message", typeof(RectTransform), typeof(Text), typeof(UnityEngine.UI.Shadow)).GetComponent<Text>();
+            text.rectTransform.SetParent(column, false);
+            text.rectTransform.sizeDelta = new Vector2(Room.x * CardView.TextUnitsPerMm / CardView.ScaleAt(DeckLayout.Ahead), 400f);
             text.font = font;
-            text.fontSize = fontSize;
-            text.fontStyle = style;
+            text.supportRichText = true;
             text.color = Bright;
-            text.alignment = alignment;
+            text.alignment = TextAnchor.MiddleCenter;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
-            var shadow = text.gameObject.AddComponent<UnityEngine.UI.Shadow>();
+            text.raycastTarget = false;
+            text.material = material;
+            var shadow = text.GetComponent<UnityEngine.UI.Shadow>();
             shadow.effectColor = ShadowColor;
             shadow.effectDistance = new Vector2(1.5f, -1.5f);
-            var rect = text.rectTransform;
-            var right = alignment == TextAnchor.UpperRight;
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(right ? 1f : 0f, 1f);
-            rect.sizeDelta = new Vector2(Width, height);
-            rect.anchoredPosition = Vector2.zero;
             return text;
-        }
-
-        static void Anchor(RectTransform rect, Vector2 size, Vector2 position)
-        {
-            rect.sizeDelta = size;
-            rect.anchoredPosition = position;
         }
     }
 }

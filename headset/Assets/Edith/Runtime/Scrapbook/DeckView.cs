@@ -63,8 +63,7 @@ namespace Edith.Scrapbook
         public void ShowNotice(string title, string body, float fade = 1f)
         {
             Hide();
-            cards[0].Show(title, body, null, null, MemoryCard.Untiered);
-            cards[0].SetPhoto(null);
+            cards[0].Show(title, body);
             cards[0].Place(DeckLayout.Pose(0f), fade);
         }
 
