@@ -53,6 +53,46 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_whole_answer_as_the_live_server_sends_it()
+        {
+            byte[] first = { 1, 0, 2, 0 }, second = { 3, 0 };
+            string Audio(byte[] pcm) =>
+                "{\"inlineData\":{\"mimeType\":\"audio/pcm;rate=24000\",\"data\":\"" + Convert.ToBase64String(pcm) + "\"}}";
+            var frames = new[]
+            {
+                "{\"setupComplete\":{}}",
+                "{\"sessionResumptionUpdate\":{\"newHandle\":\"CihwYXN0LWhhbmRsZQ\",\"resumable\":true}}",
+                "{}",
+                "{\"serverContent\":{\"modelTurn\":{\"parts\":[" + Audio(first) + "]},\"outputTranscription\":{\"text\":\"It's a\"}}}",
+                "{}",
+                "{\"serverContent\":{\"modelTurn\":{\"parts\":[" + Audio(second) + "]}}}",
+                "{\"serverContent\":{\"outputTranscription\":{\"text\":\" fern.\"}}}",
+                "{\"serverContent\":{\"generationComplete\":true}}",
+                "{\"serverContent\":{\"turnComplete\":true},\"usageMetadata\":{\"promptTokenCount\":412,\"responseTokenCount\":61," +
+                "\"totalTokenCount\":473,\"promptTokensDetails\":[{\"modality\":\"AUDIO\",\"tokenCount\":380}]," +
+                "\"responseTokensDetails\":[{\"modality\":\"AUDIO\",\"tokenCount\":61}]}}",
+            };
+
+            var messages = Array.ConvertAll(frames, LiveMessage.Parse);
+            CollectionAssert.AreEqual(new[] { true, false, false, false, false, false, false, false, false },
+                Array.ConvertAll(messages, m => m.SetupComplete), "setupComplete");
+            CollectionAssert.AreEqual(new[] { false, false, false, false, false, false, false, false, true },
+                Array.ConvertAll(messages, m => m.TurnComplete), "turnComplete");
+            var audio = new System.Collections.Generic.List<byte>();
+            var said = "";
+            foreach (var m in messages)
+            {
+                foreach (var pcm in m.Audio) audio.AddRange(pcm);
+                said += m.OutputText;
+                Assert.AreEqual("", m.InputText);
+                Assert.IsFalse(m.Interrupted);
+                Assert.IsFalse(m.GoAway);
+            }
+            CollectionAssert.AreEqual(new byte[] { 1, 0, 2, 0, 3, 0 }, audio);
+            Assert.AreEqual("It's a fern.", said);
+        }
+
+        [Test]
         public void Garbage_text_parts_and_bad_base64_are_ignored()
         {
             Assert.AreEqual(0, LiveMessage.Parse("not json").Audio.Count);
