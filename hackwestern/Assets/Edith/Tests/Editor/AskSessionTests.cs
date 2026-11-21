@@ -135,6 +135,24 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_failure_after_the_whole_answer_arrived_lets_it_play_out()
+        {
+            Answered(at: 3f);
+            session.Fail(AskProblem.Dropped, 3.5f);
+            Assert.AreEqual(AskPhase.Answering, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+            session.Tick(4f, speechLeft: 0);
+            Assert.AreEqual(AskPhase.Fading, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+
+            session.Tap(20f);
+            session.Ready(21f);
+            session.AnswerAudio(22f);
+            session.Fail(AskProblem.Dropped, 23f);
+            Assert.AreEqual(AskProblem.Dropped, session.Problem, "a failure before the turn ended still fails");
+        }
+
+        [Test]
         public void Dismiss_goes_straight_to_idle_from_anywhere()
         {
             session.Tap(0f);

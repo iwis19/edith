@@ -72,10 +72,11 @@ namespace Edith.Ask
             else Fail(AskProblem.Dropped, now);
         }
 
-        /// Ends the question under way with `problem`. Ignored when none is under way.
+        /// Ends the question under way with `problem`. Ignored when none is under way, and once the whole answer has
+        /// arrived it lets the answer play out instead.
         public void Fail(AskProblem problem, float now)
         {
-            if (!Busy) return;
+            if (!Busy || (Phase == AskPhase.Answering && turnComplete)) return;
             Problem = problem;
             Fade(now, ProblemLingerSeconds);
         }
