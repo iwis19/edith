@@ -28,12 +28,9 @@ class Accepted(_Event):
 
 
 class Name(_Event):
-    """A pending name is the text written so far, sent so the card can show it early; the final one follows."""
-
     type: Literal["name"] = "name"
     name: str
     confidence: float
-    pending: bool = False
 
 
 class Fact(_Event):
