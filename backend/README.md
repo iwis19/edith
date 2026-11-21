@@ -98,6 +98,7 @@ The response is newline-delimited JSON (`application/x-ndjson`), one event per l
 | `name` | `name`, `confidence`, `pending`: while `true`, `name` is the text written so far and `confidence` is 0; the final name follows with `pending: false` |
 | `fact` | `text`, `sources` (`title`, `url`) |
 | `rarity` | `tier`: `common`, `uncommon`, `rare`, `epic`, `legendary` or `mythic` |
+| `hunt` | A Look ticked a hunt target: `index`, `text`, `found` (targets found so far), `total` (5), `status` (`active` or `found_all`). Only sent during a hunt, see [Bounty](#bounty) |
 | `done` | none |
 | `error` | `code` (`timeout` or `agent_failed`), `message` |
 
@@ -144,6 +145,7 @@ The response is `{"scan_ref", "ms", "picks"}`. `picks` holds 0 to 3 items, most 
 | `hook` | One line saying why it is worth a look, or something to do with it |
 | `point` | `[x, y]`: one spot on the thing, where its pin sits |
 | `box` | `[x0, y0, x1, y1]`: a loose box around the whole thing, with `point` inside it |
+| `target` | The `index` of the open hunt target the thing clearly fits, or `null`. Always `null` outside a hunt |
 
 Coordinates are fractions of the upright image from 0 to 1, with the origin at the top left and y running down.
 
@@ -167,6 +169,8 @@ The response is `{"url", "setup", "model"}`:
 - `setup`: the JSON text the headset sends as its first message. It sets the model, spoken English, the voice, transcription of both sides (so the card can show the spoken answer) and EDITH's persona. With `LIVE_SEARCH=true` it adds the `googleSearch` tool and a persona line that limits searching to questions that need current or factual web information. The headset reads the sources from `serverContent.groundingMetadata.groundingChunks[].web` and shows up to three site names under the answer.
 - `model`: the Live model ID.
 
+The setup always declares two function tools, `start_hunt` (optional `interests`: an array of strings) and `stop_hunt` (no arguments), and the persona tells the model to call them when the person asks for a scavenger hunt or asks to stop one. The headset runs a call by sending `POST /hunt` (with `{"interests": [...]}` when given) or `POST /hunt/stop`, and answers the call with the response JSON as the `toolResponse` (`{"functionResponses": [{"id": <the call's id>, "name": <the call's name>, "response": <the HuntState>}]}`). An error body from those routes goes back the same way. While the profile has an active hunt, the persona also lists the open targets, the found ones and the time left, so "what's left?" is answered from the session.
+
 | Status | `error.code` | Meaning |
 | --- | --- | --- |
 | 503 | `ask_unavailable` | `GEMINI_API_KEY` is not set |
@@ -179,6 +183,65 @@ uv run python -m tools.search_latency --mode both --runs 5
 ```
 
 It sends each question as realtime text and prints the milliseconds to the first answer audio, the end of the turn, and whether grounding came back.
+
+### Bounty
+
+A scavenger hunt: 5 targets on one clock (`HUNT_SECONDS`, 300 by default), ticked off by Looks. The backend holds each profile's active hunt, so the headset never sends targets; it starts and stops the hunt and reads each find from the `hunt` event on a Look. A profile has at most one active hunt, kept in process memory and written through to Postgres (`hunts` and `hunt_targets`), so a restart picks a running hunt back up. Without a database the hunt still runs and `GET /hunts` answers 503 `db_unavailable`.
+
+A hunt has one of four statuses, and `timeout` is worked out from `ends_at` and the clock, never stored:
+
+| `status` | Meaning |
+| --- | --- |
+| `active` | Running |
+| `found_all` | All 5 found |
+| `stopped` | Ended by `POST /hunt/stop`, or replaced by a new `POST /hunt` |
+| `timeout` | `ends_at` passed first |
+
+Every route below needs the same two headers as the others. `HuntState` is:
+
+```json
+{
+  "hunt_ref": "32 hex characters",
+  "status": "active",
+  "started_at": "2026-11-21T10:00:00Z",
+  "ends_at": "2026-11-21T10:05:00Z",
+  "ended_at": null,
+  "remaining_s": 300,
+  "place": "Waterloo, Ontario, Canada",
+  "found": 0,
+  "targets": [
+    {"index": 0, "text": "something red", "tier": null, "found": false, "found_at": null, "look_ref": null, "memory_id": null},
+    {"index": 3, "text": "something Uncommon or better", "tier": "uncommon", "found": false, "found_at": null, "look_ref": null, "memory_id": null}
+  ]
+}
+```
+
+`remaining_s` is 0 once the hunt is over. `ended_at` is set for `found_all` and `stopped`, and is `null` for `timeout`; the time taken for a timeout is `ends_at - started_at`. `place` is the phone's place name when there was one at the start. `tier` is set only on a rarity target, which any Look of that tier or better ticks. `look_ref` is the Look that found the target. `memory_id` is filled only by `GET /hunts`, and only once that Look was collected.
+
+#### `POST /hunt`
+
+Starts a hunt and returns its `HuntState`. The body is optional JSON `{"interests": ["bikes", "birds"]}`. A hunt still running for the profile ends as `stopped`. One fast Gemini call (`HUNT_MODEL`, default `GEMINI_CARD_MODEL`) writes the targets from the phone's place and the interests: 3 or 4 themes a photo of one object can show, and 1 or 2 rarity targets of tier `uncommon` or `rare` (never higher). The reply is repaired to exactly 5 distinct targets. Without a Gemini key, or when the call fails or takes longer than `HUNT_TARGETS_TIMEOUT_S` (4 s), the targets come from a built-in pool, so a hunt always starts.
+
+#### `GET /hunt`
+
+The active hunt's `HuntState`, or 404 `no_hunt` when there is none, including after a timeout.
+
+#### `POST /hunt/stop`
+
+Ends the active hunt as `stopped` and returns its final `HuntState`, or 404 `no_hunt`.
+
+#### `GET /hunts`
+
+`?limit=` (1 to 200, default 50). Returns `{"hunts": [HuntState, ...]}`, newest first, past and current, with `memory_id` on each found target whose Look was collected through `/collect`. 503 `db_unavailable` without a database.
+
+#### Looks and scans during a hunt
+
+While a hunt is active, `/look` and `/scan` pass its open targets to the model, and the headset sends nothing extra.
+
+- The naming call is asked for a sixth line, `HUNT`, with the number of the open target the framed object clearly fits. The first name still goes out as soon as it is written.
+- Once the final name and the rarity are known, the backend ticks at most one target for the Look and streams a `hunt` event before the `fact`. The pick of the card call counts if it names an open theme target. Otherwise the lowest open rarity target whose tier the Look's rarity meets or beats is ticked. A Look whose name starts with "Maybe", or whose `confidence` is below 0.5 (`MIN_TICK_CONFIDENCE`), ticks nothing. When the 5th target is found the event carries `status: "found_all"` and the hunt is over.
+- `/scan` asks the model for an optional `target` per pick, returned on the pick as the target's `index`.
+- A hunt that has timed out or ended sends no targets and ticks nothing.
 
 ### Phone location
 
@@ -266,6 +329,9 @@ Scan settings:
 | `SCAN_BACKUP_AFTER_S` | `2` | How long the Gemini call runs alone before the backup is asked too; 0 turns the backup off |
 | `SCAN_THINKING_LEVEL` | `minimal` | The model's thinking level; more thinking makes pins later |
 | `SCAN_TIMEOUT_S` | `7` | The time one scan may take. The headset waits 8 s |
+| `HUNT_SECONDS` | `300` | The length of a Bounty hunt's clock |
+| `HUNT_MODEL` | empty | The Gemini model that writes a hunt's targets. Empty uses `GEMINI_CARD_MODEL` |
+| `HUNT_TARGETS_TIMEOUT_S` | `4` | How long the target call may take before the built-in targets are used |
 
 Kind matching settings:
 
