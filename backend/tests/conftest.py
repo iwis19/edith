@@ -80,6 +80,9 @@ class RecordingStore:
     async def save_told_fact(self, profile_id, told):
         self.told.setdefault(profile_id, {})[told.fact] = told
 
+    async def load_recent_places(self):
+        return [(r.profile_id, r.photo_place, r.captured_at.timestamp()) for r in self.records if r.photo_place]
+
 
 @pytest.fixture
 def settings() -> Settings:

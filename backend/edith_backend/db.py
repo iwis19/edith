@@ -35,6 +35,7 @@ class LookRecord:
     duration_ms: int
     kind: str | None = None
     place: str | None = None
+    photo_place: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,8 @@ class ToldFact:
 
 # How many told facts per profile are kept, in memory and in the table.
 TOLD_FACTS_KEPT = 50
+# How far back the places photos showed are loaded at startup, the card agent's place window.
+PLACE_WINDOW_HOURS = 6
 
 
 class StoreUnavailable(Exception):
@@ -86,6 +89,10 @@ class Store(Protocol):
         ...
     async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
         """Keeps the fact with its kind embedding. A fact told again only gets the new `told_at`. Never raises."""
+        ...
+    async def load_recent_places(self) -> list[tuple[UUID, str, float]]:
+        """(profile_id, place, epoch seconds) for each Look whose photo showed a place within the place window, oldest
+        first. Empty when there are none or the query failed."""
         ...
 
 
@@ -114,6 +121,9 @@ class DisabledStore:
         raise StoreUnavailable("There is no database.")
 
     async def load_told_facts(self, profile_id: UUID) -> list[ToldFact]:
+        return []
+
+    async def load_recent_places(self) -> list[tuple[UUID, str, float]]:
         return []
 
     async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
@@ -168,12 +178,13 @@ class PostgresStore:
                 )
                 await conn.execute(
                     """insert into looks (id, profile_id, client_look_id, source, captured_at, width, height, status,
-                           name, confidence, fact, fact_sources, rarity, duration_ms, kind, place)
-                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                           name, confidence, fact, fact_sources, rarity, duration_ms, kind, place, photo_place)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         record.look_ref, record.profile_id, record.client_look_id, record.source, record.captured_at,
                         record.width, record.height, record.status, record.name, record.confidence, record.fact,
                         Jsonb(record.fact_sources), record.rarity, record.duration_ms, record.kind, record.place,
+                        record.photo_place,
                     ),
                 )
         except Exception:
@@ -245,6 +256,21 @@ class PostgresStore:
             log.exception("failed to load told facts")
             return []
         return [ToldFact(kind, fact, _parse_vector(vector), float(at)) for kind, fact, vector, at in reversed(rows)]
+
+    async def load_recent_places(self) -> list[tuple[UUID, str, float]]:
+        try:
+            async with self._pool.connection(timeout=30) as conn:
+                cursor = await conn.execute(
+                    """select profile_id, photo_place, extract(epoch from created_at) from looks
+                       where photo_place is not null and created_at > now() - make_interval(hours => %s)
+                       order by created_at, id""",
+                    (PLACE_WINDOW_HOURS,),
+                )
+                rows = await cursor.fetchall()
+        except Exception:
+            log.exception("failed to load recent places")
+            return []
+        return [(profile_id, place, float(at)) for profile_id, place, at in rows]
 
     async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
         try:

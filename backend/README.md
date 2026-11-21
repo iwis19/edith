@@ -25,9 +25,9 @@ Gemini Flash-Lite models measured on the Card agent's own prompts, with 5 headse
 
 The card shows the fact, so name plus fact is the time that counts. On the same photos `openai` gave the final name in about 0.6 to 1.3 s and the fact by about 1.6 to 2.5 s.
 
-When the phone has shared a position within the last 30 minutes (see [Phone location](#phone-location)), the naming call is also told the place and the nearest named sights, in place of the recent photos' places. The Look's `kind` and `place` are recorded with it and copied into its memory, with the phone's place preferred over the photo's guess. They are not sent in the stream.
+When the phone has shared a position within the last 30 minutes (see [Phone location](#phone-location)), the naming call is also told the place and the nearest named sights, beside the recent photos' places. The Look's `kind`, `place` and `photo_place` (the place the photo itself showed) are recorded with it and copied into its memory, with the phone's place preferred over the photo's guess. They are not sent in the stream.
 
-Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The places seen are kept per profile in process memory for 6 h and are lost on restart. The last 50 facts told to each profile are kept in memory too, and also in the `told_facts` table when there is a database, so they survive a restart.
+Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The places photos showed are kept per profile for 6 h. With a database they are loaded back from `looks.photo_place` at startup, so they survive a restart. The last 50 facts told to each profile are kept in memory too, and also in the `told_facts` table when there is a database, so they survive a restart.
 
 ### Model trade-offs
 
@@ -321,7 +321,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 
 1. Create a Railway service from this repository with the root directory set to `backend`. Railway builds the `Dockerfile`.
 2. Set `DATABASE_URL`, `DEVICE_TOKEN` and the key for `CARD_PROVIDER` (`OPENAI_API_KEY` by default, or `GEMINI_API_KEY` with `CARD_PROVIDER=gemini`) on the service. The image sets `PUBLIC_SERVER=1`, so the app refuses to start without `DEVICE_TOKEN`.
-3. Keep one replica: the places seen, the scan hooks and the phone's location are held in process memory.
+3. Keep one replica: the scan hooks and the phone's location are held in process memory, and each replica keeps its own copy of the places seen.
 
 ## Layout
 

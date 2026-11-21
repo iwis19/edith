@@ -90,6 +90,8 @@ class LookDetails(BaseModel):
 
     kind: str
     place: str | None = None
+    # The place the photo itself showed, kept for later Looks. None when the model only copied the hint it was given.
+    photo_place: str | None = None
 
 
 StreamedEvent = Name | Fact | RarityEvent

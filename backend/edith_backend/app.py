@@ -154,7 +154,13 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await store.open()
+        # A sleeping database can take seconds to wake, so startup does not wait for the places. Looks before the load
+        # finishes go without the places from before the restart. Only the model agent remembers places.
+        restore = getattr(agent, "restore_places", None)
+        restoring = asyncio.create_task(restore()) if restore else None
         yield
+        if restoring:
+            restoring.cancel()
         if _recording:
             await asyncio.wait(_recording, timeout=10)
         await store.close()
@@ -470,6 +476,7 @@ def _record(
         duration_ms=duration_ms,
         kind=details.kind if details else None,
         place=details.place if details else None,
+        photo_place=details.photo_place if details else None,
     )
 
 

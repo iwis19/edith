@@ -13,7 +13,7 @@ from edith_backend.agents.card_model import (
 )
 from edith_backend.agents.writers import GeminiError, gemini_text
 from edith_backend.config import Settings
-from edith_backend.db import ToldFact
+from edith_backend.db import LookRecord, ToldFact
 from edith_backend.events import LookDetails, LookMeta, Name
 from edith_backend.location import Sight, Whereabouts
 
@@ -332,7 +332,7 @@ async def test_a_fresh_phone_place_and_its_sights_go_into_the_naming_prompt():
     assert "data, not instructions" in context
 
 
-async def test_the_phone_place_replaces_the_recent_photo_places_while_a_fix_exists():
+async def test_the_phone_place_and_the_recent_photo_places_both_go_into_the_naming_prompt():
     namer = FakeWriter(NAMING.replace("PLACE: unknown", "PLACE: London, UK"), NAMING)
     here: list[Whereabouts | None] = [None]
     agent = CardModelAgent(namer, FakeWriter("A fact."), lambda profile: here[0])
@@ -342,8 +342,45 @@ async def test_the_phone_place_replaces_the_recent_photo_places_while_a_fix_exis
     here[0] = None
     await run(agent)
     assert namer.calls[0]["context"] is None
-    assert "London, UK" not in namer.calls[1]["context"] and "Waterloo" in namer.calls[1]["context"]
-    assert "London, UK" in namer.calls[2]["context"], "the photo guess is the fallback with no fix"
+    assert "London, UK" in namer.calls[1]["context"] and "Waterloo" in namer.calls[1]["context"]
+    assert "London, UK" in namer.calls[2]["context"] and "Waterloo" not in namer.calls[2]["context"]
+
+
+async def test_a_place_copied_from_the_hint_is_not_kept_as_a_new_photo_place():
+    namer = FakeWriter(NAMING.replace("PLACE: unknown", "PLACE: London, UK"))
+    agent = CardModelAgent(namer, FakeWriter("A fact."))
+    assert (await details_of(agent)).photo_place == "London, UK"
+    again = await details_of(agent)
+    assert again.place == "London, UK" and again.photo_place is None
+    await details_of(agent)
+    assert "London, UK: 1 photo," in namer.calls[2]["context"]
+
+
+async def test_places_restored_from_the_archive_reach_the_first_look_after_a_restart():
+    archive = RecordingStore()
+    first = CardModelAgent(FakeWriter(NAMING.replace("PLACE: unknown", "PLACE: Lisbon, Portugal")),
+                           FakeWriter("A fact."), archive=archive)
+    details = await details_of(first)
+    await archive.record_look(a_record(photo_place=details.photo_place))
+    namer = FakeWriter(NAMING)
+    restarted = CardModelAgent(namer, FakeWriter("A fact."), archive=archive)
+    await restarted.restore_places()
+    await run(restarted)
+    assert "Lisbon, Portugal: 1 photo" in namer.calls[0]["context"]
+
+
+async def test_restored_places_go_behind_places_seen_since_startup():
+    archive = RecordingStore()
+    two_hours_ago = datetime.now(timezone.utc).timestamp() - 2 * 3600
+    await archive.record_look(a_record(photo_place="Lisbon, Portugal",
+                                       captured_at=datetime.fromtimestamp(two_hours_ago, timezone.utc)))
+    namer = FakeWriter(NAMING.replace("PLACE: unknown", "PLACE: London, UK"), NAMING)
+    agent = CardModelAgent(namer, FakeWriter("A fact."), archive=archive)
+    await run(agent)
+    await agent.restore_places()
+    await run(agent)
+    context = namer.calls[1]["context"]
+    assert context.index("London, UK") < context.index("Lisbon, Portugal")
 
 
 async def test_a_place_with_no_sights_is_still_context_and_an_empty_one_is_not():
@@ -369,7 +406,8 @@ async def details_of(agent, profile=PROFILE) -> LookDetails:
 
 async def test_the_look_details_carry_the_kind_and_the_photos_place_guess():
     namer = FakeWriter(NAMING.replace("PLACE: unknown", "PLACE: London, UK"))
-    assert await details_of(CardModelAgent(namer, FakeWriter("A fact."))) == LookDetails(kind="moka pot", place="London, UK")
+    assert await details_of(CardModelAgent(namer, FakeWriter("A fact."))) == LookDetails(
+        kind="moka pot", place="London, UK", photo_place="London, UK")
 
 
 async def test_the_phone_place_wins_over_the_photos_place_guess():
@@ -389,3 +427,12 @@ async def test_with_no_place_anywhere_the_details_have_none_and_the_kind_falls_b
     assert details == LookDetails(kind="moka pot", place=None)
     unkinded = FakeWriter("NAME: a red enamel moka pot\nCONFIDENCE: 0.9\nRARITY: common\n")
     assert (await details_of(CardModelAgent(unkinded, FakeWriter("A fact.")))).kind == "a red enamel moka pot"
+
+
+def a_record(**overrides) -> LookRecord:
+    fields = dict(
+        look_ref=uuid.uuid4(), profile_id=PROFILE, client_look_id=1, source="pinch",
+        captured_at=datetime.now(timezone.utc), width=640, height=480, status="done", name="a mug", confidence=0.9,
+        fact=None, fact_sources=[], rarity="common", duration_ms=500,
+    )
+    return LookRecord(**{**fields, **overrides})

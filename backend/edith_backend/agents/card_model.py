@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from array import array
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from dataclasses import replace
 from typing import Protocol
@@ -80,7 +80,7 @@ identification. When the name has no brand, stay on the kind of object, its mate
 - Output ONLY the fact. No title, no preamble, no quotation marks, no emoji, no markdown, no "Did you know"."""
 FACT_ASK = "The person framed {name}. Write the fact about it."
 
-# The place the person's phone reports, which stands in for the recent-photos hint while a fresh fix exists.
+# The place the person's phone reports, sent beside the recent-photos hint while a fresh fix exists.
 PHONE_PLACE_NOTE = (
     "{facts} Use this for RARITY and for what is typical here. Name one of these sights only when the photo shows that "
     "sight itself and its name is readable or its design is unmistakable; being near one is no reason to name it. The "
@@ -260,6 +260,10 @@ class PlaceHistory:
     def add(self, profile_id: UUID, place: str) -> None:
         self._seen.append(profile_id, (self._clock(), place))
 
+    def load(self, profile_id: UUID, seen: list[tuple[float, str]]) -> None:
+        """Puts places from the store, as (epoch seconds, place) oldest first, in front of any seen since startup."""
+        self._seen.put(profile_id, seen + self._seen.get(profile_id))
+
     def recent(self, profile_id: UUID) -> list[tuple[str, int, float]]:
         """(place, photos, minutes since the latest), latest first, within the keep window."""
         now = self._clock()
@@ -289,8 +293,8 @@ class CardModelAgent:
         facts: FactHistory | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
-        """`embedder` matches kinds by meaning and `archive` keeps the told facts across restarts; without them the
-        history lives in memory and kinds match by a shared word."""
+        """`embedder` matches kinds by meaning and `archive` keeps the told facts and the places photos showed across
+        restarts; without them the history lives in memory and kinds match by a shared word."""
         self._name_writer = name_writer
         self._fact_writer = fact_writer
         self._whereabouts = whereabouts
@@ -299,16 +303,27 @@ class CardModelAgent:
         self._places = PlaceHistory()
         self._saving: set[asyncio.Task] = set()
 
+    async def restore_places(self) -> None:
+        """Loads every profile's recent photo places from the archive, as at startup."""
+        if self._archive is None:
+            return
+        places: dict[UUID, list[tuple[float, str]]] = defaultdict(list)
+        for profile_id, place, seen_at in await self._archive.load_recent_places():
+            places[profile_id].append((seen_at, place))
+        for profile_id, seen in places.items():
+            self._places.load(profile_id, seen)
+
     async def run(self, image: bytes, meta: LookMeta, profile_id: UUID) -> AsyncIterator[CardEvent]:
         fields: dict[str, str] = {}
         found = self._whereabouts(profile_id)
+        hinted = {place for place, _, _ in self._places.recent(profile_id)}
         # Started as soon as the name is final, while the naming call writes kind, place and rarity. A fact call
         # started blind beside the naming call often picked a different object in the crop.
         fact_task: asyncio.Task[str] | None = None
         warm_task = asyncio.create_task(self._warm(profile_id))
         embed_task: asyncio.Task[array | None] | None = None
         try:
-            async for event in self._name(image, profile_id, fields, found):
+            async for event in self._name(image, fields, self._context(profile_id, found)):
                 if isinstance(event, Name) and not event.pending:
                     fact_task = asyncio.create_task(
                         self._write_fact(image, profile_id, meta, event.name, warm=warm_task))
@@ -318,9 +333,14 @@ class CardModelAgent:
             kind = normalize_kind(fields.get("KIND", "")) or normalize_kind(fields["NAME"])
             # Embedded beside the fact call, after the name has gone out, so it never delays a name.
             embed_task = asyncio.create_task(self._embed(kind))
-            # The phone's place is exact where the photo's guess is a clue, so it wins when there is one.
             photo_place = parse_place(fields.get("PLACE", ""))
-            yield LookDetails(kind=kind, place=(found.place if found else None) or photo_place)
+            # A place already in the context is not kept again: on a crop with no clue, the model copies it onto the
+            # PLACE line despite the prompt.
+            kept = photo_place if photo_place not in hinted else None
+            if kept:
+                self._places.add(profile_id, kept)
+            # The phone's place is exact where the photo's guess is a clue, so it wins when there is one.
+            yield LookDetails(kind=kind, place=(found.place if found else None) or photo_place, photo_place=kept)
             fact = await fact_task
             embedding = await embed_task
             await warm_task
@@ -358,21 +378,20 @@ class CardModelAgent:
         self._save(profile_id, kept)
         yield Fact(text=fact, sources=[])
 
-    async def _name(
-        self, image: bytes, profile_id: UUID, fields: dict[str, str], found: Whereabouts | None
-    ) -> AsyncIterator[CardEvent]:
-        """Yields the name once its CONFIDENCE line is in, then the tier. Fills `fields` with the reply. `found` is the
-        phone's place, which replaces the recent photos' places as the context when there is one."""
-        hinted: set[str] = set()
-        context: str | None = None
+    def _context(self, profile_id: UUID, found: Whereabouts | None) -> str | None:
+        """Where the person is, for RARITY: the phone's place and the places recent photos showed, both when known."""
+        parts = []
         if phone := describe_place(found, PROMPT_SIGHTS):
-            context = PHONE_PLACE_NOTE.format(facts=phone)
-        elif places := self._places.render(profile_id):
-            hinted = {place for place, _, _ in self._places.recent(profile_id)}
-            context = (
+            parts.append(PHONE_PLACE_NOTE.format(facts=phone))
+        if places := self._places.render(profile_id):
+            parts.append(
                 "Places this person's recent photos showed, latest first. They are only a hint of where the person is "
                 f"now, for RARITY; never write them on the PLACE line:\n{places}"
             )
+        return "\n\n".join(parts) or None
+
+    async def _name(self, image: bytes, fields: dict[str, str], context: str | None) -> AsyncIterator[CardEvent]:
+        """Yields the name once its CONFIDENCE line is in, then the tier. Fills `fields` with the reply."""
         parser = LineParser()
         named = rated = False
         shown = ""
@@ -407,10 +426,6 @@ class CardModelAgent:
         if not answered():
             raise ValueError("The naming reply was not in the line format.")
         fields.setdefault("CONFIDENCE", "0.5")
-        # A place already in the context is not kept again: on a crop with no clue, the model copies it onto the
-        # PLACE line despite the prompt.
-        if (place := parse_place(fields.get("PLACE", ""))) and place not in hinted:
-            self._places.add(profile_id, place)
         for event in updates():
             yield event
 

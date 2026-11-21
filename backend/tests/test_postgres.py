@@ -31,14 +31,14 @@ def schema_url():
 
 
 def test_migrate_applies_each_file_once(schema_url):
-    assert migrate(schema_url) == ["001_init", "002_collect", "003_told_facts"]
+    assert migrate(schema_url) == ["001_init", "002_collect", "003_told_facts", "004_photo_place"]
     assert migrate(schema_url) == []
 
 
 def test_concurrent_migrations_take_turns(schema_url):
     with ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _: migrate(schema_url), range(4)))
-    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_told_facts"]]
+    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_told_facts", "004_photo_place"]]
 
 
 async def test_health_checks_share_one_query_while_cached(schema_url):
@@ -170,3 +170,24 @@ async def test_only_the_newest_told_facts_are_kept(schema_url):
         assert [t.fact for t in loaded] == [f"Fact {n}." for n in range(5, TOLD_FACTS_KEPT + 5)]
     finally:
         await store.close()
+
+
+async def test_recent_places_load_only_photo_places_within_the_window_oldest_first(schema_url):
+    migrate(schema_url)
+    store = PostgresStore(schema_url, max_size=2)
+    await store.open()
+    try:
+        profile, other = uuid.uuid4(), uuid.uuid4()
+        for record in (
+            a_look(profile, photo_place="Lisbon, Portugal"),
+            a_look(profile, place="Waterloo, Ontario, Canada"),
+            a_look(profile, photo_place="Porto, Portugal"),
+            a_look(other, photo_place="Paris, France"),
+        ):
+            await store.record_look(record)
+        with psycopg.connect(schema_url, autocommit=True) as conn:
+            conn.execute("update looks set created_at = now() - interval '7 hours' where photo_place = 'Lisbon, Portugal'")
+        places = await store.load_recent_places()
+    finally:
+        await store.close()
+    assert [(p, place) for p, place, _ in places] == [(profile, "Porto, Portugal"), (other, "Paris, France")]
