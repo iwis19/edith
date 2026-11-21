@@ -5,7 +5,8 @@ using UnityEngine.UI;
 namespace Edith.Snapshots
 {
     /// A snapshot's card drawn around its photo: a thin border just outside it that takes the rarity's colour, and
-    /// under it the name and the fact. The photo's rect is in millimetres.
+    /// one line of text under it, "Looking…" until the fact types out in the rarity's colour. The photo's rect is in
+    /// millimetres.
     sealed class CardView
     {
         // Text is laid out in quarter millimetres and scaled down, so the font is rasterised sharply at this size.
@@ -13,10 +14,7 @@ namespace Edith.Snapshots
         const float BorderMm = 3f;
         const float GapMm = 6f;
         const float MinTextWidthMm = 90f;
-        const float NameHeight = 64f;
-        const float FactTop = 72f;
         const float FactHeight = 360f;
-        const int NameSize = 46;
         const int FactSize = 36;
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
         static readonly Color Quiet = new Color(0.78f, 0.8f, 0.85f, 0.7f);
@@ -24,7 +22,6 @@ namespace Edith.Snapshots
         static readonly Color BorderWaiting = new Color(0.95f, 0.95f, 0.97f, 0.35f);
 
         readonly Image[] border = new Image[4];
-        Text name;
         Text fact;
 
         public static CardView Build(RectTransform photo, Vector2 photoSizeMm, Font font, Material material)
@@ -37,14 +34,23 @@ namespace Edith.Snapshots
 
         public void Show(LookCard card)
         {
-            var looking = card.Phase == LookPhase.Looking;
-            var failed = card.Phase == LookPhase.Failed;
-            var tint = card.Tier is Rarity tier ? RarityColors.For(tier) : BorderWaiting;
-            foreach (var edge in border) edge.color = tint;
-            name.text = looking ? "Looking…" : card.Name;
-            name.color = looking ? Quiet : card.Tier is Rarity rated ? RarityColors.For(rated) : Bright;
-            fact.text = failed ? card.Error : card.Fact.Render();
-            fact.color = failed ? Quiet : Bright;
+            var rated = card.Tier is Rarity tier ? RarityColors.For(tier) : (Color?)null;
+            foreach (var edge in border) edge.color = rated ?? BorderWaiting;
+            if (card.Phase == LookPhase.Failed)
+            {
+                fact.text = card.Error;
+                fact.color = Quiet;
+            }
+            else if (card.Fact.Empty)
+            {
+                fact.text = card.Finished ? "" : "Looking…";
+                fact.color = Quiet;
+            }
+            else
+            {
+                fact.text = card.Fact.Render();
+                fact.color = rated ?? Bright;
+            }
         }
 
         /// Four strips just outside the photo, so the border never covers any of it.
@@ -76,9 +82,7 @@ namespace Edith.Snapshots
             column.localScale = Vector3.one / TextUnitsPerMm;
 
             var lineWidth = width * TextUnitsPerMm;
-            name = Label("Name", column, font, material, NameSize, FontStyle.Bold, new Vector2(lineWidth, NameHeight), 0f);
-            name.supportRichText = false;
-            fact = Label("Fact", column, font, material, FactSize, FontStyle.Normal, new Vector2(lineWidth, FactHeight), -FactTop);
+            fact = Label("Fact", column, font, material, FactSize, FontStyle.Normal, new Vector2(lineWidth, FactHeight), 0f);
             // TypedText hides the part not yet typed with a transparent colour tag.
             fact.supportRichText = true;
         }

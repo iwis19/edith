@@ -35,31 +35,51 @@ namespace Edith.Tests
         public void A_new_snapshot_says_it_is_looking()
         {
             var snapshot = room.Place(Box(0f));
-            Assert.AreEqual("Looking…", Shown(snapshot, "Name"));
+            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
             Assert.AreEqual(LookPhase.Looking, snapshot.Card.Phase);
         }
 
         [Test]
-        public void Events_write_the_name_and_the_fact_under_the_photo()
+        public void The_card_says_looking_until_the_fact_then_shows_only_the_fact()
         {
             var snapshot = room.Place(Box(0f));
             snapshot.Apply(LookEvent.Named("Red m", pending: true));
-            Assert.AreEqual("Red m", Shown(snapshot, "Name"));
+            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
             snapshot.Apply(LookEvent.Named("Red mug"));
+            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
             snapshot.Apply(LookEvent.Fact("Mugs are old."));
             snapshot.Card.Advance(10f);
             snapshot.Apply(LookEvent.Done());
-            Assert.AreEqual("Red mug", Shown(snapshot, "Name"));
             Assert.AreEqual("Mugs are old.", Shown(snapshot, "Fact"));
+            Assert.AreEqual(1, snapshot.GetComponentsInChildren<Text>().Length, "one line of text, no name above it");
         }
 
         [Test]
-        public void A_failed_look_shows_its_message_in_place_of_a_fact()
+        public void A_look_without_a_fact_shows_its_name()
+        {
+            var snapshot = room.Place(Box(0f));
+            snapshot.Apply(LookEvent.Named("Red mug"));
+            snapshot.Apply(LookEvent.Done());
+            snapshot.Card.Advance(10f);
+            snapshot.Apply(LookEvent.Done());
+            Assert.AreEqual("Red mug", Shown(snapshot, "Fact"));
+        }
+
+        [Test]
+        public void A_failed_look_shows_its_message()
         {
             var snapshot = room.Place(Box(0f));
             snapshot.Apply(LookEvent.Failure("camera", "The camera is not ready."));
             Assert.AreEqual("The camera is not ready.", Shown(snapshot, "Fact"));
-            Assert.AreEqual("", Shown(snapshot, "Name"));
+        }
+
+        [Test]
+        public void The_fact_takes_the_rarity_colour()
+        {
+            var snapshot = room.Place(Box(0f));
+            snapshot.Apply(LookEvent.Fact("Mugs are old."));
+            snapshot.Apply(LookEvent.Rated(Rarity.Epic));
+            Assert.AreEqual(RarityColors.For(Rarity.Epic), snapshot.GetComponentsInChildren<Text>().Single().color);
         }
 
         [Test]
@@ -74,7 +94,7 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_snapshot_whose_card_has_not_finished_is_not_a_grab_target()
+        public void Every_snapshot_claims_a_fist_but_only_a_finished_look_moves()
         {
             var host = new GameObject("Grab");
             host.SetActive(false);
@@ -90,8 +110,10 @@ namespace Edith.Tests
 
                 var targets = new List<(int id, SightBox box)>();
                 grab.AddGrabTargets(targets);
-                CollectionAssert.AreEquivalent(new[] { written.Id, failed.Id }, targets.Select(target => target.id));
-                CollectionAssert.DoesNotContain(targets.Select(target => target.id), writing.Id);
+                CollectionAssert.AreEquivalent(new[] { writing.Id, written.Id, failed.Id }, targets.Select(target => target.id));
+                Assert.IsTrue(SnapshotGrab.CanCarry(written));
+                Assert.IsFalse(SnapshotGrab.CanCarry(writing), "still being written");
+                Assert.IsFalse(SnapshotGrab.CanCarry(failed), "a failed look never moves");
             }
             finally
             {

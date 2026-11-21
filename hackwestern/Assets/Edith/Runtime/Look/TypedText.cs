@@ -18,6 +18,7 @@ namespace Edith.Look
 
         public string Visible => target.Substring(0, Math.Min((int)shown, target.Length));
         public bool Done => (int)shown >= target.Length;
+        public bool Empty => target.Length == 0;
 
         /// The whole text as rich text, with the part not yet typed drawn fully transparent. The layout is the final
         /// one from the first character, so wrapped lines do not shift while typing.

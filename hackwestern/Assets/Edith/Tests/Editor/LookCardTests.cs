@@ -118,8 +118,18 @@ namespace Edith.Tests
             Assert.AreEqual(LookPhase.Done, card.Phase);
             Assert.AreEqual("Mug", card.Name);
             Assert.IsNull(card.Tier);
-            Assert.IsTrue(card.Fact.Done);
-            Assert.AreEqual("", card.Fact.Visible);
+            card.Advance(10f);
+            Assert.AreEqual("Mug", card.Fact.Visible, "a Look that ends without a fact shows its name");
+        }
+
+        [Test]
+        public void A_fact_is_shown_instead_of_the_name()
+        {
+            card.Apply(LookEvent.Named("Mug"));
+            card.Apply(LookEvent.Fact("Mugs are old."));
+            card.Apply(LookEvent.Done());
+            card.Advance(10f);
+            Assert.AreEqual("Mugs are old.", card.Fact.Visible);
         }
 
         [Test]
