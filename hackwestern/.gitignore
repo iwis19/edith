@@ -22,3 +22,6 @@ Assets/Resources/DevAgentSettings.asset.meta
 # The backend URL and device token, written from backend/.env by the editor setup.
 Assets/Resources/EdithBackend.asset
 Assets/Resources/EdithBackend.asset.meta
+
+# Hand recordings pulled off the headset.
+/Recordings/

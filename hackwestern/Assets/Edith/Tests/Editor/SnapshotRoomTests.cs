@@ -110,6 +110,44 @@ namespace Edith.Tests
             Assert.IsFalse(room.Dismiss(snapshot));
         }
 
+        static void Settle(Snapshot snapshot, int frames = 400)
+        {
+            var update = typeof(Snapshot).GetMethod("Update", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            for (var i = 0; i < frames; i++) update.Invoke(snapshot, null);
+        }
+
+        [Test]
+        public void A_carried_snapshot_follows_the_hold_and_floats_back_to_its_box_on_release()
+        {
+            var box = Box(0.1f);
+            var snapshot = room.Place(box);
+            var held = box.Center + new Vector3(0f, -0.3f, -0.2f);
+
+            snapshot.Hold(held, Quaternion.Euler(0f, 40f, 0f));
+            Settle(snapshot);
+            Assert.That(Vector3.Distance(snapshot.transform.position, held), Is.LessThan(1e-3f), "carried");
+
+            snapshot.FloatBack();
+            Settle(snapshot);
+            Assert.That(Vector3.Distance(snapshot.transform.position, box.Center), Is.LessThan(1e-3f), "back at its box");
+            Assert.That(Quaternion.Angle(snapshot.transform.rotation, box.Eye.rotation), Is.LessThan(0.2f));
+        }
+
+        [Test]
+        public void A_leaving_snapshot_ignores_the_hold()
+        {
+            var box = Box(0.1f);
+            var snapshot = room.Place(box);
+            room.Dismiss(snapshot);
+
+            snapshot.Hold(box.Center + Vector3.down, Quaternion.identity);
+
+            Assert.IsFalse(Carried(snapshot));
+        }
+
+        static bool Carried(Snapshot snapshot) =>
+            (bool)typeof(Snapshot).GetField("carried", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(snapshot);
+
         [Test]
         public void A_pinch_hits_only_a_snapshot_it_lands_on()
         {
