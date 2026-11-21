@@ -51,7 +51,8 @@ class Settings(BaseSettings):
     # Asked as well when scan_model fails or has not answered by scan_backup_after_s; the first good answer wins.
     # Needs OPENAI_API_KEY. 0 turns the backup off.
     scan_backup_model: str = "gpt-4o"
-    scan_backup_after_s: float = 3.5
+    # Flash-Lite usually answers within 2 s, so a reply still missing then is the slow case.
+    scan_backup_after_s: float = 2.0
     live_model: str = "gemini-3.8-live"
     live_voice: LiveVoice = "Kore"
     # Google Search grounding for Ask. A free-tier key refuses the Live session when the setup carries the tool.
