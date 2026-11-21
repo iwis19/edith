@@ -72,9 +72,13 @@ namespace Edith.Editor
             // Horizon OS refuses to launch an app that doesn't declare hand tracking while no controllers are paired.
             config.handTrackingSupport = OVRProjectConfig.HandTrackingSupport.HandsOnly;
             config.boundaryVisibilitySupport = OVRProjectConfig.FeatureSupport.Supported;
+            // Declares USE_SCENE, which the Depth API waits for.
+            config.sceneSupport = OVRProjectConfig.FeatureSupport.Supported;
             OVRProjectConfig.CommitProjectConfig(config);
 
             EnsureScene();
+            DepthSetup.EnableFeatures();
+            DepthSetup.AddToScene(ScenePath);
             // Meta's fixes enable rules that only pass after an earlier fix, so one pass is not enough.
             for (var pass = 0; pass < 3; pass++)
                 await OVRProjectSetup.FixAllAsync(BuildTargetGroup.Android);
