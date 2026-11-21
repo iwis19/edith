@@ -16,10 +16,9 @@ namespace Edith.Scrapbook
     /// The Scrapbook: the collected memories as a deck of cards to scroll through. Both palms held up side by side
     /// open it in front of the user, where it stays put in the room, and the palms brought together close it. A
     /// thumb swipe moves one card. A pinch chooses what was under the line of sight when it was pressed, once it
-    /// ends, unless the pinch point moved 6 cm or more sideways, which scrubs the deck, or spins the globe when it
-    /// started on it. The tabs under the deck pick the lens, and the chips under them narrow the deck to a rarity or
-    /// show the globe of places: a city's pin dives into its street map, and a spot's pin narrows the deck to that
-    /// spot. The chip or pin nearest the line of sight wins over a card. While it is open it holds the hand gate, so
+    /// ends, unless the pinch point moved 6 cm or more sideways, which scrubs the deck. The tabs under the deck pick
+    /// the lens, and the chips under them narrow the deck to a rarity or pick a place on the map: a city's pin
+    /// zooms the map to that city, and a spot's pin narrows the deck to that spot. The chip or pin nearest the line of sight wins over a card. While it is open it holds the hand gate, so
     /// pinches make no Looks and palms start no Scan.
     public sealed class ScrapbookPanel : MonoBehaviour
     {
@@ -32,8 +31,6 @@ namespace Edith.Scrapbook
         [SerializeField] Font font;
         /// Draws the cards so a hand in front of them hides them.
         [SerializeField] Material material;
-        /// Draws the globe and the street map, which a hand in front also hides.
-        [SerializeField] Material mapMaterial;
         [SerializeField] BookTuning book = new BookTuning();
 
         const float FadeSeconds = 0.25f;
@@ -77,8 +74,6 @@ namespace Edith.Scrapbook
         Deck deck;
         (Lens lens, Rarity? filter, Place place, int count)? barShows;
         float fade;
-        /// What the pinch under way scrubs, or null while it has not scrubbed.
-        DragTarget? dragging;
         /// The scrubbing hand's pinch point in the deck's frame, a frame ago.
         Vector3 draggedTo;
         /// The pinch under way, or null between pinches, with where and from what eye it was pressed.
@@ -100,7 +95,7 @@ namespace Edith.Scrapbook
             deckView = new DeckView(frame, font, material);
             bar = new LensBar(frame, font, material);
             maps = new MapImages();
-            places = new PlacesView(frame, font, material, mapMaterial, maps);
+            places = new PlacesView(frame, font, material, maps);
             photos = new RecentCache<Texture2D>(PhotosKept, Destroy);
             photoOf = id => photos.TryGet(id, out var photo) ? photo : null;
             sound = gameObject.AddComponent<AudioSource>();
@@ -132,7 +127,6 @@ namespace Edith.Scrapbook
             session?.Cancel();
             photos.Clear();
             maps.Clear();
-            places.Release();
             ring.Dispose();
         }
 
@@ -166,7 +160,7 @@ namespace Edith.Scrapbook
             if (Open) LoadPhotosInReach();
             deckView.Show(browse.Visible, deck.Position, photoOf, eased, deck.Form, kept);
             DrawLeaving(eased);
-            places.Draw(browse, eased, eye.position, Time.deltaTime, Open ? client : null, session);
+            places.Draw(browse, eased, Time.deltaTime, Open ? client : null, session);
             var shows = (browse.Lens, browse.Filter, (Place)browse.Spot ?? browse.City, browse.Visible.Count);
             if (barShows is { } had && had.Equals(shows)) return;
             barShows = shows;
@@ -278,7 +272,6 @@ namespace Edith.Scrapbook
         {
             Open = false;
             gate.Held = false;
-            dragging = null;
             intent = null;
             session.Cancel();
             Debug.Log("[EDITH scrapbook] closed");
@@ -304,24 +297,19 @@ namespace Edith.Scrapbook
                 pressedAt = reading.Start;
                 pressedEye = eye.position;
                 var pressedInFrame = frame.InverseTransformPoint(pressedAt);
-                dragging = PinchRoute.DragStart(places.GlobeSpins, pressedEye, pressedAt, places.GlobePosition, GlobeView.Radius);
-                intent = dragging == DragTarget.Globe ? PinchIntent.ForGlobe(pressedInFrame) : new PinchIntent(pressedInFrame);
-                // The globe turns with the hand from where it was pressed; the deck scrubs from where the sweep began,
-                // so it does not jump by the 6 cm it took to tell a sweep from a reach.
+                intent = new PinchIntent(pressedInFrame);
+                // The deck scrubs from where the sweep began, so it does not jump by the 6 cm it took to tell a sweep
+                // from a reach.
                 draggedTo = pressedInFrame;
                 chosen = false;
             }
             if (intent == null) return;
             if (reading.Phase == PinchPhase.Pressed || reading.Phase == PinchPhase.Dragging) Follow();
             if (reading.Event == PinchEvent.Tap || reading.Event == PinchEvent.Completed || reading.Event == PinchEvent.Cancelled) End(reading.Event);
-            if (reading.Phase == PinchPhase.Idle)
-            {
-                intent = null;
-                dragging = null;
-            }
+            if (reading.Phase == PinchPhase.Idle) intent = null;
         }
 
-        /// Moves the deck or the globe with the pinch once it has gone far enough sideways to scrub.
+        /// Moves the deck with the pinch once it has gone far enough sideways to scrub.
         void Follow()
         {
             var hand = pinch.Owner == HandSide.Left ? leftHand.Read() : rightHand.Read();
@@ -330,8 +318,7 @@ namespace Edith.Scrapbook
             var at = frame.InverseTransformPoint(hand.PinchPoint);
             var wasDragging = intent.Scrubbing;
             if (!intent.Move(at)) return;
-            if (dragging == DragTarget.Globe) places.Drag(at - draggedTo);
-            else if (wasDragging) deck.Scrub((draggedTo.x - at.x) / MetersPerCard);
+            if (wasDragging) deck.Scrub((draggedTo.x - at.x) / MetersPerCard);
             draggedTo = at;
         }
 
@@ -339,10 +326,10 @@ namespace Edith.Scrapbook
         void End(PinchEvent ended)
         {
             if (chosen) return;
-            var how = $"{ended}, {intent.Sideways * 100f:0.0} cm {(dragging == DragTarget.Globe ? "moved" : "sideways")}";
+            var how = $"{ended}, {intent.Sideways * 100f:0.0} cm sideways";
             if (intent.Scrubbing)
             {
-                Debug.Log($"[EDITH scrapbook] {(dragging == DragTarget.Globe ? "spun the globe" : "scrubbed the deck")} ({how})");
+                Debug.Log($"[EDITH scrapbook] scrubbed the deck ({how})");
                 deck.Release();
                 return;
             }

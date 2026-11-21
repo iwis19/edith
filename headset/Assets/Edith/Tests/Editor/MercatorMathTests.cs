@@ -57,37 +57,6 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_world_image_runs_from_its_last_latitude_south_to_its_last_latitude_north()
-        {
-            Assert.AreEqual(1f, MercatorMath.UV(new GeoPoint(MercatorMath.MaxLatitude, 0)).y, 1e-6f);
-            Assert.AreEqual(0f, MercatorMath.UV(new GeoPoint(-MercatorMath.MaxLatitude, 0)).y, 1e-6f);
-            Assert.AreEqual(0.5f, MercatorMath.UV(new GeoPoint(0, 0)).y, 1e-6f);
-        }
-
-        [Test]
-        public void The_poles_take_the_world_images_edge_rows()
-        {
-            Assert.AreEqual(1f, MercatorMath.UV(new GeoPoint(90, 0)).y, 1e-6f);
-            Assert.AreEqual(0f, MercatorMath.UV(new GeoPoint(-90, 0)).y, 1e-6f);
-        }
-
-        [Test]
-        public void The_world_image_runs_east_from_the_date_line()
-        {
-            Assert.AreEqual(0f, MercatorMath.UV(new GeoPoint(0, -180)).x, 1e-6f);
-            Assert.AreEqual(0.5f, MercatorMath.UV(new GeoPoint(0, 0)).x, 1e-6f);
-            Assert.AreEqual(0.75f, MercatorMath.UV(new GeoPoint(0, 90)).x, 1e-6f);
-        }
-
-        [Test]
-        public void On_the_globe_north_is_up_and_east_is_to_the_right_of_the_meridian_facing_the_viewer()
-        {
-            Assert.That(Vector3.Distance(Vector3.up, MercatorMath.Direction(new GeoPoint(90, 0))), Is.LessThan(1e-6f));
-            Assert.That(Vector3.Distance(Vector3.back, MercatorMath.Direction(new GeoPoint(0, 0))), Is.LessThan(1e-6f));
-            Assert.That(Vector3.Distance(Vector3.right, MercatorMath.Direction(new GeoPoint(0, 90))), Is.LessThan(1e-6f));
-        }
-
-        [Test]
         public void The_centre_of_an_area_image_is_its_middle_pixel()
         {
             var at = MercatorMath.OnImage(Western, Western, 15);

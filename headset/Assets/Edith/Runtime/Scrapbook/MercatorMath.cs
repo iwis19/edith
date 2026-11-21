@@ -76,23 +76,6 @@ namespace Edith.Scrapbook
             return new GeoPoint(Math.Atan(Math.Sinh(n)) * 180.0 / Math.PI, x / size * 360.0 - 180.0);
         }
 
-        /// Where `point` is on the world image as a texture coordinate: u east from longitude -180, v north from
-        /// latitude -85.0511.
-        public static Vector2 UV(GeoPoint point)
-        {
-            var (x, y) = Pixel(point, 0);
-            return new Vector2((float)(x / 256.0), (float)(1.0 - y / 256.0));
-        }
-
-        /// Where `point` is on the unit globe: north is +y, and longitude 0 on the equator is -z, so that seen from
-        /// outside with north up, east is to the right.
-        public static Vector3 Direction(GeoPoint point)
-        {
-            var lat = point.Lat * Math.PI / 180.0;
-            var lon = point.Lon * Math.PI / 180.0;
-            return new Vector3((float)(Math.Cos(lat) * Math.Sin(lon)), (float)Math.Sin(lat), (float)(-Math.Cos(lat) * Math.Cos(lon)));
-        }
-
         /// The pixel of `point` on the area image centred on `centre` at `zoom`, x right and y down from the image's
         /// top left corner. Longitudes are taken the short way round, as a low zoom shows the world repeating.
         public static Vector2 OnImage(GeoPoint point, GeoPoint centre, int zoom)

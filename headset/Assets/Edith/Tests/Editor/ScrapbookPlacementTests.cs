@@ -51,9 +51,6 @@ namespace Edith.Tests
 
         static float PhotoBottom => Elevation(ScrapbookPlacement.CardCentre - new Vector3(0f, DeckLayout.CardHeight * 0.5f, 0f));
 
-        static float TopOf(Vector3 centre, float radius) =>
-            Elevation(centre) - Mathf.Asin(radius / centre.magnitude) * Mathf.Rad2Deg;
-
         [Test]
         public void The_lens_bar_sits_under_the_card_text_without_touching_it()
         {
@@ -62,16 +59,35 @@ namespace Edith.Tests
             Assert.That(PhotoBottom + TextDropDegrees, Is.LessThan(Elevation(ScrapbookPlacement.BarCentre) - BarHalfDegrees));
         }
 
+        static Vector3 MapPoint(float x, float y) =>
+            ScrapbookPlacement.MapCentre + ScrapbookPlacement.MapRotation * new Vector3(x * ScrapbookPlacement.MapWidth * 0.5f, y * ScrapbookPlacement.MapHeight * 0.5f, 0f);
+
         [Test]
-        public void The_globe_and_the_map_sit_under_the_lens_bar_without_touching_it()
+        public void The_map_sits_under_the_lens_bar_without_touching_it()
         {
             var barBottom = Elevation(ScrapbookPlacement.BarCentre) + BarHalfDegrees;
-            Assert.That(TopOf(GlobeView.Centre, GlobeView.Radius), Is.GreaterThan(barBottom));
-            var mapHalfHeight = CityMapView.Width * 0.5f * Mathf.Cos(CityMapView.Lean * Mathf.Deg2Rad);
-            Assert.That(TopOf(CityMapView.Centre, mapHalfHeight), Is.GreaterThan(barBottom));
-            Assert.That(GlobeView.Centre.magnitude - GlobeView.Radius, Is.GreaterThanOrEqualTo(MinMeters));
-            Assert.That(CityMapView.Centre.magnitude - CityMapView.Width * 0.5f, Is.GreaterThanOrEqualTo(MinMeters));
-            Assert.AreEqual(Elevation(GlobeView.Centre), GlobeView.EyeElevation, 0.01f);
+            foreach (var x in new[] { -1f, 0f, 1f })
+                Assert.That(Elevation(MapPoint(x, 1f)), Is.GreaterThan(barBottom), $"top edge at {x}");
+        }
+
+        [Test]
+        public void The_map_is_a_5_by_3_panel_facing_the_eye_and_leaned_back()
+        {
+            Assert.AreEqual(0.30f, ScrapbookPlacement.MapWidth, 1e-6f);
+            Assert.AreEqual(0.18f, ScrapbookPlacement.MapHeight, 1e-6f);
+            Assert.AreEqual(23f, Elevation(ScrapbookPlacement.MapCentre), 0.01f);
+            Assert.AreEqual(0.80f, ScrapbookPlacement.MapCentre.z, 1e-6f);
+            var normal = ScrapbookPlacement.MapRotation * Vector3.forward;
+            Assert.AreEqual(ScrapbookPlacement.MapLean, Vector3.Angle(normal, ScrapbookPlacement.MapCentre), 0.01f);
+            Assert.That(normal.y, Is.LessThan(ScrapbookPlacement.MapCentre.normalized.y), "the front looks up, so the top is leaned away from the eye");
+        }
+
+        [Test]
+        public void Nothing_of_the_map_is_nearer_than_the_minimum()
+        {
+            foreach (var x in new[] { -1f, 0f, 1f })
+                foreach (var y in new[] { -1f, 0f, 1f })
+                    Assert.That(MapPoint(x, y).magnitude, Is.GreaterThanOrEqualTo(MinMeters), $"point {x}, {y}");
         }
 
         [Test]
@@ -79,8 +95,7 @@ namespace Edith.Tests
         {
             Assert.That(Elevation(ScrapbookPlacement.CardCentre), Is.LessThanOrEqualTo(26f));
             Assert.That(Elevation(ScrapbookPlacement.BarCentre), Is.LessThanOrEqualTo(26f));
-            Assert.That(Elevation(GlobeView.Centre), Is.LessThanOrEqualTo(26f));
-            Assert.That(Elevation(CityMapView.Centre), Is.LessThanOrEqualTo(26.01f));
+            Assert.That(Elevation(ScrapbookPlacement.MapCentre), Is.LessThanOrEqualTo(26f));
         }
     }
 }
