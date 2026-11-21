@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import psycopg
 import pytest
 
+from edith_backend.config import Settings
 from edith_backend.db import LookRecord, PostgresStore
 from edith_backend.migrate import migrate
 
@@ -29,14 +30,14 @@ def schema_url():
 
 
 def test_migrate_applies_each_file_once(schema_url):
-    assert migrate(schema_url) == ["001_init"]
+    assert migrate(schema_url) == ["001_init", "002_collect"]
     assert migrate(schema_url) == []
 
 
 def test_concurrent_migrations_take_turns(schema_url):
     with ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _: migrate(schema_url), range(4)))
-    assert sorted(results) == [[], [], [], ["001_init"]]
+    assert sorted(results) == [[], [], [], ["001_init", "002_collect"]]
 
 
 async def test_health_checks_share_one_query_while_cached(schema_url):
@@ -70,3 +71,50 @@ async def test_the_store_records_a_look_for_a_new_profile(schema_url):
     with psycopg.connect(schema_url) as conn:
         rows = conn.execute("select name, rarity, fact_sources from looks where profile_id = %s", (profile,)).fetchall()
     assert rows == [("mug", "mythic", record.fact_sources)] * 2
+
+
+def a_look(profile: uuid.UUID, **overrides) -> LookRecord:
+    fields = dict(
+        look_ref=uuid.uuid4(), profile_id=profile, client_look_id=1, source="pinch", captured_at=datetime.now(UTC),
+        width=640, height=480, status="done", name="mug", confidence=0.9, fact="Handles came late.",
+        fact_sources=[{"title": "t", "url": "https://example.com"}], rarity="rare", duration_ms=812,
+    )
+    return LookRecord(**{**fields, **overrides})
+
+
+async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(schema_url):
+    migrate(schema_url)
+    store = PostgresStore(schema_url, max_size=2)
+    await store.open()
+    try:
+        profile, other = uuid.uuid4(), uuid.uuid4()
+        first, second, failed = a_look(profile), a_look(profile, name="lamp", rarity="epic"), a_look(
+            profile, status="error", name=None, fact=None, rarity=None)
+        for record in (first, second, failed, a_look(other)):
+            await store.record_look(record)
+
+        first_id = await store.collect(profile, first.look_ref, b"crop-1")
+        assert await store.collect(profile, first.look_ref, b"other bytes") == first_id
+        second_id = await store.collect(profile, second.look_ref, b"crop-2")
+        assert await store.collect(profile, failed.look_ref, b"x") is None
+        assert await store.collect(other, first.look_ref, b"x") is None
+        assert await store.collect(profile, uuid.uuid4(), b"x") is None
+
+        memories = await store.list_memories(profile, 10)
+        assert [(m.id, m.name, m.rarity) for m in memories] == [(second_id, "lamp", "epic"), (first_id, "mug", "rare")]
+        assert memories[1].sources == first.fact_sources
+        assert await store.list_memories(profile, 1) == memories[:1]
+        assert await store.list_memories(other, 10) == []
+        assert await store.memory_image(profile, first_id) == b"crop-1"
+        assert await store.memory_image(other, first_id) is None
+    finally:
+        await store.close()
+
+
+def test_the_embedding_column_matches_the_configured_dimensions(schema_url):
+    migrate(schema_url)
+    with psycopg.connect(schema_url) as conn:
+        [(dimensions,)] = conn.execute(
+            "select atttypmod from pg_attribute where attrelid = 'memories'::regclass and attname = 'embedding'"
+        ).fetchall()
+    assert dimensions == Settings(_env_file=None).embedding_dimensions

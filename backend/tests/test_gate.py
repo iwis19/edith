@@ -70,7 +70,7 @@ class QuickAgent:
 async def test_the_look_deadline_does_not_count_time_the_client_spends_reading(settings, store):
     settings.look_timeout_s = 0.1
     meta = LookMeta(look_id=1, source="pinch", captured_at=datetime.now(UTC))
-    stream = _stream(QuickAgent(), store, settings, uuid.uuid4(), meta, make_jpeg(), (640, 480), time.monotonic())
+    stream = _stream(QuickAgent(), store, settings, {}, uuid.uuid4(), meta, make_jpeg(), (640, 480), time.monotonic())
     types = []
     async for line in stream:
         types.append(json.loads(line)["type"])

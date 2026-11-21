@@ -4,22 +4,22 @@ import logging
 import secrets
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from uuid import UUID
 
-from fastapi import Body, Depends, FastAPI, File, Form, Header, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, Query, Request, Response, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import VERSION
 from .agents.ask import AskError, AskRequest, AskSession, LiveAsk, make_live_ask
 from .agents.card import CardAgent, make_card_agent
 from .config import Settings
-from .db import LookRecord, Store, make_store
-from .events import Accepted, Done, ErrorEvent, Fact, LookEvent, LookMeta, Name, RarityEvent
+from .db import LookRecord, Store, StoreUnavailable, make_store
+from .events import Accepted, CollectMeta, Done, ErrorEvent, Fact, LookEvent, LookMeta, Name, RarityEvent
 from .jpeg import is_jpeg, jpeg_size
 
 log = logging.getLogger("edith")
@@ -118,6 +118,9 @@ def create_app(
     agent = agent or make_card_agent(settings)
     store = store or make_store(settings.database_url, settings.db_pool_max)
     ask = ask or make_live_ask(settings)
+    # Looks still streaming, by look_ref, so a /collect that arrives before the Look is recorded can wait for it. A
+    # per-process map is right because the backend runs as a single replica.
+    inflight: dict[UUID, asyncio.Event] = {}
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -157,10 +160,10 @@ def create_app(
         profile_id: UUID = Depends(profile),
     ) -> StreamingResponse:
         received = time.monotonic()
-        parsed = _parse_meta(meta)
+        parsed = _parse_meta(meta, LookMeta)
         data, size = await _read_image(image, settings)
         return StreamingResponse(
-            _stream(agent, store, settings, profile_id, parsed, data, size, received),
+            _stream(agent, store, settings, inflight, profile_id, parsed, data, size, received),
             media_type="application/x-ndjson",
         )
 
@@ -174,14 +177,56 @@ def create_app(
             log.warning("ask session failed: %s", exc)
             raise ApiError(502, "ask_failed", "Gemini did not give a session token.")
 
+    @app.post("/collect")
+    async def collect(
+        image: UploadFile | None = File(None),
+        meta: str | None = Form(None),
+        profile_id: UUID = Depends(profile),
+    ) -> dict:
+        parsed = _parse_meta(meta, CollectMeta)
+        data, _ = await _read_image(image, settings)
+        # A card can be pocketed before its Look has finished, and the memory should hold what arrives after.
+        if (recording := inflight.get(parsed.look_ref)) is not None:
+            try:
+                await asyncio.wait_for(recording.wait(), settings.look_timeout_s + 5)
+            except TimeoutError:
+                pass
+        memory_id = await _stored(store.collect(profile_id, parsed.look_ref, data))
+        if memory_id is None:
+            raise ApiError(404, "unknown_look", "This profile has no finished Look with that look_ref.")
+        return {"memory_id": memory_id}
+
+    @app.get("/memories")
+    async def memories(limit: int = Query(100, ge=1, le=500), profile_id: UUID = Depends(profile)) -> dict:
+        found = await _stored(store.list_memories(profile_id, limit))
+        return {"memories": [
+            {"id": m.id, "look_ref": m.look_ref.hex, "name": m.name, "kind": m.kind, "fact": m.fact,
+             "sources": m.sources, "rarity": m.rarity, "place": m.place, "created_at": m.created_at.isoformat()}
+            for m in found
+        ]}
+
+    @app.get("/memories/{memory_id}/image")
+    async def memory_image(memory_id: int, profile_id: UUID = Depends(profile)) -> Response:
+        data = await _stored(store.memory_image(profile_id, memory_id))
+        if data is None:
+            raise ApiError(404, "unknown_memory", "This profile has no memory with that id.")
+        return Response(data, media_type="image/jpeg")
+
     return app
 
 
-def _parse_meta(meta: str | None) -> LookMeta:
+async def _stored[T](call: Awaitable[T]) -> T:
+    try:
+        return await call
+    except StoreUnavailable:
+        raise ApiError(503, "db_unavailable", "The memory store is not available right now.")
+
+
+def _parse_meta[M: BaseModel](meta: str | None, model: type[M]) -> M:
     if meta is None:
         raise ApiError(422, "invalid_meta", "The meta field is required.")
     try:
-        return LookMeta.model_validate(json.loads(meta))
+        return model.model_validate(json.loads(meta))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise ApiError(422, "invalid_meta", f"The meta field is not valid ({type(exc).__name__}).")
 
@@ -211,6 +256,7 @@ async def _stream(
     agent: CardAgent,
     store: Store,
     settings: Settings,
+    inflight: dict[UUID, asyncio.Event],
     profile_id: UUID,
     meta: LookMeta,
     image: bytes,
@@ -225,6 +271,12 @@ async def _stream(
         return event.model_dump_json() + "\n"
 
     look_ref = uuid.uuid4()
+    recorded = inflight[look_ref] = asyncio.Event()
+
+    def release() -> None:
+        recorded.set()
+        inflight.pop(look_ref, None)
+
     marks: dict[str, int] = {}
     seen: dict[str, LookEvent] = {}
     final: LookEvent
@@ -256,6 +308,7 @@ async def _stream(
             yield line
     except (GeneratorExit, asyncio.CancelledError):
         log.info("look %s abandoned by the client after %s ms", meta.look_id, elapsed_ms())
+        release()
         raise
     except TimeoutError:
         final = ErrorEvent(code="timeout", message="The look took too long.")
@@ -274,6 +327,7 @@ async def _stream(
     task = asyncio.create_task(store.record_look(record))
     _recording.add(task)
     task.add_done_callback(_recording.discard)
+    task.add_done_callback(lambda _: release())
     last = stamp(final)
     log.info("look %s accepted %s name %s final %s fact %s %s %s", meta.look_id, marks.get("accepted", "-"),
              marks.get("name", "-"), marks.get("name_final", "-"), marks.get("fact", "-"), final.type, final.t_ms)

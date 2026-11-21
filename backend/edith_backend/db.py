@@ -33,11 +33,34 @@ class LookRecord:
     duration_ms: int
 
 
+@dataclass(frozen=True)
+class Memory:
+    id: int
+    look_ref: UUID
+    name: str
+    kind: str | None
+    fact: str | None
+    sources: list[dict]
+    rarity: str | None
+    place: str | None
+    created_at: datetime
+
+
+class StoreUnavailable(Exception):
+    """The database is not configured or the query failed."""
+
+
 class Store(Protocol):
     async def open(self) -> None: ...
     async def close(self) -> None: ...
     async def status(self) -> str: ...
     async def record_look(self, record: LookRecord) -> None: ...
+    async def collect(self, profile_id: UUID, look_ref: UUID, image: bytes) -> int | None:
+        """Saves the finished Look as a memory, once per Look, and returns the memory's id. None when the profile has
+        no finished Look with that ref. Raises StoreUnavailable."""
+        ...
+    async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]: ...
+    async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None: ...
 
 
 class DisabledStore:
@@ -52,6 +75,15 @@ class DisabledStore:
 
     async def record_look(self, record: LookRecord) -> None:
         pass
+
+    async def collect(self, profile_id: UUID, look_ref: UUID, image: bytes) -> int | None:
+        raise StoreUnavailable("There is no database.")
+
+    async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]:
+        raise StoreUnavailable("There is no database.")
+
+    async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None:
+        raise StoreUnavailable("There is no database.")
 
 
 class PostgresStore:
@@ -112,6 +144,55 @@ class PostgresStore:
                 )
         except Exception:
             log.exception("failed to record look %s", record.look_ref)
+
+    async def collect(self, profile_id: UUID, look_ref: UUID, image: bytes) -> int | None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                # The fields are copied from the stored Look, so the client cannot supply card text. A repeat inserts
+                # nothing and the existing row is read back.
+                cursor = await conn.execute(
+                    """insert into memories (profile_id, look_ref, name, kind, fact, sources, rarity, place, image)
+                       select profile_id, id, name, kind, fact, fact_sources, rarity, place, %s from looks
+                       where id = %s and profile_id = %s and status = 'done' and name is not null
+                       on conflict (look_ref) do nothing
+                       returning id""",
+                    (image, look_ref, profile_id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    cursor = await conn.execute(
+                        "select id from memories where look_ref = %s and profile_id = %s", (look_ref, profile_id)
+                    )
+                    row = await cursor.fetchone()
+        except Exception as exc:
+            log.exception("failed to collect look %s", look_ref)
+            raise StoreUnavailable("The memory could not be saved.") from exc
+        return row[0] if row else None
+
+    async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                cursor = await conn.execute(
+                    """select id, look_ref, name, kind, fact, sources, rarity, place, created_at from memories
+                       where profile_id = %s order by created_at desc, id desc limit %s""",
+                    (profile_id, limit),
+                )
+                return [Memory(*row) for row in await cursor.fetchall()]
+        except Exception as exc:
+            log.exception("failed to list memories")
+            raise StoreUnavailable("The memories could not be read.") from exc
+
+    async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                cursor = await conn.execute(
+                    "select image from memories where id = %s and profile_id = %s", (memory_id, profile_id)
+                )
+                row = await cursor.fetchone()
+        except Exception as exc:
+            log.exception("failed to read memory %s", memory_id)
+            raise StoreUnavailable("The memory could not be read.") from exc
+        return bytes(row[0]) if row else None
 
 
 def make_store(database_url: str | None, max_size: int) -> Store:
