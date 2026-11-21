@@ -9,53 +9,8 @@ namespace Edith.Hands
         [SerializeField] OVRSkeleton skeleton;
         [SerializeField] Transform eye;
 
-        Transform thumbTip, indexTip, wrist, indexKnuckle, littleKnuckle, middleKnuckle, middleTip, ringKnuckle, ringTip;
+        HandReader reader;
 
-        public HandFrame Read()
-        {
-            var frame = new HandFrame { Time = Time.time, EyePosition = eye.position, EyeRotation = eye.rotation };
-            if (!FindBones()) return frame;
-
-            frame.Visible = hand.IsTracked;
-            frame.Tracked = hand.IsTracked
-                && hand.GetFingerConfidence(OVRHand.HandFinger.Thumb) == OVRHand.TrackingConfidence.High
-                && hand.GetFingerConfidence(OVRHand.HandFinger.Index) == OVRHand.TrackingConfidence.High;
-            frame.Pinching = frame.Tracked && hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
-            frame.ThumbTip = thumbTip.position;
-            frame.IndexTip = indexTip.position;
-            frame.Wrist = wrist.position;
-            frame.IndexKnuckle = indexKnuckle.position;
-            frame.LittleKnuckle = littleKnuckle.position;
-            frame.MiddleKnuckle = middleKnuckle.position;
-            frame.MiddleTip = middleTip.position;
-            frame.RingKnuckle = ringKnuckle.position;
-            frame.RingTip = ringTip.position;
-            return frame;
-        }
-
-        bool FindBones()
-        {
-            if (thumbTip != null) return true;
-            if (!skeleton.IsInitialized) return false;
-            foreach (var bone in skeleton.Bones)
-            {
-                switch (bone.Id)
-                {
-                    case OVRSkeleton.BoneId.XRHand_ThumbTip: thumbTip = bone.Transform; break;
-                    case OVRSkeleton.BoneId.XRHand_IndexTip: indexTip = bone.Transform; break;
-                    case OVRSkeleton.BoneId.XRHand_Wrist: wrist = bone.Transform; break;
-                    case OVRSkeleton.BoneId.XRHand_IndexProximal: indexKnuckle = bone.Transform; break;
-                    case OVRSkeleton.BoneId.XRHand_LittleProximal: littleKnuckle = bone.Transform; break;
-                    case OVRSkeleton.BoneId.XRHand_MiddleProximal: middleKnuckle = bone.Transform; break;
-                    case OVRSkeleton.BoneId.XRHand_MiddleTip: middleTip = bone.Transform; break;
-                    case OVRSkeleton.BoneId.XRHand_RingProximal: ringKnuckle = bone.Transform; break;
-                    case OVRSkeleton.BoneId.XRHand_RingTip: ringTip = bone.Transform; break;
-                }
-            }
-            if (thumbTip != null && indexTip != null && wrist != null && indexKnuckle != null && littleKnuckle != null
-                && middleKnuckle != null && middleTip != null && ringKnuckle != null && ringTip != null) return true;
-            thumbTip = null;
-            return false;
-        }
+        public HandFrame Read() => (reader ??= new HandReader(hand, skeleton, eye)).Read();
     }
 }

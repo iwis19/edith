@@ -5,7 +5,7 @@ import pytest
 from pydantic import SecretStr
 
 from edith_backend.app import create_app
-from edith_backend.events import Name
+from edith_backend.events import Fact, LookDetails, Name
 
 from .conftest import PROFILE, client_for, look_files, make_jpeg, meta_json, ndjson
 
@@ -127,3 +127,29 @@ async def test_pending_names_reach_the_client_and_only_the_final_name_is_recorde
     await asyncio.sleep(0)
     [record] = store.records
     assert (record.name, record.confidence) == ("a red mug", 0.8)
+
+
+class DetailedAgent:
+    async def run(self, image, meta, profile_id):
+        yield Name(name="a red mug", confidence=0.8)
+        yield LookDetails(kind="mug", place="Waterloo, Ontario, Canada")
+        yield Fact(text="Mugs are old.", sources=[])
+
+
+async def test_the_kind_and_place_are_recorded_but_never_streamed(settings, store):
+    async with client_for(create_app(settings, agent=DetailedAgent(), store=store)) as c:
+        events = ndjson(await c.post("/look", files=look_files(), headers=HEADERS))
+    assert [e["type"] for e in events] == ["accepted", "name", "fact", "done"]
+    assert all("kind" not in e and "place" not in e for e in events)
+    await asyncio.sleep(0)
+    [record] = store.records
+    assert (record.kind, record.place) == ("mug", "Waterloo, Ontario, Canada")
+
+
+async def test_a_look_that_fails_before_its_details_records_no_kind_or_place(settings, store):
+    settings.look_timeout_s = 0.2
+    async with client_for(create_app(settings, agent=StuckAgent(), store=store)) as c:
+        await c.post("/look", files=look_files(), headers=HEADERS)
+    await asyncio.sleep(0)
+    [record] = store.records
+    assert (record.kind, record.place) == (None, None)
