@@ -296,7 +296,7 @@ namespace Edith.Ask
             for (var i = pinned.Count - 1; i >= 0; i--)
             {
                 var card = pinned[i];
-                if (!AskGeometry.InLine(card.Box, eye.position, reading.Start, TapMargin)) continue;
+                if (!card.Box.InLine(eye.position, reading.Start, TapMargin)) continue;
                 pinned.RemoveAt(i);
                 if (card == current) current = null;
                 card.Leave(1f);

@@ -24,15 +24,6 @@ namespace Edith.Ask
             return nearest;
         }
 
-        /// True when `point`, seen from `eye`, lies on `box` or within `margin` (a tangent, about margin radians) of it.
-        public static bool InLine(in SightBox box, Vector3 eye, Vector3 point, float margin)
-        {
-            var toPoint = point - eye;
-            if (toPoint.sqrMagnitude < 1e-8f) return false;
-            if (box.SeenFrom(new Pose(eye, Quaternion.LookRotation(toPoint))) is not { } seen) return false;
-            return seen.xMin - margin <= 0f && seen.xMax + margin >= 0f && seen.yMin - margin <= 0f && seen.yMax + margin >= 0f;
-        }
-
         /// `width` by `height` scaled down to at most `maxLongSide` on its longer side, keeping the aspect ratio.
         /// Never scales up.
         public static Vector2Int FitLongSide(int width, int height, int maxLongSide)

@@ -50,6 +50,16 @@ namespace Edith.Snapshots
             return snapshot;
         }
 
+        /// The newest snapshot whose box lies on the line from `eye` through `point`, or null. A point off the box
+        /// hits nothing, however near.
+        public Snapshot Hit(Vector3 eye, Vector3 point)
+        {
+            var items = shelf.Items;
+            for (var i = items.Count - 1; i >= 0; i--)
+                if (!items[i].item.Leaving && items[i].box.InLine(eye, point, 0f)) return items[i].item;
+            return null;
+        }
+
         /// Fades out and destroys `snapshot`. False when it is not in the room.
         public bool Dismiss(Snapshot snapshot)
         {

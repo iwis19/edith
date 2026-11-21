@@ -44,7 +44,7 @@ namespace Edith.Tests
             ((RectTransform)card.transform).GetWorldCorners(corners);
             Assert.AreEqual(Vector3.Distance(corners[0], corners[3]), box.Size.x, 1e-4f, "width");
             Assert.AreEqual(Vector3.Distance(corners[0], corners[1]), box.Size.y, 1e-4f, "height");
-            Assert.IsTrue(AskGeometry.InLine(box, eye.transform.position, Vector3.Lerp(eye.transform.position, card.transform.position, 0.6f), 0f));
+            Assert.IsTrue(box.InLine(eye.transform.position, Vector3.Lerp(eye.transform.position, card.transform.position, 0.6f), 0f));
         }
 
         [Test]

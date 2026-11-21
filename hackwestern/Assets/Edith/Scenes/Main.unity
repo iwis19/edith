@@ -869,6 +869,120 @@ MonoBehaviour:
     pullMinMeters: 0.08
     pullMaxMeters: 0.18
     graceSeconds: 0.3
+--- !u!1 &1186068192
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1186068195}
+  - component: {fileID: 1186068194}
+  - component: {fileID: 1186068193}
+  m_Layer: 0
+  m_Name: HeadsetCamera
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1186068193
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1186068192}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c9a0803ff965f841b9c531e8fbb012e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Capture.HeadsetCamera
+  cameraAccess: {fileID: 1186068194}
+  jpegQuality: 85
+--- !u!114 &1186068194
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1186068192}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef9a7893e57c04c0db4114c70954b915, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: meta.xr.mrutilitykit::Meta.XR.PassthroughCameraAccess
+  CameraPosition: 0
+  RequestedResolution: {x: 1280, y: 960}
+  _maxFramerate: 60
+  TargetMaterial: {fileID: 0}
+  _texturePropertyName: 
+--- !u!4 &1186068195
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1186068192}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1308650305
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1308650307}
+  - component: {fileID: 1308650306}
+  m_Layer: 0
+  m_Name: Look
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1308650306
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1308650305}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 823b898d51eb7cc4eab948f6dfa32108, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Look.LookController
+  pinch: {fileID: 1145216124}
+  headsetCamera: {fileID: 1186068193}
+  grab: {fileID: 1145216127}
+  ask: {fileID: 1083127875}
+  eye: {fileID: 578435152}
+  environmentRaycast: {fileID: 1803563344}
+--- !u!4 &1308650307
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1308650305}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1403383107
 GameObject:
   m_ObjectHideFlags: 0
@@ -1071,6 +1185,51 @@ Transform:
   - {fileID: 66785161}
   m_Father: {fileID: 578435150}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1803563343
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1803563345}
+  - component: {fileID: 1803563344}
+  m_Layer: 0
+  m_Name: EnvironmentRaycast
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1803563344
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1803563343}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d8affdff7ba47d892cc734baac9ac71, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: meta.xr.mrutilitykit::Meta.XR.EnvironmentRaycastManager
+  CustomTrackingSpace: {fileID: 0}
+--- !u!4 &1803563345
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1803563343}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1882255770
 GameObject:
   m_ObjectHideFlags: 0
@@ -1111,3 +1270,6 @@ SceneRoots:
   - {fileID: 682279827}
   - {fileID: 1145216126}
   - {fileID: 1083127879}
+  - {fileID: 1186068195}
+  - {fileID: 1803563345}
+  - {fileID: 1308650307}

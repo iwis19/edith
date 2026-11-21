@@ -13,6 +13,9 @@ namespace Edith.Occlusion
         public const string ScenePermission = "com.oculus.permission.USE_SCENE";
         const float DepthWaitSeconds = 5f;
 
+        /// True once the spatial data prompt has been answered or was not needed.
+        public static bool Asked { get; private set; }
+
         IEnumerator Start()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -26,6 +29,7 @@ namespace Edith.Occlusion
                 Permission.RequestUserPermission(ScenePermission, callbacks);
                 yield return new WaitUntil(() => answered);
             }
+            Asked = true;
             if (!Permission.HasUserAuthorizedPermission(ScenePermission))
             {
                 Debug.Log("[EDITH depth] spatial data permission denied, so real objects will not cover snapshots");

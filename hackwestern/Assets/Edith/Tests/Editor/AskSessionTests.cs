@@ -188,10 +188,10 @@ namespace Edith.Tests
         {
             var box = new SightBox(new Pose(Vector3.zero, Quaternion.identity), Rect.MinMaxRect(-0.2f, -0.1f, 0.2f, 0.1f), 2f);
             var eye = new Vector3(0f, 0f, 0.5f);
-            Assert.IsTrue(AskGeometry.InLine(box, eye, eye + new Vector3(0.05f, 0.02f, 0.4f), 0.02f));
-            Assert.IsTrue(AskGeometry.InLine(box, eye, eye + new Vector3(0f, 0f, 0.05f), 0.02f));
-            Assert.IsFalse(AskGeometry.InLine(box, eye, eye + new Vector3(0.3f, 0f, 0.4f), 0.02f), "off to the side");
-            Assert.IsFalse(AskGeometry.InLine(box, eye, eye + new Vector3(0f, 0f, -0.4f), 0.02f), "behind the eye");
+            Assert.IsTrue(box.InLine(eye, eye + new Vector3(0.05f, 0.02f, 0.4f), 0.02f));
+            Assert.IsTrue(box.InLine(eye, eye + new Vector3(0f, 0f, 0.05f), 0.02f));
+            Assert.IsFalse(box.InLine(eye, eye + new Vector3(0.3f, 0f, 0.4f), 0.02f), "off to the side");
+            Assert.IsFalse(box.InLine(eye, eye + new Vector3(0f, 0f, -0.4f), 0.02f), "behind the eye");
         }
 
         [TestCase(1280, 960, 512, 512, 384)]

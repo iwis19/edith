@@ -41,7 +41,8 @@ namespace Edith.Snapshots
         /// Unique among snapshots, and stable for as long as this one lives.
         public int Id { get; private set; }
 
-        /// Shows on the plane of `box`. `parent` must have unit world scale. A null `photo` shows a plain panel.
+        /// Shows on the plane of `box`. `parent` must have unit world scale. A null `photo` shows a plain panel; any
+        /// other is destroyed with the snapshot.
         public static Snapshot Create(in SightBox box, Transform parent, Texture photo = null)
         {
             var root = new GameObject("Snapshot", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
@@ -121,9 +122,14 @@ namespace Edith.Snapshots
             fullScale = transform.localScale;
         }
 
+        void OnDestroy()
+        {
+            if (Photo != null) Destroy(Photo);
+        }
+
         void Update()
         {
-            fade = Mathf.MoveTowards(fade, target, Time.deltaTime / FadeSeconds);
+            fade =Mathf.MoveTowards(fade, target, Time.deltaTime / FadeSeconds);
             group.alpha = fade * fade * (3f - 2f * fade);
             var settled = pocketing ? Shrink() : Follow();
             if (fade != target || !settled) return;
