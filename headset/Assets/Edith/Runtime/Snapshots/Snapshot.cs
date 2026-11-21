@@ -175,7 +175,7 @@ namespace Edith.Snapshots
 
         /// A copy of `photo` whose corners are transparent outside a radius of `radiusShare` of its width, or null
         /// when the photo can't be read.
-        static Texture2D Rounded(Texture photo, float radiusShare)
+        internal static Texture2D Rounded(Texture photo, float radiusShare)
         {
             if (!(photo is Texture2D source) || !source.isReadable) return null;
             int w = source.width, h = source.height;

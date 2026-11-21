@@ -10,7 +10,7 @@ from openai import AsyncOpenAI
 
 from ..config import Settings
 from ..db import Store
-from ..events import CardEvent, Fact, LookMeta, Name, RarityEvent, Source
+from ..events import CardEvent, Fact, LookMeta, Name, RarityEvent
 from ..location import Whereabouts
 from .card_model import CardModelAgent, FactHistory
 from .embeddings import GeminiEmbedder, KindEmbedder
@@ -27,14 +27,11 @@ class CardAgent(Protocol):
 
 _CANNED = [
     ("ceramic pour-over coffee dripper", 0.82, "common",
-     "The spiral ridges inside a pour-over cone let air escape so water drains evenly through the grounds.",
-     Source(title="Pour-over brewing", url="https://en.wikipedia.org/wiki/Pour-over_coffee")),
+     "The spiral ridges inside a pour-over cone let air escape so water drains evenly through the grounds."),
     ("mechanical keyboard", 0.91, "uncommon",
-     "Many mechanical key switches are rated for over fifty million presses each.",
-     Source(title="Keyboard technology", url="https://en.wikipedia.org/wiki/Keyboard_technology")),
+     "Many mechanical key switches are rated for over fifty million presses each."),
     ("Swiss cheese plant", 0.88, "rare",
-     "The holes in monstera leaves may help the plant catch sunflecks on a dim forest floor.",
-     Source(title="Monstera deliciosa", url="https://en.wikipedia.org/wiki/Monstera_deliciosa")),
+     "The holes in monstera leaves may help the plant catch sunflecks on a dim forest floor."),
 ]
 
 
@@ -46,7 +43,7 @@ class StubCardAgent:
         self._count = 0
 
     async def run(self, image: bytes, meta: LookMeta, profile_id: UUID) -> AsyncIterator[CardEvent]:
-        name, confidence, tier, fact, source = _CANNED[self._count % len(_CANNED)]
+        name, confidence, tier, fact = _CANNED[self._count % len(_CANNED)]
         self._count += 1
         start = time.monotonic()
 
@@ -58,7 +55,7 @@ class StubCardAgent:
         await at(self._settings.stub_name_ms)
         yield Name(name=name, confidence=confidence)
         await at(self._settings.stub_fact_ms)
-        yield Fact(text=fact, sources=[source])
+        yield Fact(text=fact)
         await at(self._settings.stub_rarity_ms)
         yield RarityEvent(tier=tier)
 

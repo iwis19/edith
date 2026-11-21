@@ -17,10 +17,10 @@ EDITH is a hands-only Quest 3/3S mixed-reality companion that makes whatever you
 | Step | Trigger | What you get | Saved? |
 | --- | --- | --- | --- |
 | Look | Pinch empty space, drag a box around an object, let go | A snapshot card pinned where you took it: what it is, a fun fact you haven't heard for that kind of object, a rarity glow | No |
-| Collect | Close a fist on the snapshot and pull it in toward your chest | A memory: cropped image, name, fun fact, rarity, sources behind a flip | Yes |
+| Collect | Close a fist on the snapshot and pull it in toward your chest | A memory: cropped image, name, fun fact, rarity, place and date | Yes |
 | Ask | Thumb tap on the side of the index finger, then speak, about anything | A spoken answer typed out in a two-line caption beside a small orb, which perches on the snapshot asked about or rests low in your view, shows what was heard, and fades when the answer is over | No |
 | Scan | Palms-out pose, aimed at what's in front of you | Pins on the 2 or 3 things in sight that make the most fun dares, each with a short dare to do on the spot; pinch one to open it as a snapshot card | Only cards you collect from it |
-| Remember | Open the Scrapbook from the wrist menu, or ask "what did I find today?" | Memories found by meaning, with when and where | Not applicable |
+| Remember | Open the Scrapbook with both palms held up like an open book, or ask "what did I find today?" | Memories found by meaning, with when and where | Not applicable |
 
 ## Features
 
@@ -31,8 +31,8 @@ A short guided start on first launch: EDITH introduces itself, you pick or say a
 ### Look result
 
 - **Identify:** name the object as specifically as the photo allows, with a confidence. When unsure, say so playfully and offer a best guess; never invent a confident wrong name.
-- **Fun fact:** one short, true, surprising fact per Look, not repeated for that kind of object (kinds matched by embedding, so "mug" and "coffee cup" are one kind). When no fresh fact is left, EDITH owns it and reuses the one told longest ago. Fun wins over a strict check; sources sit behind the card's flip.
-- **Snapshot:** on release the box is filled with the cropped photo, where and how big you drew it, and it stays there. While you pinch and drag, a glowing cyan rounded frame with white corner brackets marks the box. On release it becomes the card: a liquid-glass panel with a thick glowing border, a thin inner frame and white corner brackets around the photo, then a divider with a dot, the name in bold and the fun fact under it, typed out in place (the name alone when there is no fact). the rarity colour tints its outline and glow, and the text stays ice white.
+- **Fun fact:** one short, true, surprising fact per Look, not repeated for that kind of object (kinds matched by embedding, so "mug" and "coffee cup" are one kind). When no fresh fact is left, EDITH owns it and reuses the one told longest ago. Fun wins over a strict check.
+- **Snapshot:** on release the box is filled with the cropped photo, where and how big you drew it, and it stays there. While you pinch and drag, a glowing cyan rounded frame with white corner brackets marks the box. On release it becomes the card: a liquid-glass panel with a thick glowing border, a thin inner frame and white corner brackets around the photo, then a divider with a dot, the name in bold and the fun fact under it, typed out in place (the name alone when there is no fact). the rarity colour tints its outline and glow, and the text stays ice white. A photo narrower than a card's minimum width (about 14.5 degrees) is shown widened about its centre, while the backend reads only the framed box.
 - Up to four snapshots in the room; a fifth removes the oldest, and a new box erases the ones it covers.
 - A quick pinch in line with a photo clears it from any distance.
 - Real hands and objects in front of a snapshot hide it.
@@ -86,7 +86,9 @@ The hook is not a fact: it is why the thing is worth a look, or something to do 
 
 ### Scrapbook
 
-A curved panel at arm's length. Memories sit on pages grouped by topic, framed in their rarity colour. Thumb swipe flips pages and pinch opens a card. Voice search lights up matching cards, using embeddings over labels, stories and tags.
+A deck of memory cards, placed 0.7 m in front of where you look when it opens, at eye level and fixed there in the room. The middle card is full size and is a snapshot's card: the photo in a rarity-coloured border with the fun fact under it. Two smaller cards fade back on each side. Thumb swipe or a sideways pinch-drag scrolls, and a pinch on a side card brings it to the middle. A pinch chooses at the point where it was pressed unless it moves 6 cm or more sideways. A row of six rarity chips under the deck, Common to Mythic, each with its count and dimmed when empty, narrows the deck to one tier. A pinch on the chip in use shows every card again. The deck runs from Common to Mythic, newest first within a tier, and opens at its first card. Letting go of a drag lands on the card the drag was heading to: movement in the last 0.12 s before the release is ignored, and a small reversal at the end does not turn the deck back. Voice search lights up matching cards, using embeddings over labels and facts.
+
+A memory keeps only what its card shows: the photo, name, fun fact, tier, place, the local date it was collected (no time of day), the place's centre point for the map, and the search embedding. Your own position is never stored.
 
 ### Where you are: the phone's location
 
@@ -126,7 +128,7 @@ Ask can guide the person to something nearby: "where's the nearest subway?", "ta
 | Stop directions | Both hands as finger guns pointing up, held about 0.3 s |
 | Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |
 | App menu | Turn the left wrist inward and poke with the right index |
-| Scrapbook | Thumb swipe to flip; pinch to open; grab to pull closer |
+| Scrapbook | Hold both palms up side by side for half a second to open, and again to close; thumb swipe or pinch-drag to scroll; pinch a chip or a side card |
 | Spots globe | One-hand grab to spin; two-hand pull to zoom |
 
 **Rules**
@@ -155,7 +157,7 @@ Ask can guide the person to something nearby: "where's the nearest subway?", "ta
 | Look: name, fun fact, rarity, place guess | Card | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), streamed | Fastest option, needed for the 1.5 s first-words target. Step up to `gemini-3.8-flash` if rarity or fact quality is weak. |
 | Scan: pick 2 or 3 things with point, box and hook | Scan | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), structured JSON output, with OpenAI `gpt-4o` asked as well after 2 s | One image-in call; Flash missed the 7 s scan budget on the headset. The first good answer of the two wins. |
 | Ask: spoken answer | Query | Gemini 3.8 Live, the default low-latency variant | Native speech in and out, silence detection, and the voice choices for EDITH's voice; confirm the exact ID in the Live API docs. |
-| Ask: web answers with sources | Query | Gemini with Google Search grounding | Returns the sources behind the card's flip with no separate search service. |
+| Ask: web answers | Query | Gemini with Google Search grounding | Answers current questions with no separate search service. |
 | Welcome: intro, interests, practice Look | Welcome | Gemini 3.8 Live, with the Card model for the practice Look | Same voice session as Ask, so the voice picked on welcome carries over. |
 | Fun-fact kind matching, déjà vu, Scrapbook voice search | none | `gemini-embedding-2`, stored in pgvector | Multimodal, so a cropped photo and its label share one space; déjà vu can match on the image itself. Fix the vector size in config before the first row is written. |
 
@@ -169,7 +171,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 
 - [ ] Passthrough camera permission and frame capture
 - [ ] Pinch-and-drag frame and crop
-- [ ] Label, Collect by grab and pocket, memory card with flip and rarity reveal
+- [ ] Label, Collect by grab and pocket, memory card with rarity reveal
 - [ ] Thumb-tap Ask, answer orb that perches on the snapshot asked about, swipe to dismiss
 - [ ] Scan: palms-out pose, one front frame, pins with hooks placed by depth, pinch a pin to open its card, Ask aimed at the nearest pin or card
 - [ ] Wrist menu
@@ -184,14 +186,15 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 - [ ] Scan: pick the 2 or 3 things in one frame that make the most fun dares, with a point, a box and a dare each; no repeated dare per object in a session
 - [ ] EDITH's voice
 - [ ] Rarity tier and place guess from the card call; déjà vu matching from embeddings
-- [ ] Web-search answers with sources for Ask
+- [ ] Web-search answers for Ask
 - [ ] Phone location: place context for Look, Scan and Ask; named sights nearby for the Scan
 - [ ] Place confirm and geocoding (only if Spots ships)
 - [x] Directions: find_place / stop_navigation tools, `/navigate`, phone compass and course, blue arrow with north calibration
 
 **Scrapbook and visuals**
 
-- [ ] Scrapbook panel: pages by topic, rarity frames, filters, voice search
+- [x] Scrapbook deck: rarity frames, rarity chips, open-book gesture
+- [ ] Scrapbook: voice search
 - [ ] Spots globe with pins and labelled seeded sample data (only if Spots ships)
 - [ ] A sound per rarity tier on collect
 - [ ] UI design pass across the headset app. Target feel: liquid glass.

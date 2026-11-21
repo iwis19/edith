@@ -5,7 +5,7 @@ import os
 import uuid
 from array import array
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import psycopg
 import pytest
@@ -31,14 +31,14 @@ def schema_url():
 
 
 def test_migrate_applies_each_file_once(schema_url):
-    assert migrate(schema_url) == ["001_init", "002_collect", "003_told_facts", "004_photo_place"]
+    assert migrate(schema_url) == ["001_init", "002_collect", "003_told_facts", "004_photo_place", "005_drop_sources", "006_memory_date", "007_place_point"]
     assert migrate(schema_url) == []
 
 
 def test_concurrent_migrations_take_turns(schema_url):
     with ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _: migrate(schema_url), range(4)))
-    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_told_facts", "004_photo_place"]]
+    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_told_facts", "004_photo_place", "005_drop_sources", "006_memory_date", "007_place_point"]]
 
 
 async def test_health_checks_share_one_query_while_cached(schema_url):
@@ -62,23 +62,22 @@ async def test_the_store_records_a_look_for_a_new_profile(schema_url):
         record = LookRecord(
             look_ref=uuid.uuid4(), profile_id=profile, client_look_id=1, source="pinch",
             captured_at=datetime.now(UTC), width=640, height=480, status="done", name="mug", confidence=0.9,
-            fact="Handles came late.", fact_sources=[{"title": "t", "url": "https://example.com"}], rarity="mythic",
-            duration_ms=812,
+            fact="Handles came late.", rarity="mythic", duration_ms=812,
         )
         await store.record_look(record)
         await store.record_look(LookRecord(**{**record.__dict__, "look_ref": uuid.uuid4()}))
     finally:
         await store.close()
     with psycopg.connect(schema_url) as conn:
-        rows = conn.execute("select name, rarity, fact_sources from looks where profile_id = %s", (profile,)).fetchall()
-    assert rows == [("mug", "mythic", record.fact_sources)] * 2
+        rows = conn.execute("select name, rarity, fact from looks where profile_id = %s", (profile,)).fetchall()
+    assert rows == [("mug", "mythic", "Handles came late.")] * 2
 
 
 def a_look(profile: uuid.UUID, **overrides) -> LookRecord:
     fields = dict(
         look_ref=uuid.uuid4(), profile_id=profile, client_look_id=1, source="pinch", captured_at=datetime.now(UTC),
         width=640, height=480, status="done", name="mug", confidence=0.9, fact="Handles came late.",
-        fact_sources=[{"title": "t", "url": "https://example.com"}], rarity="rare", duration_ms=812,
+        rarity="rare", duration_ms=812,
     )
     return LookRecord(**{**fields, **overrides})
 
@@ -95,23 +94,46 @@ async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(
         for record in (first, second, failed, a_look(other)):
             await store.record_look(record)
 
-        first_id = await store.collect(profile, first.look_ref, b"crop-1",
-                                       datetime(2026, 11, 21, 8, tzinfo=UTC))
-        assert await store.collect(profile, first.look_ref, b"other bytes") == first_id
-        second_id = await store.collect(profile, second.look_ref, b"crop-2")
-        assert await store.collect(profile, failed.look_ref, b"x") is None
-        assert await store.collect(other, first.look_ref, b"x") is None
-        assert await store.collect(profile, uuid.uuid4(), b"x") is None
+        first_id = await store.collect(profile, first.look_ref, b"crop-1", date(2026, 11, 20))
+        assert await store.collect(profile, first.look_ref, b"other bytes", date(2026, 11, 22)) == first_id
+        second_id = await store.collect(profile, second.look_ref, b"crop-2", date(2026, 11, 21))
+        assert await store.collect(profile, failed.look_ref, b"x", date(2026, 11, 21)) is None
+        assert await store.collect(other, first.look_ref, b"x", date(2026, 11, 21)) is None
+        assert await store.collect(profile, uuid.uuid4(), b"x", date(2026, 11, 21)) is None
 
         memories = await store.list_memories(profile, 10)
         assert [(m.id, m.name, m.rarity) for m in memories] == [(second_id, "lamp", "epic"), (first_id, "mug", "rare")]
-        assert memories[1].sources == first.fact_sources
-        assert memories[1].created_at == datetime(2026, 11, 21, 8, tzinfo=UTC)
-        assert [(m.kind, m.place) for m in memories] == [(None, None), ("mug", "Waterloo, Ontario, Canada")]
+        assert memories[1].fact == first.fact
+        assert [m.collected_on for m in memories] == [date(2026, 11, 21), date(2026, 11, 20)]
+        assert [m.place for m in memories] == [None, "Waterloo, Ontario, Canada"]
         assert await store.list_memories(profile, 1) == memories[:1]
         assert await store.list_memories(other, 10) == []
         assert await store.memory_image(profile, first_id) == b"crop-1"
         assert await store.memory_image(other, first_id) is None
+    finally:
+        await store.close()
+
+
+async def test_a_place_point_is_saved_once_for_a_memory_with_a_place(schema_url):
+    migrate(schema_url)
+    store = PostgresStore(schema_url, max_size=2)
+    await store.open()
+    try:
+        profile, other = uuid.uuid4(), uuid.uuid4()
+        placed, unplaced = a_look(profile, place="Waterloo, Ontario, Canada"), a_look(profile)
+        for record in (placed, unplaced):
+            await store.record_look(record)
+        placed_id = await store.collect(profile, placed.look_ref, b"a", date(2026, 11, 21))
+        unplaced_id = await store.collect(profile, unplaced.look_ref, b"b", date(2026, 11, 20))
+
+        assert await store.place_to_locate(profile, placed_id) == "Waterloo, Ontario, Canada"
+        assert await store.place_to_locate(other, placed_id) is None
+        assert await store.place_to_locate(profile, unplaced_id) is None
+        await store.set_place_point(placed_id, (43.47235, -80.54491))
+        await store.set_place_point(placed_id, (1.0, 2.0))
+        assert await store.place_to_locate(profile, placed_id) is None
+        points = [m.point for m in await store.list_memories(profile, 10)]
+        assert points == [(43.47235, -80.54491), None]
     finally:
         await store.close()
 

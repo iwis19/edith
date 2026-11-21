@@ -96,7 +96,7 @@ The response is newline-delimited JSON (`application/x-ndjson`), one event per l
 | --- | --- |
 | `accepted` | `look_id`, `look_ref` (the backend's ID for this Look) |
 | `name` | `name`, `confidence`, `pending`: while `true`, `name` is the text written so far and `confidence` is 0; the final name follows with `pending: false` |
-| `fact` | `text`, `sources` (`title`, `url`) |
+| `fact` | `text` |
 | `rarity` | `tier`: `common`, `uncommon`, `rare`, `epic`, `legendary` or `mythic` |
 | `done` | none |
 | `error` | `code` (`timeout` or `agent_failed`), `message` |
@@ -108,9 +108,9 @@ The stream always starts with `accepted` and ends with `done` or `error`. In bet
 Saves a finished Look as a memory. A multipart form with two fields:
 
 - `image`: the JPEG to keep, under the same limits as `/look`'s image. A Look keeps no image, so the headset sends the snapshot it is pocketing.
-- `meta`: JSON `{"look_ref": "<look_ref from the accepted event>", "collected_at": ISO 8601 with a timezone}`. `collected_at` is optional and becomes the memory's `created_at`; it defaults to the server time, and a time ahead of the server is capped at the server time.
+- `meta`: JSON `{"look_ref": "<look_ref from the accepted event>", "collected_at": ISO 8601 with a timezone}`. `collected_at` is optional and is the headset's local time with its UTC offset. The memory keeps only the calendar date in that offset, so an evening at UTC-5 is that evening's date and not the next UTC day. A time ahead of the server is capped at the server time, and with no `collected_at` the date is the server's UTC date. No time of day is stored.
 
-The name, kind, fact, sources, rarity tier and place are copied from the Look the backend recorded, never from the request. If the Look is still streaming, the request waits for it to be recorded (at most `LOOK_TIMEOUT_S` plus 5 s). Collecting a Look again returns the first memory and keeps its first image.
+The name, fact, rarity tier and place are copied from the Look the backend recorded, never from the request. If the Look is still streaming, the request waits for it to be recorded (at most `LOOK_TIMEOUT_S` plus 5 s). Collecting a Look again returns the first memory and keeps its first image.
 
 The response is `{"memory_id": int}`.
 
@@ -121,13 +121,23 @@ The response is `{"memory_id": int}`.
 
 ### `GET /memories`
 
-Lists the profile's memories, newest first, without image bytes. The optional `limit` query parameter is 1 to 500 and defaults to 100.
+Lists the profile's memories, newest date first and newest first within a date, without image bytes. The optional `limit` query parameter is 1 to 500 and defaults to 100.
 
-The response is `{"memories": [{"id", "look_ref", "name", "kind", "fact", "sources", "rarity", "place", "created_at"}]}`. `kind` and `place` are `null` when the Card agent gave none. Answers 503 `db_unavailable` like `/collect`.
+The response is `{"memories": [{"id", "name", "fact", "rarity", "place", "date", "point"}]}`. `date` is `YYYY-MM-DD`. `place` is `null` when the Card agent gave none. `point` is the centre of `place` as `[lat, lon]` rounded to 5 decimals, or `null` when the memory has no place, the place was not found, or the lookup has not finished (see [Phone location](#phone-location)). Answers 503 `db_unavailable` like `/collect`.
 
 ### `GET /memories/{id}/image`
 
 Returns the memory's JPEG (`image/jpeg`). Answers 404 `unknown_memory` for an id that is missing or belongs to another profile, and 503 `db_unavailable` like `/collect`.
+
+### `GET /map/world` and `GET /map/area`
+
+Two 1024 x 1024 `image/png` maps for the Scrapbook, stitched from OpenStreetMap tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) in Web Mercator. Both need the device token and profile headers, answer with `Cache-Control: max-age=86400`, and answer 502 `map_failed` when a tile cannot be fetched (that answer is not cacheable). Nothing but tile coordinates is sent to the tile server.
+
+`GET /map/world` is the whole world at tile zoom 2, 4 x 4 tiles: x spans longitude -180 to 180 and y spans latitude 85.0511 down to -85.0511.
+
+`GET /map/area?lat=<float>&lon=<float>&zoom=<int>` is centred on the point at that tile zoom. The point's pixel at zoom `z` is its slippy-map world pixel, `256 * 2^z * ((lon + 180) / 360, (1 - asinh(tan(lat)) / pi) / 2)`, minus the centre's world pixel, plus 512. `zoom` is clamped to 3 to 17, `lat` to plus or minus 85.0511, and `lon` is wrapped into -180 to 180. Tiles are wrapped across the antimeridian, and the part of the window past a pole is a plain sea-blue. The point is first rounded to 4 decimals (about 11 m), so a client that sends 4-decimal values gets an image centred exactly on them. A non-number, `nan`, `inf` or a missing parameter answers 422 `invalid_request`.
+
+Tiles are fetched 2 at a time, and the process keeps the last 512 tiles and the last 32 finished images. Show **© OpenStreetMap contributors** on any screen that shows these maps, as the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) and the ODbL licence require.
 
 ### `POST /scan`
 
@@ -147,7 +157,7 @@ The response is `{"scan_ref", "ms", "picks"}`. `picks` holds 0 to 3 items, most 
 
 Coordinates are fractions of the upright image from 0 to 1, with the origin at the top left and y running down.
 
-The model is also told three things when they exist: the phone's place and up to 12 named sights nearby (see [Phone location](#phone-location)), the hooks this profile was already given in this `session`, and the profile's newest 50 memories, which it is asked to pass over for things not yet collected. A pick that repeats a hook for the same name within the session is dropped, and so is one whose hook opens with a generic word such as "Check" or "Look". The hooks are kept in process memory for one session per profile; a new `session` forgets the old one's. The memory lookup gets 0.6 s, after which the scan goes without it.
+The model is also told three things when they exist: the phone's place and up to 12 named sights nearby (see [Phone location](#phone-location)), the hooks this profile was already given in this `session`, and the names of the profile's newest 50 memories, which it is asked to pass over for things not yet collected. A pick that repeats a hook for the same name within the session is dropped, and so is one whose hook opens with a generic word such as "Check" or "Look". The hooks are kept in process memory for one session per profile; a new `session` forgets the old one's. The memory lookup gets 0.6 s, after which the scan goes without it.
 
 | Status | `error.code` | Meaning |
 | --- | --- | --- |
@@ -192,6 +202,8 @@ The headset pairs like this:
 4. The phone page sends its position to `POST /location` about every 10 s, or after moving 25 m.
 
 A position becomes a place name and named sights through OpenStreetMap: Nominatim for the address and Overpass for the buildings, landmarks and campuses around the point, with no list of places kept in this repository. The backend sends each service the position rounded to about 11 m and a `User-Agent` of `EDITH/<version>` only. It asks Nominatim at most once a second, remembers each answer for 30 min per rounded point, and looks a profile up again only after it moves 75 m or its answer is 10 min old.
+
+A memory's `point` comes from a Nominatim search (`/search`, `limit=1`) for the memory's `place` text, run in the background after `/collect` has answered. The phone's position is never part of it and is never written to the database. Searches share the reverse lookups' one-a-second limit and `User-Agent`, and each normalised place is searched once per process, including when nothing was found. A failed search leaves `point` null and is retried by a later `/collect` of the same Look.
 
 The Look and Ask prompts use a position only while its latest fix is at most 30 min old (`FRESH_S`). That outlasts `PHONE_SILENT_S`: a person who stopped somewhere is still there minutes later. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights, and `describe_place` turns them into prompt text. The Scan agent uses both.
 
@@ -335,8 +347,9 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/events.py`: the stream's event types, the Look metadata and the details recorded but not streamed.
 - `edith_backend/pairing.py`: pairing codes with their throttle, and the signed phone tokens.
 - `edith_backend/location.py`: the phone's position per profile, kept in memory, and the place description for prompts.
-- `edith_backend/resolve.py`: Nominatim and Overpass lookups with the cache and the rate limit.
+- `edith_backend/resolve.py`: Nominatim (reverse and place search) and Overpass lookups with the cache and the rate limit.
 - `edith_backend/static/phone.html`: the page the phone opens.
+- `edith_backend/maps.py`: the tile maths, the tile fetch and cache, and the stitching behind `/map/world` and `/map/area`.
 - `edith_backend/db.py`: the pooled Postgres store, or a no-op store with no database.
 - `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills and the `told_facts` table that keeps the facts told to each profile, with the embedding of their kind. `memories.embedding` is not written.
 - `tools/stream_check.py`: prints the arrival time of each event of one Look.

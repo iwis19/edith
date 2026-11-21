@@ -1,3 +1,4 @@
+using Edith.Hands;
 using Edith.Snapshots;
 using Edith.UI;
 using UnityEngine;
@@ -16,6 +17,8 @@ namespace Edith.Pinch
         static readonly Color Edge = new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.95f);
 
         [SerializeField] PinchInput input;
+        /// While another panel holds it, a dragged pinch draws no box. Optional.
+        [SerializeField] HandGate gate;
 
         RectTransform rect;
         Canvas canvas;
@@ -40,6 +43,11 @@ namespace Edith.Pinch
 
         void OnStepped(PinchReading reading)
         {
+            if (gate != null && gate.Held)
+            {
+                canvas.enabled = false;
+                return;
+            }
             switch (reading.Event)
             {
                 case PinchEvent.Tap:

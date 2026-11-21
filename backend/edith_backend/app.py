@@ -22,19 +22,20 @@ from .agents.ask import AskError, AskRequest, AskSession, LiveAsk, make_live_ask
 from .agents.card import CardAgent, make_card_agent
 from .agents.scan import ScanAgent, make_scan_agent
 from .config import Settings
-from .db import LookRecord, Store, StoreUnavailable, make_store
+from .db import LookRecord, Store, StoreUnavailable, collection_date, make_store
 from .events import (
     Accepted, CollectMeta, Done, ErrorEvent, Fact, LookDetails, LookEvent, LookMeta, Name, RarityEvent, ScanMeta,
     ScanReply,
 )
 from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
+from .maps import MapError, TileMap
 from .navigate import (
     NAVIGATE_TIMEOUT_S, SEARCH_FIX_S, HttpPlaceFinder, NavigateReply, NavigateRequest, Navigations, NavStatus, PlaceFinder, SearchFailed,
     others, status,
 )
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
-from .resolve import HttpResolver
+from .resolve import HttpResolver, PlaceLocator
 
 log = logging.getLogger("edith")
 if not log.handlers:
@@ -140,14 +141,21 @@ def create_app(
     locations: Locations | None = None,
     pairings: Pairings | None = None,
     scanner: ScanAgent | None = None,
+    geocoder: PlaceLocator | None = None,
+    tile_map: TileMap | None = None,
     navigations: Navigations | None = None,
     finder: PlaceFinder | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
         raise RuntimeError("PUBLIC_SERVER is set but DEVICE_TOKEN is empty, so anyone could spend the API keys.")
-    # Made here and not per request: only the phone's position ever uses the resolver's client.
-    locations = locations or Locations(HttpResolver(httpx.AsyncClient()))
+    # Made here and not per request. The geocoder is the same resolver, so reverse and search lookups share one
+    # Nominatim rate limit.
+    http = httpx.AsyncClient()
+    resolver = HttpResolver(http)
+    tile_map = tile_map or TileMap(http)
+    locations = locations or Locations(resolver)
+    geocoder = geocoder or resolver
     pairings = pairings or Pairings()
     navigations = navigations or Navigations()
     finder = finder or HttpPlaceFinder(httpx.AsyncClient())
@@ -158,6 +166,7 @@ def create_app(
     # Looks still streaming, by look_ref, so a /collect that arrives before the Look is recorded can wait for it. A
     # per-process map is right because the backend runs as a single replica.
     inflight: dict[UUID, asyncio.Event] = {}
+    geocoding: set[asyncio.Task] = set()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -167,6 +176,8 @@ def create_app(
         restore = getattr(agent, "restore_places", None)
         restoring = asyncio.create_task(restore()) if restore else None
         yield
+        for task in geocoding:
+            task.cancel()
         if restoring:
             restoring.cancel()
         if _recording:
@@ -340,17 +351,22 @@ def create_app(
                 await asyncio.wait_for(recording.wait(), settings.look_timeout_s + 5)
             except TimeoutError:
                 pass
-        memory_id = await _stored(store.collect(profile_id, parsed.look_ref, data, parsed.collected_at))
+        memory_id = await _stored(store.collect(
+            profile_id, parsed.look_ref, data, collection_date(parsed.collected_at, datetime.now(UTC))))
         if memory_id is None:
             raise ApiError(404, "unknown_look", "This profile has no finished Look with that look_ref.")
+        task = asyncio.create_task(_locate_place(store, geocoder, profile_id, memory_id))
+        geocoding.add(task)
+        task.add_done_callback(geocoding.discard)
         return {"memory_id": memory_id}
 
     @app.get("/memories")
     async def memories(limit: int = Query(100, ge=1, le=500), profile_id: UUID = Depends(profile)) -> dict:
         found = await _stored(store.list_memories(profile_id, limit))
         return {"memories": [
-            {"id": m.id, "look_ref": m.look_ref.hex, "name": m.name, "kind": m.kind, "fact": m.fact,
-             "sources": m.sources, "rarity": m.rarity, "place": m.place, "created_at": m.created_at.isoformat()}
+            {"id": m.id, "name": m.name, "fact": m.fact, "rarity": m.rarity, "place": m.place,
+             "date": m.collected_on.isoformat(),
+             "point": [round(m.point[0], 5), round(m.point[1], 5)] if m.point else None}
             for m in found
         ]}
 
@@ -361,7 +377,40 @@ def create_app(
             raise ApiError(404, "unknown_memory", "This profile has no memory with that id.")
         return Response(data, media_type="image/jpeg")
 
+    @app.get("/map/world")
+    async def map_world(_: UUID = Depends(profile)) -> Response:
+        return await _map_png(tile_map.world())
+
+    @app.get("/map/area")
+    async def map_area(
+        lat: float = Query(allow_inf_nan=False),
+        lon: float = Query(allow_inf_nan=False),
+        zoom: int = Query(),
+        _: UUID = Depends(profile),
+    ) -> Response:
+        return await _map_png(tile_map.area(lat, lon, zoom))
+
     return app
+
+
+async def _map_png(image: Awaitable[bytes]) -> Response:
+    try:
+        return Response(await image, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
+    except MapError as exc:
+        log.warning("map failed: %s", exc)
+        raise ApiError(502, "map_failed", "The map tiles could not be fetched.")
+
+
+async def _locate_place(store: Store, geocoder: PlaceLocator, profile_id: UUID, memory_id: int) -> None:
+    """Saves the centre of a memory's place after /collect has answered. Only the place text is sent out."""
+    try:
+        place = await store.place_to_locate(profile_id, memory_id)
+        if place is None:
+            return
+        if (point := await geocoder.locate(place)) is not None:
+            await store.set_place_point(memory_id, point)
+    except Exception as exc:
+        log.warning("could not locate the place of memory %s: %s", memory_id, type(exc).__name__)
 
 
 async def _stored[T](call: Awaitable[T]) -> T:
@@ -512,7 +561,6 @@ def _record(
         name=name.name if isinstance(name, Name) else None,
         confidence=name.confidence if isinstance(name, Name) else None,
         fact=fact.text if isinstance(fact, Fact) else None,
-        fact_sources=[s.model_dump() for s in fact.sources] if isinstance(fact, Fact) else [],
         rarity=rarity.tier if isinstance(rarity, RarityEvent) else None,
         duration_ms=duration_ms,
         kind=details.kind if details else None,

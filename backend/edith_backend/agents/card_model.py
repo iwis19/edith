@@ -386,7 +386,7 @@ class CardModelAgent:
             kept = ToldFact(kind, fact, embedding, self._clock())
         self._facts.add(profile_id, kept)
         self._save(profile_id, kept)
-        yield Fact(text=fact, sources=[])
+        yield Fact(text=fact)
 
     def _context(self, profile_id: UUID, found: Whereabouts | None) -> str | None:
         """Where the person is, for RARITY: the phone's place and the places recent photos showed, both when known."""

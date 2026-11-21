@@ -108,7 +108,8 @@ namespace Edith.Look
             }
         }
 
-        static bool TryTier(string name, out Rarity tier)
+        /// False for a rarity this build does not know, null included.
+        internal static bool TryTier(string name, out Rarity tier)
         {
             switch (name)
             {
