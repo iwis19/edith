@@ -80,7 +80,7 @@ namespace Edith.Snapshots
             snapshot.group.alpha = 0f;
             snapshot.group.interactable = false;
             snapshot.group.blocksRaycasts = false;
-            snapshot.view = CardView.Build(rect, box.Size * UnitsPerMetre, font, material);
+            snapshot.view = CardView.Build(rect, box.Size * UnitsPerMetre, box.Depth, font, material);
             snapshot.view.Show(snapshot.Card);
             return snapshot;
         }

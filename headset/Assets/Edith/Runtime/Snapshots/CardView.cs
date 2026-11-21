@@ -24,11 +24,17 @@ namespace Edith.Snapshots
         readonly Image[] border = new Image[4];
         Text fact;
 
-        public static CardView Build(RectTransform photo, Vector2 photoSizeMm, Font font, Material material)
+        // Sizes above are for a card at arm's length. A card hung farther away, such as one on the object a scan pin
+        // marked, grows its border, gap and text with its distance so they look the same size from the eye.
+        const float ArmsLengthMeters = 0.45f;
+
+        /// `depth` is how far the card hangs from the eye that made it, in metres.
+        public static CardView Build(RectTransform photo, Vector2 photoSizeMm, float depth, Font font, Material material)
         {
             var view = new CardView();
-            view.BuildBorder(photo, photoSizeMm, material);
-            view.BuildText(photo, photoSizeMm, font, material);
+            var scale = Mathf.Max(1f, depth / ArmsLengthMeters);
+            view.BuildBorder(photo, photoSizeMm, scale, material);
+            view.BuildText(photo, photoSizeMm, scale, font, material);
             return view;
         }
 
@@ -54,9 +60,9 @@ namespace Edith.Snapshots
         }
 
         /// Four strips just outside the photo, so the border never covers any of it.
-        void BuildBorder(RectTransform photo, Vector2 size, Material material)
+        void BuildBorder(RectTransform photo, Vector2 size, float scale, Material material)
         {
-            float w = BorderMm, x = (size.x + w) * 0.5f, y = (size.y + w) * 0.5f;
+            float w = BorderMm * scale, x = (size.x + w) * 0.5f, y = (size.y + w) * 0.5f;
             var edges = new[]
             {
                 (new Vector2(size.x + 2f * w, w), new Vector2(0f, y)),
@@ -74,14 +80,14 @@ namespace Edith.Snapshots
             }
         }
 
-        void BuildText(RectTransform photo, Vector2 size, Font font, Material material)
+        void BuildText(RectTransform photo, Vector2 size, float scale, Font font, Material material)
         {
-            var width = Mathf.Max(size.x, MinTextWidthMm);
+            var width = Mathf.Max(size.x, MinTextWidthMm * scale);
             var column = new GameObject("Text", typeof(RectTransform)).GetComponent<RectTransform>();
-            Anchor(column, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, -(size.y * 0.5f + GapMm)));
-            column.localScale = Vector3.one / TextUnitsPerMm;
+            Anchor(column, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, -(size.y * 0.5f + GapMm * scale)));
+            column.localScale = Vector3.one * (scale / TextUnitsPerMm);
 
-            var lineWidth = width * TextUnitsPerMm;
+            var lineWidth = width * TextUnitsPerMm / scale;
             fact = Label("Fact", column, font, material, FactSize, FontStyle.Normal, new Vector2(lineWidth, FactHeight), 0f);
             // TypedText hides the part not yet typed with a transparent colour tag.
             fact.supportRichText = true;
