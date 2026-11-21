@@ -162,6 +162,12 @@
       token = localStorage.getItem(TOKEN_KEY);
     } catch (e) {}
     showScreen();
+    // A paired phone starts sharing as soon as the page opens. iOS asks for compass access only inside a tap, so
+    // there the compass waits for the first tap anywhere on the page.
+    if (token) {
+      if (compassNeedsTap()) document.addEventListener("click", startCompass, { once: true });
+      start(false);
+    }
   }
 
   function saveToken(value) {
@@ -311,6 +317,11 @@
     setTimeout(function () { if (!compassOn) showCompass("not available on this phone"); }, 4000);
   }
 
+  function compassNeedsTap() {
+    var D = window.DeviceOrientationEvent;
+    return !!(D && typeof D.requestPermission === "function");
+  }
+
   // iOS asks for motion access, and only inside the tap itself, before anything else waits.
   function startCompass() {
     if (compassAsked) return;
@@ -352,9 +363,9 @@
     showScreen();
   }
 
-  function start() {
+  function start(askCompass) {
     if (!token) { showScreen(); return; }
-    startCompass();
+    if (askCompass !== false) startCompass();
     if (watchId !== null) return;
     if (!navigator.geolocation) { showError("This browser has no location support."); return; }
     showError("");
