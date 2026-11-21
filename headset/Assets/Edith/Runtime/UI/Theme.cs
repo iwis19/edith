@@ -35,7 +35,7 @@ namespace Edith.UI
 
         static Font regular, semiBold;
         static Texture2D head, rider;
-        static Sprite fill, edge, glow, inner;
+        static Sprite fill, edge, boldEdge, glow, inner;
 
         /// Jost Regular, or `fallback` (else Unity's built-in font) when the font is not in the build.
         public static Font Regular(Font fallback = null) => Pick(ref regular, "Jost-Regular", fallback);
@@ -95,6 +95,16 @@ namespace Edith.UI
             {
                 if (edge == null) edge = Bake("EDITH glass edge", 0, d => Mathf.Clamp01(0.5f - d) * Mathf.Clamp01(d + 3.5f));
                 return edge;
+            }
+        }
+
+        /// A bold ring on the shape's outline, ten pixels wide, for an outline meant to be seen at a glance.
+        public static Sprite BoldEdge
+        {
+            get
+            {
+                if (boldEdge == null) boldEdge = Bake("EDITH glass bold edge", 0, d => Mathf.Clamp01(0.5f - d) * Mathf.Clamp01(d + 10.5f));
+                return boldEdge;
             }
         }
 
@@ -287,6 +297,9 @@ namespace Edith.UI
         }
 
         public void SetOutline(Color color) => outline.color = color;
+
+        /// Draws the outline with `sprite`, such as Theme.BoldEdge for a thicker ring, keeping its corners.
+        public void SetOutlineSprite(Sprite sprite) => outline.sprite = sprite;
         public void SetGlow(Color color)
         {
             glow.color = color;

@@ -146,7 +146,7 @@ namespace Edith.Scrapbook
                 follow = new FrameFollow();
                 Debug.Log("[EDITH scrapbook] recentred, deck moved in front");
             }
-            ring.SetRing(ringAt, ringProgress, false);
+            ring.SetDeck(ringAt, ringProgress);
             ring.Tick(eye.position);
             fade = Mathf.MoveTowards(fade, Open ? 1f : 0f, Time.deltaTime / FadeSeconds);
             if (!frame.gameObject.activeSelf) return;

@@ -93,26 +93,31 @@ namespace Edith.Snapshots
         /// name stands in its place.
         public void Show(Rarity? tier, string name, string text)
         {
-            Tint(tier);
+            Tint(tier, bold: false);
             fact.text = string.IsNullOrEmpty(text) ? name ?? "" : text;
             Fit();
         }
 
-        void Tint(Rarity? tier)
+        /// `bold` draws a rated card's outline as a thick ring and its photo frame at full strength, so the rarity's
+        /// colour reads at a glance. A card still waiting for its rarity keeps the thin outline.
+        void Tint(Rarity? tier, bool bold)
         {
             var rated = tier is Rarity rarity ? RarityColors.For(rarity) : (Color?)null;
+            var thick = bold && rated != null;
+            glass.SetOutlineSprite(thick ? Theme.BoldEdge : Theme.Edge);
+            frame.SetOutlineSprite(thick ? Theme.BoldEdge : Theme.Edge);
             if (rated is Color tint)
-                glass.SetLook(Theme.PanelFill, new Color(tint.r, tint.g, tint.b, 0.16f), tint, new Color(tint.r, tint.g, tint.b, 0.4f));
+                glass.SetLook(Theme.PanelFill, new Color(tint.r, tint.g, tint.b, thick ? 0.22f : 0.16f), tint, new Color(tint.r, tint.g, tint.b, 0.4f));
             else
                 glass.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.12f), Waiting, Color.clear);
             var rimLook = rated ?? Theme.Accent;
-            frame.SetLook(Color.clear, Color.clear, new Color(rimLook.r, rimLook.g, rimLook.b, 0.75f), Color.clear);
+            frame.SetLook(Color.clear, Color.clear, new Color(rimLook.r, rimLook.g, rimLook.b, thick ? 1f : 0.75f), Color.clear);
         }
 
         /// `caption`, when given, is said in place of the card's fact.
         public void Show(LookCard card, string caption)
         {
-            Tint(card.Tier);
+            Tint(card.Tier, bold: true);
             fact.text = caption
                 ?? (card.Phase == LookPhase.Failed ? card.Error
                     : card.Fact.Empty ? (card.Finished ? "" : "Looking…")
