@@ -7,7 +7,7 @@ A FastAPI service that holds every AI call, the search and the memory, so API ke
 Each Look makes two model calls:
 
 1. The naming call streams the name, a confidence, the kind of object, a place guess and the rarity tier. The `name` event goes out as soon as the confidence arrives.
-2. The fact call starts at that moment, told the name, and writes one fun fact of about 30 words. A fact that repeats one already told to the profile is rewritten once, and dropped if it repeats again.
+2. The fact call starts at that moment, told the name, and writes one fun fact of about 30 words. A fact that repeats one already told to the profile is rewritten once, told every fact already told for the Look's kind. If the rewrite repeats too, the card shows the fact for that kind told longest ago and counts it as told again, so a card with a fact never goes out without one.
 
 `CARD_PROVIDER` picks who writes both calls:
 
@@ -27,7 +27,7 @@ The card shows the fact, so name plus fact is the time that counts. On the same 
 
 When the phone has shared a position within the last 30 minutes (see [Phone location](#phone-location)), the naming call is also told the place and the nearest named sights, in place of the recent photos' places. The Look's `kind` and `place` are recorded with it and copied into its memory, with the phone's place preferred over the photo's guess. They are not sent in the stream.
 
-Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The facts told and the places seen are kept per profile in process memory: places for 6 h, and both are lost on restart.
+Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The places seen are kept per profile in process memory for 6 h and are lost on restart. The last 50 facts told to each profile are kept in memory too, and also in the `told_facts` table when there is a database, so they survive a restart.
 
 ### Model trade-offs
 
@@ -187,13 +187,13 @@ The headset has no GPS, so the phone that runs its hotspot pairs with the backen
 The headset pairs like this:
 
 1. `POST /pair` returns a 4-digit code and the address to open on the phone.
-2. The person opens that address on the phone, types the code and taps Share location.
+2. The person opens that address on the phone, types the code and taps Share location. A phone that is already paired shows the code box under "Enter a new code"; claiming a code replaces the phone's stored token.
 3. The headset polls `GET /pair/{code}` until `paired` is `true`.
 4. The phone page sends its position to `POST /location` about every 10 s, or after moving 25 m.
 
 A position becomes a place name and named sights through OpenStreetMap: Nominatim for the address and Overpass for the buildings, landmarks and campuses around the point, with no list of places kept in this repository. The backend sends each service the position rounded to about 11 m and a `User-Agent` of `EDITH/<version>` only. It asks Nominatim at most once a second, remembers each answer for 30 min per rounded point, and looks a profile up again only after it moves 75 m or its answer is 10 min old.
 
-The Look and Ask prompts use a position only while its latest fix is at most 30 min old. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights, and `describe_place` turns them into prompt text. The Scan agent uses both.
+The Look and Ask prompts use a position only while its latest fix is at most 30 min old (`FRESH_S`). That outlasts `PHONE_SILENT_S`: a person who stopped somewhere is still there minutes later. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights, and `describe_place` turns them into prompt text. The Scan agent uses both.
 
 #### `POST /pair`
 
@@ -227,7 +227,7 @@ Needs `X-Edith-Phone` with the phone token, and no other headers. The body, at m
 
 #### `GET /location`
 
-Needs the device token and profile headers. Returns the same summary as `POST /location` when a position is kept for the profile, so the headset can skip pairing, else 404 `no_location`.
+Needs the device token and profile headers. Returns the same summary as `POST /location` while the phone's latest fix is at most 30 s old (`PHONE_SILENT_S`), so the headset can skip pairing, else 404 `no_location`. The phone page re-sends every 10 s, so a phone that closed the page reads as gone after three missed re-sends, and the headset, which checks every 30 s and locks after three misses, locks about 1.5 min later. A backend the headset cannot reach never locks it.
 
 ## Set up
 
@@ -266,6 +266,15 @@ Scan settings:
 | `SCAN_BACKUP_AFTER_S` | `3.5` | How long the Gemini call runs alone before the backup is asked too; 0 turns the backup off |
 | `SCAN_THINKING_LEVEL` | `minimal` | The model's thinking level; more thinking makes pins later |
 | `SCAN_TIMEOUT_S` | `7` | The time one scan may take. The headset waits 8 s |
+
+Kind matching settings:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `EMBEDDING_MODEL` | `gemini-embedding-2` | The Gemini model that embeds a Look's kind of object, so "mug" and "coffee cup" count as one kind. Needs `GEMINI_API_KEY`; without it kinds match by a shared word |
+| `EMBEDDING_DIMENSIONS` | `1536` | The embedding size. It must equal the `vector(1536)` columns in the migrations |
+| `KIND_SIMILARITY` | `0.8` | The cosine similarity at which two kinds count as one |
+| `EMBEDDING_TIMEOUT_S` | `0.3` | The time the embedding call may take. It starts after the name has gone out and runs beside the fact call, and a call that runs over is dropped, so the kinds match by a shared word for that Look |
 
 Phone location settings:
 
@@ -312,7 +321,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 
 1. Create a Railway service from this repository with the root directory set to `backend`. Railway builds the `Dockerfile`.
 2. Set `DATABASE_URL`, `DEVICE_TOKEN` and the key for `CARD_PROVIDER` (`OPENAI_API_KEY` by default, or `GEMINI_API_KEY` with `CARD_PROVIDER=gemini`) on the service. The image sets `PUBLIC_SERVER=1`, so the app refuses to start without `DEVICE_TOKEN`.
-3. Keep one replica: the facts told, the places seen, the scan hooks and the phone's location are held in process memory.
+3. Keep one replica: the places seen, the scan hooks and the phone's location are held in process memory.
 
 ## Layout
 
@@ -320,6 +329,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/agents/ask.py`: the Ask persona prompt, the token request and the session setup.
 - `edith_backend/agents/card.py`: the `CardAgent` protocol, the stub, and `make_card_agent`, which picks the agent from `CARD_PROVIDER`.
 - `edith_backend/agents/card_model.py`: the two-call Card agent, its line parser, and the fact and place histories.
+- `edith_backend/agents/embeddings.py`: the Gemini embedding client for kinds of object, and cosine similarity.
 - `edith_backend/agents/scan.py`: the Scan agent with its prompt, the repair of the model's picks, the Gemini call with its OpenAI backup, and the hook memory.
 - `edith_backend/agents/writers.py`: the OpenAI and Gemini streaming writers.
 - `edith_backend/events.py`: the stream's event types, the Look metadata and the details recorded but not streamed.
@@ -328,5 +338,5 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/resolve.py`: Nominatim and Overpass lookups with the cache and the rate limit.
 - `edith_backend/static/phone.html`: the page the phone opens.
 - `edith_backend/db.py`: the pooled Postgres store, or a no-op store with no database.
-- `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills.
+- `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills and the `told_facts` table that keeps the facts told to each profile, with the embedding of their kind. `memories.embedding` is not written.
 - `tools/stream_check.py`: prints the arrival time of each event of one Look.

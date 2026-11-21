@@ -14,8 +14,12 @@ from pydantic import BaseModel, Field
 log = logging.getLogger("edith.location")
 
 KEEP_S = 6 * 3600
-# A prompt trusts a position only this long after the phone last sent one: a phone that locked and went quiet no
-# longer says where the person is.
+# GET /location reports a position only this long after the phone last sent one, so the headset sees a closed phone
+# page as gone. The phone page re-sends every 10 s, so 30 s is three missed re-sends.
+PHONE_SILENT_S = 30.0
+# A prompt trusts a position this long after the phone last sent one. It outlasts PHONE_SILENT_S: a person who
+# stopped at a place is still there minutes later, and a phone that dropped out for a minute is not a reason to
+# forget where the Look is happening.
 FRESH_S = 30 * 60
 # A new fix re-resolves only when it moved this far from the last resolved one, or that result is this old.
 MOVE_M = 75.0
@@ -132,8 +136,9 @@ class Locations:
             task.add_done_callback(self._tasks.discard)
         return _summarise(entry)
 
-    def summary(self, profile_id: UUID) -> LocationSummary | None:
-        entry = self._entry(profile_id)
+    def summary(self, profile_id: UUID, max_age_s: float = PHONE_SILENT_S) -> LocationSummary | None:
+        """What the headset reads, or None once the phone has sent nothing for `max_age_s`."""
+        entry = self._entry(profile_id, max_age_s)
         return _summarise(entry) if entry else None
 
     async def settle(self) -> None:

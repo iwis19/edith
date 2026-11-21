@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     embedding_model: str = "gemini-embedding-2"
     # The size of every stored embedding; it can change only before the first one is written.
     embedding_dimensions: int = 1536
+    # Two kinds of object count as one when their embeddings' cosine similarity is at least this.
+    kind_similarity: float = 0.8
+    # The embedding of a Look's kind is asked for beside the fact call and dropped when it takes longer, so it never
+    # delays the card; the kinds then match by a shared word.
+    embedding_timeout_s: float = 0.3
 
     stub_name_ms: int = 300
     stub_fact_ms: int = 700

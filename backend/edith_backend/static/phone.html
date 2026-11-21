@@ -70,9 +70,9 @@
 <body>
 <main>
 <div class="brand">EDITH</div>
-<form id="pair" class="hidden" autocomplete="off">
+<form id="pair" autocomplete="off">
   <h1>Connect your phone</h1>
-  <p class="lead">Enter the code shown in your headset.</p>
+  <p class="lead" id="codeLabel">Enter the code shown in your headset.</p>
   <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code from the headset" placeholder="0000">
   <button id="connect" type="submit">Connect</button>
 </form>
@@ -119,7 +119,8 @@
 
   function showScreen() {
     var paired = !!token;
-    $("pair").classList.toggle("hidden", paired);
+    $("codeLabel").textContent = paired ? "Enter a new code" : "Look in your headset for the code";
+    $("codeLabel").textContent = paired ? "Enter a new code to connect a different headset." : "Enter the code shown in your headset.";
     $("share").classList.toggle("hidden", !paired);
     $("status").classList.toggle("hidden", !paired);
     $("shared").classList.toggle("hidden", !paired);

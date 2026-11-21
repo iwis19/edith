@@ -7,7 +7,7 @@ from pydantic import SecretStr, ValidationError
 
 from edith_backend.app import create_app
 from edith_backend.location import (
-    FRESH_S, KEEP_S, LocationFix, Locations, Resolution, Sight, Whereabouts, describe_place,
+    FRESH_S, KEEP_S, PHONE_SILENT_S, LocationFix, Locations, Resolution, Sight, Whereabouts, describe_place,
 )
 from edith_backend.pairing import Pairings
 
@@ -105,6 +105,19 @@ async def test_a_prompt_stops_trusting_a_position_the_phone_has_stopped_updating
     assert locations.whereabouts(ANN, max_age_s=KEEP_S) == WATERLOO
 
 
+async def test_the_headset_sees_no_position_once_the_phone_has_been_silent_for_thirty_seconds(clock):
+    locations = Locations(FakeResolver(), clock)
+    locations.update(ANN, fix())
+    await locations.settle()
+    clock.now += PHONE_SILENT_S
+    assert locations.summary(ANN).place == WATERLOO.place
+    clock.now += 1
+    assert locations.summary(ANN) is None
+    assert locations.whereabouts(ANN) == WATERLOO, "prompts keep the place for FRESH_S"
+    locations.update(ANN, fix())
+    assert locations.summary(ANN) is not None, "the next re-send brings the phone back"
+
+
 async def test_positions_are_kept_per_profile(clock):
     locations = Locations(FakeResolver(), clock)
     locations.update(ANN, fix())
@@ -195,7 +208,7 @@ async def http(settings, store, clock):
     locations = Locations(FakeResolver(), clock)
     app = create_app(settings, store=store, locations=locations, pairings=Pairings(clock))
     async with client_for(app) as c:
-        c.locations = locations
+        c.locations, c.clock = locations, clock
         yield c
 
 
@@ -251,6 +264,10 @@ async def test_the_headset_reads_whether_a_position_is_kept_and_never_the_coordi
     assert kept.json()["place"] == WATERLOO.place
     assert "43.47" not in kept.text and "80.54" not in kept.text
 
+    http.clock.now += PHONE_SILENT_S + 1
+    silent = await http.get("/location", headers=headers)
+    assert (silent.status_code, silent.json()["error"]["code"]) == (404, "no_location")
+
     other = await http.get("/location", headers={"X-Edith-Token": "secret", "X-Edith-Profile": str(BOB)})
     assert other.status_code == 404
 
@@ -276,6 +293,13 @@ async def test_the_phone_page_is_served_without_the_device_token_and_holds_no_se
     assert "secret" not in response.text
     assert "default-src 'none'" in response.headers["content-security-policy"]
     assert '"/pair/claim"' in response.text and "X-Edith-Phone" in response.text
+
+
+async def test_the_phone_page_offers_a_code_box_even_while_paired(http):
+    page = (await http.get("/phone")).text
+    assert '<form id="pair" autocomplete="off">' in page, "the code form is never hidden by markup"
+    assert 'paired ? "Enter a new code"' in page
+    assert '$("pair").classList' not in page, "the script never hides the code form"
 
 
 async def test_no_other_route_is_open_without_the_device_token(http):
