@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # Which provider writes the card. Without that provider's key the stub card agent answers instead.
     card_provider: Literal["openai", "gemini"] = "openai"
     # gpt-4o names objects more specifically than gpt-5.4-mini with fewer false facts, at about 0.6 s to the first
-    # name.
+    # name. OpenAI reportedly removes it from the API on 2027-01-14, so its replacement must be measured before then.
     openai_name_model: str = "gpt-4o"
     # gpt-5.4-mini's facts beat gpt-4o's in blind comparison, at the same length and speed.
     openai_fact_model: str = "gpt-5.4-mini"
