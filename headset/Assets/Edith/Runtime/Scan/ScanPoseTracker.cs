@@ -68,8 +68,7 @@ namespace Edith.Scan
 
             var leftPalm = Palm(left);
             var rightPalm = Palm(right);
-            // HandFrame.PalmNormal is flipped for a right hand, so on the left it points into the palm.
-            var leftRead = Read(left, leftPalm, -left.PalmNormal);
+            var leftRead = Read(left, leftPalm, left.PalmNormal);
             var rightRead = Read(right, rightPalm, right.PalmNormal);
             var ahead = Ahead(right, leftPalm) && Ahead(right, rightPalm);
             var posed = ahead && Mathf.Min(leftRead.Away, rightRead.Away) > tuning.palmAwayMin

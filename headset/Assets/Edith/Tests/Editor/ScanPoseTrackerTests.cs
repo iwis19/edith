@@ -40,6 +40,7 @@ namespace Edith.Tests
             var ring = Knuckle(0.02f, 0.085f);
             return new HandFrame
             {
+                Side = right ? HandSide.Right : HandSide.Left,
                 Visible = visible,
                 Wrist = wrist,
                 IndexKnuckle = index,
