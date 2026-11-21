@@ -2,6 +2,7 @@
     "name": "Edith",
     "rootNamespace": "Edith",
     "references": [
+        "Oculus.VR",
         "UnityEngine.UI"
     ],
     "includePlatforms": [],
