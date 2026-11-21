@@ -21,7 +21,7 @@ namespace Edith.Scrapbook
         public float maxApartMeters = 0.35f;
         public float heightGapMax = 0.10f;
         /// Each wrist is this far in front of the eye along its forward axis, and not above the eye.
-        public float minAheadMeters = 0.20f;
+        public float minAheadMeters = 0.12f;
         public float maxAheadMeters = 0.60f;
         public float holdSeconds = 0.5f;
         /// A hand lost, or out of the pose, for no longer than this does not restart a hold.

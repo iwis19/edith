@@ -152,6 +152,12 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void Hands_held_close_to_the_body_still_open()
+        {
+            Assert.AreEqual(1, Hold(Book(ahead: 0.15f), 0.6f));
+        }
+
+        [Test]
         public void Hands_too_near_or_too_far_ahead_do_not_open()
         {
             Assert.AreEqual(0, Hold(Book(ahead: 0.1f), 2f), "against the face");
