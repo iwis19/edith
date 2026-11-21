@@ -34,7 +34,7 @@ PROMPT_SIGHTS = 12
 
 SCAN_PROMPT = """You look at one frame from the camera of a person exploring somewhere new to them, such as a room, \
 a campus or a city, and pick the 1 to 3 most interesting things in it, best first. Each pick gets a pin with a fun dare \
-to do right there, or, when the thing has no good dare, a fun fact.
+to do right there; when the thing has no good dare, something cool to do with it; and only as a last resort, a fun fact.
 
 Order the picks like this:
 1. A named landmark, building, monument, statue, artwork, mural or distinctive sign in view is always pick #1.
@@ -52,23 +52,27 @@ building, monument or artwork only when it is on the list of named sights you ar
 description, or when its name is readable in the frame. Otherwise describe it ("a sandstone Gothic tower with a clock \
 face"). Never invent a building name. A plain right name beats a specific wrong one.
 hook: at most 14 words, in the second person, cheeky and warm, like a fun friend. Give a dare whenever the \
-thing has a good one, and a fun fact only when it really does not.
+thing has a good one. When it does not, give something cool to do with it. Give a fun fact only when it has neither.
 A dare is a little game they can do right there in under a minute with their eyes, feet, voice or phone camera, \
 that only makes sense for this thing and has a clear win: a bet, a guess they can check, a silly pose, a race \
 against a count, a pick-your-favourite, a tiny bit of make-believe. A plain chore ("Count the windows") is not a \
 dare; give it a twist. Keep it safe and polite: nothing that touches, uses, climbs, opens or moves things, nothing \
 with other people's belongings, art or exhibits, no closed areas, no strangers, nothing that costs money.
+Something cool to do with it is a small experience this thing offers right there, with no win needed: a sound to \
+hear, a spot to stand for the best view, a photo angle that surprises, a detail that changes when you move. The same \
+safety rules hold.
 A fun fact is one surprising, specific thing about this exact thing that makes them want a closer look, and that you \
 are sure is true; never a description of what is plainly visible, never a lecture.
 Never open a hook with Check, Look, See, Grab, Read, Take, Notice or Don't miss, and the hooks of one scan must each \
 start with a different word. Open a dare with a verb like Find, Spot, Pick, Guess, Match, Race, Hunt, Copy, Name or \
 Pretend, with "Bet you can't", or with a question.
-Bad hooks describe; good hooks dare, or surprise when there is no dare:
+Bad hooks describe; good hooks dare, then offer something to do, and surprise only when there is neither:
 - Bad: "Glowing red panels frame the beverage slots." Good: "Pick the drink you'd buy your worst enemy."
 - Bad: "Check out that old stone tower." Good: "Guess the time on that clock, then see how close you got."
 - Bad: "Take a look at this statue." Good: "Copy that bronze figure's pose and snap a side-by-side."
 - Bad: "Look at this colourful mural." Good: "Find the fox hiding in that mural before you count to ten."
 - Bad: "See this plant." Good: "Bet you can't spot one leaf on it without a hole."
+- Bad: "That atrium is very tall." Good thing to do: "Stand dead centre under that skylight and clap once."
 - Bad: "That cactus is very spiky." Good fun fact: "Those spines are its leaves; the green stem does all the eating."
 Spread the picks over different things. The box is loose around the whole thing, and the point is one spot on the \
 thing itself, where a pin can sit.
