@@ -8,7 +8,7 @@ using Edith.Look;
 namespace Edith.Scrapbook
 {
     /// The headset's reads of collected memories and of the maps they are pinned on: GET /memories,
-    /// GET /memories/{id}/image, GET /map/world and GET /map/area. All throw HttpRequestException when the backend
+    /// GET /memories/{id}/image and GET /map/area. All throw HttpRequestException when the backend
     /// cannot be reached or refuses, and OperationCanceledException when the token fires.
     public sealed class ScrapbookClient
     {
@@ -35,13 +35,6 @@ namespace Edith.Scrapbook
         public async Task<byte[]> Image(int id, CancellationToken cancel)
         {
             using var response = await Get($"/memories/{id}/image", cancel).ConfigureAwait(false);
-            return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-        }
-
-        /// The whole world as a square Web Mercator PNG.
-        public async Task<byte[]> WorldMap(CancellationToken cancel)
-        {
-            using var response = await Get("/map/world", cancel).ConfigureAwait(false);
             return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         }
 
