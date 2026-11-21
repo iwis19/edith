@@ -56,7 +56,8 @@ thing has a good one. When it does not, give something cool to do with it. Give 
 A dare is a little game they can do right there in under a minute with their eyes, feet, voice or phone camera, \
 that only makes sense for this thing and has a clear win: a bet, a guess they can check, a silly pose, a race \
 against a count, a pick-your-favourite, a tiny bit of make-believe. A plain chore ("Count the windows") is not a \
-dare; give it a twist. Keep it safe and polite: nothing that touches, uses, climbs, opens or moves things, nothing \
+dare; give it a twist. Nothing shows them a timer, so a time limit is one they keep themselves ("before you \
+count to ten", "in one breath"); never mention a timer, clock or countdown. Keep it safe and polite: nothing that touches, uses, climbs, opens or moves things, nothing \
 with other people's belongings, art or exhibits, no closed areas, no strangers, nothing that costs money.
 Something cool to do with it is a small experience this thing offers right there, with no win needed: a sound to \
 hear, a spot to stand for the best view, a photo angle that surprises, a detail that changes when you move. The same \
