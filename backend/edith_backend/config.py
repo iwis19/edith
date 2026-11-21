@@ -46,8 +46,12 @@ class Settings(BaseSettings):
     gemini_card_model: str = "gemini-3.1-flash-lite"
     # Larger Gemini models reject "minimal" and think for seconds before writing, which is too slow for a Look.
     gemini_thinking_level: str = "minimal"
-    scan_model: str = "gemini-3.5-flash"
+    scan_model: str = "gemini-3.5-flash-lite"
     scan_thinking_level: str = "minimal"
+    # Asked as well when scan_model fails or has not answered by scan_backup_after_s; the first good answer wins.
+    # Needs OPENAI_API_KEY. 0 turns the backup off.
+    scan_backup_model: str = "gpt-4o"
+    scan_backup_after_s: float = 3.5
     live_model: str = "gemini-3.8-live"
     live_voice: LiveVoice = "Kore"
     # Google Search grounding for Ask. A free-tier key refuses the Live session when the setup carries the tool.
