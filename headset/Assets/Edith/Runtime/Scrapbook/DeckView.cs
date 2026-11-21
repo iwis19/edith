@@ -56,7 +56,7 @@ namespace Edith.Scrapbook
                 bound[slot] = null;
                 cards[slot].Hide();
             }
-            cards[0].Show(title, body, null, MemoryCard.Untiered);
+            cards[0].Show(title, body, null, null, MemoryCard.Untiered);
             cards[0].SetPhoto(null);
             cards[0].Place(DeckLayout.Pose(0f), fade);
         }

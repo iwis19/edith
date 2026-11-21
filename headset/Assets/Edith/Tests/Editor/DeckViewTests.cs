@@ -60,12 +60,77 @@ namespace Edith.Tests
             card.GetComponentsInChildren<RectTransform>(true).Single(part => part.name == name);
 
         [Test]
-        public void The_middle_card_shows_the_fact_and_the_caption_without_the_name()
+        public void The_middle_card_shows_the_fact_and_the_place_and_day_without_the_name()
         {
             view.Show(Memories(5), 0f, NoPhoto);
             Assert.AreEqual("", Shown(Middle, "Name"));
             Assert.AreEqual("Fact 0.", Shown(Middle, "Fact"));
-            Assert.AreEqual("Home · 11/21", Shown(Middle, "Caption"));
+            Assert.AreEqual("Home", Shown(Middle, "Place"));
+            Assert.AreEqual("11/21", Shown(Middle, "Day"));
+        }
+
+        [Test]
+        public void The_place_line_is_the_spot_and_the_city()
+        {
+            var western = new List<Memory> { new Memory(1, "Gate", "A gate.", null, "Western University, London, Ontario, Canada", new DateTime(2026, 11, 21)) };
+            view.Show(western, 0f, NoPhoto);
+            Assert.AreEqual("Western University · London", Shown(Middle, "Place"));
+        }
+
+        [Test]
+        public void The_day_is_right_aligned_on_the_same_line_as_the_place_and_the_text_is_left_aligned()
+        {
+            view.Show(Memories(1), 0f, NoPhoto);
+            var place = Part(Middle, "Place");
+            var day = Part(Middle, "Day");
+            Assert.AreEqual(TextAnchor.UpperLeft, place.GetComponent<Text>().alignment);
+            Assert.AreEqual(TextAnchor.UpperRight, day.GetComponent<Text>().alignment);
+            Assert.AreEqual(place.anchoredPosition.y, day.anchoredPosition.y);
+            Assert.AreEqual(0f, place.anchorMin.x, "the place hangs from the left edge");
+            Assert.AreEqual(1f, day.anchorMin.x, "the day hangs from the right edge");
+            Assert.AreEqual(TextAnchor.UpperLeft, Part(Middle, "Fact").GetComponent<Text>().alignment);
+            Assert.AreEqual(TextAnchor.UpperLeft, Part(Middle, "Name").GetComponent<Text>().alignment);
+            Assert.That(Part(Middle, "Place").position.x, Is.LessThan(Part(Middle, "Day").position.x));
+        }
+
+        [Test]
+        public void The_badge_names_the_tier_in_capitals_in_the_tier_colour()
+        {
+            var photo = Photo(8, 8);
+            view.Show(Memories(1), 0f, _ => photo);
+            Assert.IsTrue(Part(Middle, "BadgeBox").gameObject.activeSelf);
+            Assert.AreEqual("RARE", Shown(Middle, "Badge"));
+            Assert.AreEqual(RarityColors.For(Rarity.Rare), Part(Middle, "BadgeBox").GetComponent<Image>().color);
+        }
+
+        [Test]
+        public void A_memory_without_a_tier_has_no_badge()
+        {
+            var plain = new List<Memory> { new Memory(1, "Fern", null, null, null, new DateTime(2026, 3, 4)) };
+            view.Show(plain, 0f, NoPhoto);
+            Assert.IsFalse(Part(Middle, "BadgeBox").gameObject.activeSelf);
+        }
+
+        [Test]
+        public void The_badge_stays_on_the_photos_top_right_corner_whatever_its_shape()
+        {
+            var wide = Photo(400, 100);
+            view.Show(Memories(1), 0f, _ => wide);
+            AssertBadgeAtCorner();
+            var tall = Photo(100, 400);
+            view.Show(Memories(1), 0f, _ => tall);
+            AssertBadgeAtCorner();
+        }
+
+        void AssertBadgeAtCorner()
+        {
+            var photo = Part(Middle, "Photo");
+            var badge = Part(Middle, "BadgeBox");
+            var scale = photo.lossyScale.x;
+            var corner = photo.position + photo.right * (photo.sizeDelta.x * 0.5f * scale) + photo.up * (photo.sizeDelta.y * 0.5f * scale);
+            // The badge hangs from its own top-right corner, 4 mm inside the photo's.
+            Assert.AreEqual(-0.004f, Vector3.Dot(badge.position - corner, photo.right), 1e-4f);
+            Assert.AreEqual(-0.004f, Vector3.Dot(badge.position - corner, photo.up), 1e-4f);
         }
 
         [Test]
@@ -82,11 +147,12 @@ namespace Edith.Tests
             view.Show(plain, 0f, NoPhoto);
             Assert.AreEqual("Fern", Shown(Middle, "Name"));
             Assert.AreEqual("", Shown(Middle, "Fact"));
-            Assert.AreEqual("3/4", Shown(Middle, "Caption"));
-            Assert.AreEqual(Part(Middle, "Fact").anchoredPosition.y, Part(Middle, "Caption").anchoredPosition.y);
+            Assert.AreEqual("", Shown(Middle, "Place"));
+            Assert.AreEqual("3/4", Shown(Middle, "Day"));
+            Assert.AreEqual(Part(Middle, "Fact").anchoredPosition.y, Part(Middle, "Place").anchoredPosition.y);
 
             view.Show(Memories(1), 0f, NoPhoto);
-            Assert.That(Part(Middle, "Caption").anchoredPosition.y, Is.LessThan(Part(Middle, "Fact").anchoredPosition.y));
+            Assert.That(Part(Middle, "Place").anchoredPosition.y, Is.LessThan(Part(Middle, "Fact").anchoredPosition.y));
         }
 
         [Test]
@@ -148,11 +214,11 @@ namespace Edith.Tests
         {
             var wide = Photo(400, 100);
             view.Show(Memories(1), 0f, _ => wide);
-            var caption = Part(Middle, "Caption").position;
+            var caption = Part(Middle, "Place").position;
             var wideBottom = Part(Middle, "Frame").anchoredPosition.y - Part(Middle, "Frame").sizeDelta.y * 0.5f;
             var tall = Photo(100, 400);
             view.Show(Memories(1), 0f, _ => tall);
-            Assert.AreEqual(caption, Part(Middle, "Caption").position);
+            Assert.AreEqual(caption, Part(Middle, "Place").position);
             Assert.AreEqual(wideBottom, Part(Middle, "Frame").anchoredPosition.y - Part(Middle, "Frame").sizeDelta.y * 0.5f, 1e-3f);
         }
 

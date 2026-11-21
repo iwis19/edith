@@ -4,8 +4,9 @@ using UnityEngine.UI;
 
 namespace Edith.Scrapbook
 {
-    /// One card of the deck: the photo at its own shape inside a thin border of the rarity's colour, and under it the
-    /// fun fact and the caption, like a snapshot's card. The name shows only when there is no fact. Also draws the
+    /// One card of the deck: the photo at its own shape inside a thin border of the rarity's colour, with the rarity's
+    /// name in a box on the photo's top-right corner, and under it the fun fact and a line with the place on the left
+    /// and the day on the right, like a snapshot's card. The name shows only when there is no fact. Also draws the
     /// Scrapbook's notices, which are cards with no photo.
     public sealed class MemoryCard
     {
@@ -14,8 +15,13 @@ namespace Edith.Scrapbook
         const float Width = DeckLayout.CardWidth * UnitsPerMetre;
         const float FrameHeight = 600f, TextHeight = 240f;
         const float FrameInset = 8f, Gap = 12f;
-        const int NameSize = 44, FactSize = 30, CaptionSize = 28;
+        const int NameSize = 44, FactSize = 30, CaptionSize = 28, BadgeSize = 22;
         const float NameHeight = 52f, FactLineHeight = 35f, FactMaxHeight = 4f * FactLineHeight, CaptionHeight = 36f;
+        // The day, "11/21", takes this much of the last line, and the place the rest.
+        const float DayWidth = 110f;
+        // The badge sits 4 mm in from the photo's corner.
+        const float BadgeInset = 16f, BadgeHeight = 36f, BadgePad = 12f;
+        static readonly Color BadgeInk = new Color(0.04f, 0.05f, 0.07f, 1f);
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
         static readonly Color Quiet = new Color(0.78f, 0.8f, 0.85f, 0.8f);
         static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
@@ -27,7 +33,8 @@ namespace Edith.Scrapbook
         CanvasGroup group, textGroup;
         Image frame;
         RawImage photo;
-        Text name, fact, caption;
+        Image badge;
+        Text name, fact, place, day, badgeLabel;
         bool fitted;
 
         public static MemoryCard Build(Transform parent, Font font, Material material)
@@ -43,6 +50,18 @@ namespace Edith.Scrapbook
 
             card.frame = New<Image>("Frame", card.root, material);
             card.photo = New<RawImage>("Photo", card.frame.rectTransform, material);
+            card.badge = New<Image>("BadgeBox", card.photo.rectTransform, material);
+            var corner = new Vector2(1f, 1f);
+            card.badge.rectTransform.anchorMin = card.badge.rectTransform.anchorMax = card.badge.rectTransform.pivot = corner;
+            card.badge.rectTransform.anchoredPosition = new Vector2(-BadgeInset, -BadgeInset);
+            card.badgeLabel = New<Text>("Badge", card.badge.rectTransform, material);
+            card.badgeLabel.font = font;
+            card.badgeLabel.fontSize = BadgeSize;
+            card.badgeLabel.fontStyle = FontStyle.Bold;
+            card.badgeLabel.color = BadgeInk;
+            card.badgeLabel.alignment = TextAnchor.MiddleCenter;
+            card.badgeLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            card.badgeLabel.verticalOverflow = VerticalWrapMode.Overflow;
 
             var text = new GameObject("Text", typeof(RectTransform), typeof(CanvasGroup));
             var column = (RectTransform)text.transform;
@@ -50,32 +69,49 @@ namespace Edith.Scrapbook
             column.pivot = new Vector2(0.5f, 1f);
             Anchor(column, new Vector2(Width, TextHeight), new Vector2(0f, TextHeight * 0.5f - FrameHeight * 0.5f - Gap));
             card.textGroup = Passive(text.GetComponent<CanvasGroup>());
-            card.name = Label("Name", column, font, material, NameSize, FontStyle.Bold, NameHeight);
+            card.name = Label("Name", column, font, material, NameSize, FontStyle.Bold, NameHeight, TextAnchor.UpperLeft);
             card.name.horizontalOverflow = HorizontalWrapMode.Overflow;
-            card.fact = Label("Fact", column, font, material, FactSize, FontStyle.Normal, FactMaxHeight);
+            card.fact = Label("Fact", column, font, material, FactSize, FontStyle.Normal, FactMaxHeight, TextAnchor.UpperLeft);
             card.fact.verticalOverflow = VerticalWrapMode.Truncate;
-            card.caption = Label("Caption", column, font, material, CaptionSize, FontStyle.Normal, CaptionHeight);
-            card.caption.color = Quiet;
+            card.place = Label("Place", column, font, material, CaptionSize, FontStyle.Normal, CaptionHeight, TextAnchor.UpperLeft);
+            card.place.rectTransform.sizeDelta = new Vector2(Width - DayWidth, CaptionHeight);
+            card.place.verticalOverflow = VerticalWrapMode.Truncate;
+            card.place.color = Quiet;
+            card.day = Label("Day", column, font, material, CaptionSize, FontStyle.Normal, CaptionHeight, TextAnchor.UpperRight);
+            card.day.rectTransform.sizeDelta = new Vector2(DayWidth, CaptionHeight);
+            card.day.color = Quiet;
             card.SetPhoto(null);
             card.Hide();
             return card;
         }
 
-        public void Show(Memory memory) =>
-            Show(string.IsNullOrEmpty(memory.Fact) ? memory.Name : null, memory.Fact, memory.Caption, memory.Tier is Rarity tier ? RarityColors.For(tier) : Untiered);
+        public void Show(Memory memory) => Show(string.IsNullOrEmpty(memory.Fact) ? memory.Name : null, memory.Fact, memory.PlaceLine,
+            Memory.Day(memory.Date), memory.Tier is Rarity tier ? RarityColors.For(tier) : Untiered, memory.Tier);
 
-        public void Show(string title, string body, string footer, Color frameColor)
+        /// `where` and `when` share the card's last line, and a null `tier` shows no badge.
+        public void Show(string title, string body, string where, string when, Color frameColor, Rarity? tier = null)
         {
             frame.color = frameColor;
             name.text = title ?? "";
             fact.text = body ?? "";
-            caption.text = footer ?? "";
-            // The fact sits under the title when there is one, and the caption follows the fact, however many lines it
-            // wraps to.
+            place.text = where ?? "";
+            day.text = when ?? "";
+            badge.gameObject.SetActive(tier != null);
+            if (tier is Rarity badged)
+            {
+                badge.color = RarityColors.For(badged);
+                badgeLabel.text = badged.ToString().ToUpperInvariant();
+                var size = new Vector2(badgeLabel.preferredWidth + 2f * BadgePad, BadgeHeight);
+                badge.rectTransform.sizeDelta = size;
+                badgeLabel.rectTransform.sizeDelta = size;
+            }
+            // The fact sits under the title when there is one, and the last line follows the fact, however many lines
+            // it wraps to.
             var titleHeight = string.IsNullOrEmpty(title) ? 0f : NameHeight;
             fact.rectTransform.anchoredPosition = new Vector2(0f, -titleHeight);
             var factHeight = string.IsNullOrEmpty(body) ? 0f : Mathf.Clamp(fact.preferredHeight, FactLineHeight, FactMaxHeight);
-            caption.rectTransform.anchoredPosition = new Vector2(0f, -(titleHeight + factHeight + (factHeight > 0f ? Gap : 0f)));
+            var line = new Vector2(0f, -(titleHeight + factHeight + (factHeight > 0f ? Gap : 0f)));
+            place.rectTransform.anchoredPosition = day.rectTransform.anchoredPosition = line;
         }
 
         /// Shows `texture` at its own shape, as large as fits the card, with the border hugging it. Null hides the
@@ -142,21 +178,22 @@ namespace Edith.Scrapbook
             return graphic;
         }
 
-        static Text Label(string name, RectTransform column, Font font, Material material, int fontSize, FontStyle style, float height)
+        static Text Label(string name, RectTransform column, Font font, Material material, int fontSize, FontStyle style, float height, TextAnchor alignment)
         {
             var text = New<Text>(name, column, material);
             text.font = font;
             text.fontSize = fontSize;
             text.fontStyle = style;
             text.color = Bright;
-            text.alignment = TextAnchor.UpperCenter;
+            text.alignment = alignment;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             var shadow = text.gameObject.AddComponent<UnityEngine.UI.Shadow>();
             shadow.effectColor = ShadowColor;
             shadow.effectDistance = new Vector2(1.5f, -1.5f);
             var rect = text.rectTransform;
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 1f);
+            var right = alignment == TextAnchor.UpperRight;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(right ? 1f : 0f, 1f);
             rect.sizeDelta = new Vector2(Width, height);
             rect.anchoredPosition = Vector2.zero;
             return text;

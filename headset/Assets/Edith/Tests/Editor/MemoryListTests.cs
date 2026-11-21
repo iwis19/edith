@@ -101,15 +101,21 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_caption_is_the_place_and_the_day_without_a_year()
+        public void A_place_of_two_parts_reads_as_its_first_part()
         {
-            Assert.AreEqual("London, Ontario · 11/21", MemoryList.Parse(Two)[0].Caption);
+            Assert.AreEqual("London", MemoryList.Parse(Two)[0].PlaceLine);
         }
 
         [Test]
-        public void The_caption_without_a_place_is_the_day_alone()
+        public void A_place_of_three_or_more_parts_reads_as_the_spot_and_the_city()
         {
-            Assert.AreEqual("3/4", MemoryList.Parse(Two)[1].Caption);
+            Assert.AreEqual("Western University · London", new Memory(1, "Gate", null, null, "Western University, London, Ontario, Canada", new DateTime(2026, 11, 21)).PlaceLine);
+        }
+
+        [Test]
+        public void Without_a_place_there_is_no_place_line()
+        {
+            Assert.IsNull(MemoryList.Parse(Two)[1].PlaceLine);
         }
     }
 }
