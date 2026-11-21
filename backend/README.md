@@ -129,6 +129,16 @@ The response is `{"memories": [{"id", "name", "fact", "rarity", "place", "date",
 
 Returns the memory's JPEG (`image/jpeg`). Answers 404 `unknown_memory` for an id that is missing or belongs to another profile, and 503 `db_unavailable` like `/collect`.
 
+### `GET /map/world` and `GET /map/area`
+
+Two 1024 x 1024 `image/png` maps for the Scrapbook, stitched from OpenStreetMap tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) in Web Mercator. Both need the device token and profile headers, answer with `Cache-Control: max-age=86400`, and answer 502 `map_failed` when a tile cannot be fetched (that answer is not cacheable). Nothing but tile coordinates is sent to the tile server.
+
+`GET /map/world` is the whole world at tile zoom 2, 4 x 4 tiles: x spans longitude -180 to 180 and y spans latitude 85.0511 down to -85.0511.
+
+`GET /map/area?lat=<float>&lon=<float>&zoom=<int>` is centred on the point at that tile zoom. The point's pixel at zoom `z` is its slippy-map world pixel, `256 * 2^z * ((lon + 180) / 360, (1 - asinh(tan(lat)) / pi) / 2)`, minus the centre's world pixel, plus 512. `zoom` is clamped to 3 to 17, `lat` to plus or minus 85.0511, and `lon` is wrapped into -180 to 180. Tiles are wrapped across the antimeridian, and the part of the window past a pole is a plain sea-blue. The point is first rounded to 4 decimals (about 11 m), so a client that sends 4-decimal values gets an image centred exactly on them. A non-number, `nan`, `inf` or a missing parameter answers 422 `invalid_request`.
+
+Tiles are fetched 2 at a time, and the process keeps the last 512 tiles and the last 32 finished images. Show **© OpenStreetMap contributors** on any screen that shows these maps, as the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) and the ODbL licence require.
+
 ### `POST /scan`
 
 Picks the 2 or 3 things in one camera frame most worth a look, with one Gemini call that answers in JSON held to a schema. A multipart form with two fields:
@@ -339,6 +349,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/location.py`: the phone's position per profile, kept in memory, and the place description for prompts.
 - `edith_backend/resolve.py`: Nominatim (reverse and place search) and Overpass lookups with the cache and the rate limit.
 - `edith_backend/static/phone.html`: the page the phone opens.
+- `edith_backend/maps.py`: the tile maths, the tile fetch and cache, and the stitching behind `/map/world` and `/map/area`.
 - `edith_backend/db.py`: the pooled Postgres store, or a no-op store with no database.
 - `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills and the `told_facts` table that keeps the facts told to each profile, with the embedding of their kind. `memories.embedding` is not written.
 - `tools/stream_check.py`: prints the arrival time of each event of one Look.
