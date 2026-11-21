@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
 using Edith.Backend;
+using Edith.Bounty;
 using Edith.Capture;
 using Edith.Grab;
 using Edith.Hands;
@@ -19,13 +20,16 @@ namespace Edith.Scan
         public readonly string Name, Hook;
         /// Beyond depth's reach: the pin only points the way.
         public readonly bool Far;
+        /// The open hunt target the thing fits, or null.
+        public readonly int? Target;
 
-        public ScanPin(Vector3 point, string name, string hook, bool far)
+        public ScanPin(Vector3 point, string name, string hook, bool far, int? target = null)
         {
             Point = point;
             Name = name;
             Hook = hook;
             Far = far;
+            Target = target;
         }
     }
 
@@ -79,6 +83,7 @@ namespace Edith.Scan
         GrabInput grab;
         ScanMarks marks;
         ScanClient client;
+        HuntTracker hunt;
         AudioSource sound;
         Vector3 ringAt;
         float holdProgress;
@@ -121,6 +126,9 @@ namespace Edith.Scan
             var settings = BackendSettings.Load();
             if (settings != null) client = new ScanClient(settings.Url, settings.DeviceToken, BackendSettings.ProfileId);
         }
+
+        /// Where a pin's hunt target is read from. Optional: without it a target pin says only that it is one.
+        public void BindBounty(HuntTracker hunt) => this.hunt = hunt;
 
         void OnDisable()
         {
@@ -292,8 +300,13 @@ namespace Edith.Scan
 
             if (looked != gazed)
             {
-                if (gazed != null && placed.Contains(gazed)) marks.SetGaze(gazed.Mark, 0f);
+                if (gazed != null && placed.Contains(gazed))
+                {
+                    marks.SetGaze(gazed.Mark, 0f);
+                    marks.SetLooked(gazed.Mark, false);
+                }
                 gazed = looked;
+                if (gazed != null) marks.SetLooked(gazed.Mark, true);
                 gazeSeconds = 0f;
             }
             else if (looked != null && turning <= tuning.gazeStillDegreesPerSecond) gazeSeconds += Time.deltaTime;
@@ -405,11 +418,18 @@ namespace Edith.Scan
                 }
 
                 var far = source == PinSource.Far;
-                var pin = new ScanPin(onObject - ray.direction * LiftMeters, pick.Name, pick.Hook, far);
+                var pin = new ScanPin(onObject - ray.direction * LiftMeters, pick.Name, pick.Hook, far, pick.Target);
                 pins.Add(pin);
-                placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point) });
+                placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point, TargetLabel(pin)) });
                 Debug.Log($"[EDITH scan] {id} pin \"{pick.Name}\" {meters:F2} m away ({source}, depth {answer}), hook \"{pick.Hook}\"");
             }
+        }
+
+        /// What a hunt target's pin says beside it: the target, then the pin's hook. Null for a pin that is no target.
+        string TargetLabel(in ScanPin pin)
+        {
+            if (pin.Target is not { } index) return null;
+            return "Bounty: " + (hunt?.TextOf(index) ?? "a hunt target") + "\n" + pin.Hook;
         }
 
         DepthAnswer Probe(Ray ray, out float meters)
