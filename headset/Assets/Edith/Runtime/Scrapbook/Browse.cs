@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Edith.Look;
 
 namespace Edith.Scrapbook
@@ -22,7 +23,8 @@ namespace Edith.Scrapbook
         }
     }
 
-    /// What the Scrapbook is showing of the collected memories: every memory, or only those of one rarity.
+    /// What the Scrapbook is showing of the collected memories: every memory, or only those of one rarity, ordered
+    /// from Common to Mythic with the memories that have no tier first, newest first within a tier.
     public sealed class Browse
     {
         static readonly Rarity[] Tiers = (Rarity[])Enum.GetValues(typeof(Rarity));
@@ -31,9 +33,11 @@ namespace Edith.Scrapbook
         readonly int[] counts = new int[Tiers.Length];
         readonly List<Memory> visible = new List<Memory>();
 
-        public Browse(IReadOnlyList<Memory> memories)
+        /// `newestFirst` is the backend's order.
+        public Browse(IReadOnlyList<Memory> newestFirst)
         {
-            all = memories;
+            // OrderBy is stable, so the newest-first order holds within a tier.
+            all = newestFirst.OrderBy(memory => memory.Tier is Rarity tier ? (int)tier : -1).ToList();
             foreach (var memory in all)
                 if (memory.Tier is Rarity tier) counts[(int)tier]++;
             Refresh();

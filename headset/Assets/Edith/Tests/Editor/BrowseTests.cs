@@ -32,11 +32,11 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void It_opens_showing_everything()
+        public void It_opens_showing_everything_from_no_tier_through_Common_to_Mythic_newest_first_within_a_tier()
         {
             var browse = Six();
             Assert.IsNull(browse.Filter);
-            CollectionAssert.AreEqual(new[] { 6, 5, 4, 3, 2, 1 }, Ids(browse));
+            CollectionAssert.AreEqual(new[] { 3, 5, 1, 6, 4, 2 }, Ids(browse));
         }
 
         [Test]
@@ -60,13 +60,13 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void Choosing_the_tier_in_use_again_shows_everything()
+        public void Choosing_the_tier_in_use_again_shows_everything_in_the_same_order()
         {
             var browse = Six();
             browse.ToggleFilter(Rarity.Rare);
             browse.ToggleFilter(Rarity.Rare);
             Assert.IsNull(browse.Filter);
-            Assert.AreEqual(6, browse.Visible.Count);
+            CollectionAssert.AreEqual(new[] { 3, 5, 1, 6, 4, 2 }, Ids(browse));
         }
 
         [Test]
@@ -115,6 +115,21 @@ namespace Edith.Tests
             browse.ToggleFilter(Rarity.Rare);
             var chips = Chips(browse);
             CollectionAssert.AreEqual(new[] { false, false, true, false, false, false }, chips.Select(chip => chip.Selected).ToArray());
+        }
+
+        [Test]
+        public void A_filtered_deck_keeps_newest_first_within_its_tier()
+        {
+            var browse = Six();
+            browse.ToggleFilter(Rarity.Common);
+            CollectionAssert.AreEqual(new[] { 5, 1 }, Ids(browse));
+        }
+
+        [Test]
+        public void The_deck_opens_at_the_first_card()
+        {
+            Assert.AreEqual(0, Six().IndexOf(3), "the memory with no tier is first");
+            Assert.AreEqual(0, new Deck(Six().Visible.Count).Target);
         }
 
         [Test]
