@@ -309,3 +309,14 @@ async def test_no_other_route_is_open_without_the_device_token(http):
                          ("get", "/pair/claim")]:
         response = await getattr(http, method)(path)
         assert response.status_code == 401, (method, path)
+
+
+def test_the_place_description_carries_wikipedia_facts_only_for_the_sights_shown():
+    sights = [Sight(name="Old Clock", kind="historic", distance_m=10, fact="Built in 1850."),
+              Sight(name="Plain Hall", kind="building", distance_m=20)]
+    text = describe_place(Whereabouts(place="Town", sights=sights), 2)
+    assert "- Old Clock: Built in 1850." in text and "Plain Hall:" not in text
+    far_clock = Sight(name="Far Clock", kind="historic", distance_m=500, fact="Built in 1900.")
+    crowded = Whereabouts(place="Town", sights=[sights[1], far_clock])
+    assert "- Far Clock: Built in 1900." in describe_place(crowded, 1), "a sight with a fact is shown ahead of a nearer one"
+    assert "Plain Hall" not in describe_place(crowded, 1)
