@@ -2,17 +2,19 @@ using System;
 
 namespace Edith.Pairing
 {
-    /// Checking asks once at launch whether the backend already keeps this profile's phone position. Paired watches
-    /// that the position stays kept.
-    public enum PairPhase { Checking, Requesting, Showing, Connected, Paired }
+    /// Confirming checks, at a launch the headset remembers a pairing, that the backend still keeps the phone's
+    /// position before anything turns on. Paired watches that it stays kept.
+    public enum PairPhase { Confirming, Requesting, Showing, Connected, Paired }
 
     public enum PairCall { None, CheckLocation, RequestCode, PollStatus }
 
     /// The pairing's life as a function of time and the results of its three backend calls. The driver asks `Next`
     /// what to call, makes at most one call at a time, and hands back what happened. All times are seconds on one
-    /// clock. Until the backend confirms a phone the flow is Locked and keeps asking, however long it takes; once
-    /// paired it checks the phone position every WatchSeconds and locks again when it is gone LostAfterMisses times
-    /// in a row. A backend that cannot be reached never locks a paired headset.
+    /// clock. Only a code claimed on the phone pairs an unpaired headset; until then the flow is Locked and keeps
+    /// asking, however long it takes. A remembered pairing stays Locked at launch until the backend confirms the phone
+    /// position, and a missing one shows a code at once. Once paired it checks every WatchSeconds and locks again when
+    /// the position is gone LostAfterMisses times in a row. A backend that cannot be reached never locks a paired
+    /// headset.
     public sealed class PairingFlow
     {
         public const float PollSeconds = 3f;
@@ -30,7 +32,7 @@ namespace Edith.Pairing
         /// `paired`: the headset remembers a pairing from an earlier launch.
         public PairingFlow(bool paired, float now)
         {
-            Phase = paired ? PairPhase.Paired : PairPhase.Checking;
+            Phase = paired ? PairPhase.Confirming : PairPhase.Requesting;
             nextCallAt = now;
         }
 
@@ -42,10 +44,11 @@ namespace Edith.Pairing
         public int Failures { get; private set; }
 
         /// Every feature but the pairing panel stays off.
-        public bool Locked => Phase == PairPhase.Checking || Phase == PairPhase.Requesting || Phase == PairPhase.Showing;
+        public bool Locked => Phase == PairPhase.Confirming || Phase == PairPhase.Requesting || Phase == PairPhase.Showing;
 
-        /// The panel is on screen: the headset is locked, or the pairing was just confirmed.
-        public bool Visible => Locked || Phase == PairPhase.Connected;
+        /// The panel is on screen: a code is on its way or up, or the pairing was just confirmed. Confirming a remembered
+        /// pairing takes one call and shows nothing.
+        public bool Visible => Phase == PairPhase.Requesting || Phase == PairPhase.Showing || Phase == PairPhase.Connected;
 
         /// The call to make now, or None. Asking again before its result comes back returns None.
         public PairCall Next(float now)
@@ -67,7 +70,7 @@ namespace Edith.Pairing
 
         public void OnLocation(bool hasPhoneLocation, float now)
         {
-            if (!Answer(PairPhase.Checking) && !Answer(PairPhase.Paired)) return;
+            if (!Answer(PairPhase.Confirming) && !Answer(PairPhase.Paired)) return;
             if (hasPhoneLocation)
             {
                 Watch(now);
@@ -112,12 +115,19 @@ namespace Edith.Pairing
             }
         }
 
-        /// The call failed. It is tried again after RetrySeconds, for as long as it keeps failing.
+        /// The call failed. It is tried again after RetrySeconds, for as long as it keeps failing. A remembered pairing
+        /// that cannot be confirmed at launch is trusted, so an unreachable backend does not lock it.
         public void OnError(float now)
         {
             if (!inFlight) return;
             inFlight = false;
             Failures++;
+            if (Phase == PairPhase.Confirming)
+            {
+                Watch(now);
+                nextCallAt = now + RetrySeconds;
+                return;
+            }
             nextCallAt = now + RetrySeconds;
         }
 

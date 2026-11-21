@@ -120,7 +120,7 @@ namespace Edith.Pairing
                 shown = flow.Phase;
                 Debug.Log($"[EDITH pair] {shown}, gate {(flow.Locked ? "closed" : "open")}");
             }
-            if (flow.Phase == PairPhase.Checking || flow.Phase == PairPhase.Requesting)
+            if (flow.Phase == PairPhase.Requesting)
             {
                 title.text = "Pair your phone";
                 line.text = flow.Failures > 0 ? "Can't reach the EDITH server. Trying again." : "Getting a code...";
