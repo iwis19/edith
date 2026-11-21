@@ -71,7 +71,7 @@ namespace Edith.Grab
                     if (hand.Held != null && room.Pocket(hand.Held, reading.Grip))
                     {
                         hand.Pocketing = hand.Held;
-                        Play(hand.Held.Card.Tier, reading.Grip);
+                        RaritySounds.Play(hand.Held.Card.Tier, reading.Grip);
                     }
                     hand.Held = null;
                     return;
@@ -107,19 +107,6 @@ namespace Edith.Grab
         {
             var turn = reading.Rotation * Quaternion.Inverse(hand.HandAtGrab);
             hand.Held.Hold(reading.Grip + turn * (hand.CardPositionAtGrab - hand.GripAtGrab), turn * hand.CardRotationAtGrab);
-        }
-
-        static void Play(Rarity? tier, Vector3 point)
-        {
-            var clip = RaritySounds.For(tier);
-            if (clip == null) return;
-            // Plain 2D, so the stereo cue arrives at full level wherever the hand is.
-            var voice = new GameObject("EDITH pocket sound").AddComponent<AudioSource>();
-            voice.transform.position = point;
-            voice.spatialBlend = 0f;
-            voice.clip = clip;
-            voice.Play();
-            Destroy(voice.gameObject, clip.length + 0.5f);
         }
     }
 }
