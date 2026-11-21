@@ -32,7 +32,7 @@ A short guided start on first launch: EDITH introduces itself, you pick or say a
 
 - **Identify:** name the object as specifically as the photo allows, with a confidence. When unsure, say so playfully and offer a best guess; never invent a confident wrong name.
 - **Fun fact:** one short, true, surprising fact per Look, not repeated for that kind of object (kinds matched by embedding, so "mug" and "coffee cup" are one kind). When no fresh fact is left, EDITH owns it and reuses the one told longest ago. Fun wins over a strict check; sources sit behind the card's flip.
-- **Snapshot:** on release the box is filled with the cropped photo, where and how big you drew it, and it stays there. Only the fun fact shows under the photo, typed out in place; the name shows only when there is no fact. The card is a liquid-glass panel around the photo with cyan sight corners; the rarity colour tints its outline and glow, and the text stays ice white.
+- **Snapshot:** on release the box is filled with the cropped photo, where and how big you drew it, and it stays there. While you pinch and drag, a glowing cyan rounded frame with white corner brackets marks the box. On release it becomes the card: a liquid-glass panel with a thick glowing border, a thin inner frame and white corner brackets around the photo, then a divider with a dot, the name in bold and the fun fact under it, typed out in place (the name alone when there is no fact). the rarity colour tints its outline and glow, and the text stays ice white.
 - Up to four snapshots in the room; a fifth removes the oldest, and a new box erases the ones it covers.
 - A quick pinch in line with a photo clears it from any distance.
 - Real hands and objects in front of a snapshot hide it.
