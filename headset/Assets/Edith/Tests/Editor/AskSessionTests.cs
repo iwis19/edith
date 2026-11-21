@@ -249,6 +249,9 @@ namespace Edith.Tests
         public void The_session_request_carries_the_pin_or_nothing()
         {
             Assert.AreEqual("{}", AskHint.RequestBody(null));
+            Assert.AreEqual("{\"voice\":\"Puck\"}", AskHint.RequestBody(null, false, "Puck"));
+            Assert.AreEqual("{\"navigate\":true,\"voice\":\"Puck\"}", AskHint.RequestBody(null, true, "Puck"));
+            Assert.AreEqual("{\"hint\":{\"name\":\"a mug\",\"hook\":\"\"},\"voice\":\"Puck\"}", AskHint.RequestBody(new AskHint("a mug", null), false, "Puck"));
             Assert.AreEqual("{\"hint\":{\"name\":\"the \\\"Peace\\\" Tower\",\"hook\":\"Climb it.\"}}",
                 AskHint.RequestBody(new AskHint("the \"Peace\" Tower", "Climb it.")));
             Assert.AreEqual("{\"hint\":{\"name\":\"a mug\",\"hook\":\"\"}}", AskHint.RequestBody(new AskHint("a mug", null)));

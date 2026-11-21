@@ -74,20 +74,20 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_fact_takes_the_rarity_colour()
+        public void The_fact_stays_ice_white_whatever_the_rarity()
         {
             var snapshot = room.Place(Box(0f));
             snapshot.Apply(LookEvent.Fact("Mugs are old."));
             snapshot.Apply(LookEvent.Rated(Rarity.Epic));
-            Assert.AreEqual(RarityColors.For(Rarity.Epic), snapshot.GetComponentsInChildren<Text>().Single().color);
+            Assert.AreEqual(Edith.UI.Theme.Ice, snapshot.GetComponentsInChildren<Text>().Single().color);
         }
 
         [Test]
-        public void The_border_takes_the_rarity_colour()
+        public void The_glass_outline_takes_the_rarity_colour()
         {
             var snapshot = room.Place(Box(0f));
             var waiting = BorderColors(snapshot);
-            Assert.AreEqual(4, waiting.Length);
+            Assert.AreEqual(1, waiting.Length, "one outline around the glass");
             snapshot.Apply(LookEvent.Rated(Rarity.Legendary));
             Assert.That(BorderColors(snapshot), Has.All.EqualTo(RarityColors.For(Rarity.Legendary)));
             Assert.AreNotEqual(waiting[0], BorderColors(snapshot)[0]);

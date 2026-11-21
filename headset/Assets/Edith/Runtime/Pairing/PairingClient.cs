@@ -23,6 +23,12 @@ namespace Edith.Pairing
         public bool expired;
     }
 
+    [Serializable]
+    public sealed class PhoneSummary
+    {
+        public string place;
+    }
+
     /// The headset's three pairing calls to the backend. HttpClient rather than UnityWebRequest, which buffers
     /// responses on Quest.
     public sealed class PairingClient
@@ -47,6 +53,15 @@ namespace Edith.Pairing
             if (response.StatusCode == HttpStatusCode.NotFound) return false;
             await Require(response);
             return true;
+        }
+
+        /// The place the backend resolved from the phone's position, or null when none is kept or it is still being found.
+        public async Task<string> PlaceAsync(CancellationToken token)
+        {
+            using var response = await Send(HttpMethod.Get, "/location", token);
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            var place = JsonUtility.FromJson<PhoneSummary>(await Require(response))?.place;
+            return string.IsNullOrEmpty(place) ? null : place;
         }
 
         public async Task<PairIssued> RequestCodeAsync(CancellationToken token)

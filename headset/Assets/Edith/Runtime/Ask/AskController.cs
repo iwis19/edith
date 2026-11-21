@@ -155,7 +155,7 @@ namespace Edith.Ask
                 return;
             }
             link = LiveLink.Open(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, hint, voice.Speech,
-                AskVoice.ChunkSamples, navigate);
+                AskVoice.ChunkSamples, navigate, Edith.Welcome.WelcomeStore.Voice);
             photo = asked != null ? PhotoJpeg.Start(asked.Photo, PhotoLongSide) : null;
             view = !navigate && asked == null && hint == null ? CaptureView() : null;
             var about = navigate ? "for directions" : hint is { } h ? $"about the pin on {h.Name}"
