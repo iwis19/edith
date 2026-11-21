@@ -226,7 +226,8 @@ async def test_a_paired_phone_posts_its_position_without_the_device_token(http):
     await http.locations.settle()
     again = await http.post("/location", json=body(), headers={"X-Edith-Phone": token})
     assert again.json() == {"place": WATERLOO.place, "sights_count": 2,
-                            "nearest": ["Dana Porter Library", "Davis Centre"], "resolving": False}
+                            "nearest": ["Dana Porter Library", "Davis Centre"], "resolving": False,
+                            "navigating": False}
     assert http.locations.whereabouts(uuid.UUID(PROFILE)) == WATERLOO
 
 
