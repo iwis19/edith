@@ -132,7 +132,7 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_photo_keeps_its_own_shape_and_the_glass_hugs_it()
+        public void A_photo_keeps_its_shape_unless_too_tall_and_the_glass_hugs_it()
         {
             margin = null;
             var wide = Photo(400, 100);
@@ -144,7 +144,7 @@ namespace Edith.Tests
             var tall = Photo(100, 400);
             view.Show(Memories(1), 0f, _ => tall);
             photo = Part(Middle, "Photo").sizeDelta;
-            Assert.AreEqual(0.25f, photo.x / photo.y, 1e-3f);
+            Assert.AreEqual(MemoryCard.MinPhotoMm / MemoryCard.MaxPhotoMm, photo.x / photo.y, 1e-3f, "too tall: cropped at the minimum width");
             AssertBorderHugs(photo);
         }
 
@@ -164,13 +164,16 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_very_tall_photo_stops_at_the_height_cap()
+        public void A_very_tall_photo_stops_at_the_height_cap_and_is_cropped_never_narrower()
         {
             var tall = Photo(100, 400);
             view.Show(Memories(1), 0f, _ => tall);
-            var photo = Part(Middle, "Photo").sizeDelta;
-            Assert.AreEqual(MemoryCard.MaxPhotoMm, photo.y, 1e-3f);
-            Assert.AreEqual(0.25f, photo.x / photo.y, 1e-3f);
+            var photo = Part(Middle, "Photo");
+            Assert.AreEqual(MemoryCard.MaxPhotoMm, photo.sizeDelta.y, 1e-3f);
+            Assert.AreEqual(MemoryCard.MinPhotoMm, photo.sizeDelta.x, 1e-3f, "never narrower than the minimum");
+            var shown = photo.GetComponent<RawImage>().uvRect;
+            Assert.AreEqual(0.25f / (MemoryCard.MinPhotoMm / MemoryCard.MaxPhotoMm), shown.height, 1e-3f, "a band through the middle");
+            Assert.AreEqual(0.5f, shown.center.y, 1e-3f);
         }
 
         static float Bottom(RectTransform rect) => rect.anchoredPosition.y - rect.sizeDelta.y * 0.5f;

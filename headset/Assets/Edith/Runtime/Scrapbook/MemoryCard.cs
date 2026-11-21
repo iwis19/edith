@@ -14,7 +14,8 @@ namespace Edith.Scrapbook
         // The photo is fitted into this room, in millimetres.
         static readonly Vector2 Room = new Vector2(DeckLayout.CardWidth, DeckLayout.CardHeight) * UnitsPerMetre;
         // A tall photo is widened to at least this, growing taller up to MaxPhotoMm, so its fact wraps into a few
-        // readable lines rather than a thin column. Millimetres.
+        // readable lines rather than a thin column. A photo too tall for both is cropped top and bottom, never shown
+        // narrower. Millimetres.
         public const float MinPhotoMm = CardWidth.MinPhotoTangent * ScrapbookPlacement.CardAhead * UnitsPerMetre, MaxPhotoMm = 260f;
         const int NoticeTitleSize = 44, NoticeBodySize = 30;
         static readonly Color EmptyPhoto = new Color(1f, 1f, 1f, 0.35f);
@@ -81,6 +82,7 @@ namespace Edith.Scrapbook
             photo.color = texture == null ? EmptyPhoto : Color.white;
             var size = ShownSize(texture);
             photo.rectTransform.sizeDelta = size;
+            photo.uvRect = Crop(texture, size);
             // The bottom edge stays where the room's is, so a taller photo grows upward and its fact never moves down
             // onto the rarity chips.
             photo.rectTransform.anchoredPosition = new Vector2(0f, (size.y - Room.y) * 0.5f);
@@ -89,8 +91,31 @@ namespace Edith.Scrapbook
 
         /// A copy of `texture` with its corners cut round to sit inside the card's frame, as a snapshot's photo is,
         /// or null when it can't be read.
-        public static Texture2D Rounded(Texture2D texture) =>
-            Snapshot.Rounded(texture, CardView.PhotoRadiusMm(ScrapbookPlacement.CardAhead) / ShownSize(texture).x);
+        public static Texture2D Rounded(Texture2D texture)
+        {
+            if (texture == null || !texture.isReadable) return null;
+            var size = ShownSize(texture);
+            var radius = CardView.PhotoRadiusMm(ScrapbookPlacement.CardAhead) / size.x;
+            var crop = Crop(texture, size);
+            if (crop.height >= 1f) return Snapshot.Rounded(texture, radius);
+            // Cut the rows the card will not show first, so the rounded corners are the ones in view.
+            int rows = Mathf.Max(1, Mathf.RoundToInt(texture.height * crop.height)), from = (texture.height - rows) / 2;
+            var cut = new Texture2D(texture.width, rows, TextureFormat.RGBA32, false);
+            cut.SetPixels(texture.GetPixels(0, from, texture.width, rows));
+            cut.Apply(false, false);
+            var rounded = Snapshot.Rounded(cut, radius);
+            if (Application.isPlaying) Object.Destroy(cut); else Object.DestroyImmediate(cut);
+            return rounded;
+        }
+
+        /// The part of `texture` a card `size` millimetres shows: all of it, or a band through its middle when the
+        /// photo is too tall for the card.
+        static Rect Crop(Texture texture, Vector2 size)
+        {
+            if (texture == null || texture.width <= 0 || texture.height <= 0) return new Rect(0f, 0f, 1f, 1f);
+            var shown = (texture.width / (float)texture.height) / (size.x / size.y);
+            return shown >= 0.999f ? new Rect(0f, 0f, 1f, 1f) : new Rect(0f, (1f - shown) * 0.5f, 1f, shown);
+        }
 
         /// The photo's size on the card, in millimetres: `texture` at its own shape, as large as fits the room.
         static Vector2 ShownSize(Texture texture)
@@ -99,7 +124,7 @@ namespace Edith.Scrapbook
             var shape = texture.width / (float)texture.height;
             var size = shape > Room.x / Room.y ? new Vector2(Room.x, Room.x / shape) : new Vector2(Room.y * shape, Room.y);
             if (size.x < MinPhotoMm) size = new Vector2(MinPhotoMm, MinPhotoMm / shape);
-            if (size.y > MaxPhotoMm) size = new Vector2(MaxPhotoMm * shape, MaxPhotoMm);
+            if (size.y > MaxPhotoMm) size = new Vector2(Mathf.Max(MaxPhotoMm * shape, MinPhotoMm), MaxPhotoMm);
             return size;
         }
 
