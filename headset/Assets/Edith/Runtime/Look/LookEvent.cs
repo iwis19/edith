@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Edith.Look
 {
-    public enum LookEventKind { Accepted, Name, Fact, Rarity, Done, Error }
+    public enum LookEventKind { Accepted, Name, Fact, Rarity, Hunt, Done, Error }
 
     public enum Rarity { Common, Uncommon, Rare, Epic, Legendary, Mythic }
 
@@ -21,9 +21,14 @@ namespace Edith.Look
         public readonly string Text;
         public readonly Rarity Tier;
         public readonly string Code, Message;
+        /// For Hunt: the target the Look ticked, how many targets are found now and in all, and the hunt's status
+        /// (`active` or `found_all`). `Text` holds the target's text.
+        public readonly int HuntIndex, HuntFound, HuntTotal;
+        public readonly string HuntStatus;
 
         LookEvent(LookEventKind kind, string lookRef = null, string name = null, float confidence = 0f, bool pending = false,
-            string text = null, Rarity tier = Rarity.Common, string code = null, string message = null)
+            string text = null, Rarity tier = Rarity.Common, string code = null, string message = null,
+            int huntIndex = 0, int huntFound = 0, int huntTotal = 0, string huntStatus = null)
         {
             Kind = kind;
             LookRef = lookRef;
@@ -34,6 +39,10 @@ namespace Edith.Look
             Tier = tier;
             Code = code;
             Message = message;
+            HuntIndex = huntIndex;
+            HuntFound = huntFound;
+            HuntTotal = huntTotal;
+            HuntStatus = huntStatus;
         }
 
         /// Done and Error each end a stream.
@@ -47,6 +56,9 @@ namespace Edith.Look
         public static LookEvent Fact(string text) => new LookEvent(LookEventKind.Fact, text: text);
 
         public static LookEvent Rated(Rarity tier) => new LookEvent(LookEventKind.Rarity, tier: tier);
+
+        public static LookEvent Hunt(int index, string text, int found, int total, string status) =>
+            new LookEvent(LookEventKind.Hunt, text: text, huntIndex: index, huntFound: found, huntTotal: total, huntStatus: status);
 
         public static LookEvent Done() => new LookEvent(LookEventKind.Done);
 
@@ -65,6 +77,8 @@ namespace Edith.Look
             public string tier;
             public string code;
             public string message;
+            public int index, found, total;
+            public string status;
         }
 
         /// False for a line that is not JSON, has a type this build does not know, or a rarity it does not know, so
@@ -96,6 +110,9 @@ namespace Edith.Look
                 case "rarity":
                     if (!TryTier(wire.tier, out var tier)) return false;
                     parsed = Rated(tier);
+                    return true;
+                case "hunt":
+                    parsed = Hunt(wire.index, wire.text ?? "", wire.found, wire.total, wire.status ?? "active");
                     return true;
                 case "done":
                     parsed = Done();

@@ -19,6 +19,7 @@ namespace Edith.Snapshots
         static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
         static readonly Color Quiet = new Color(0.78f, 0.8f, 0.85f, 0.7f);
         static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
+        static readonly Color HuntColor = new Color(0.5f, 0.95f, 0.6f, 1f);
         static readonly Color BorderWaiting = new Color(0.95f, 0.95f, 0.97f, 0.35f);
 
         readonly Image[] border = new Image[4];
@@ -38,12 +39,20 @@ namespace Edith.Snapshots
             return view;
         }
 
-        /// `caption`, when given, is said in place of the card's fact.
-        public void Show(LookCard card, string caption)
+        /// `caption`, when given, is said in place of the card's fact. `hunt` is how strongly the Look's hunt tick
+        /// shows, from 1 as it lands to 0: the border flashes and the card says the target ticked.
+        public void Show(LookCard card, string caption, float hunt = 0f)
         {
             var rated = card.Tier is Rarity tier ? RarityColors.For(tier) : (Color?)null;
-            foreach (var edge in border) edge.color = rated ?? BorderWaiting;
-            if (caption != null)
+            var edgeColor = rated ?? BorderWaiting;
+            if (hunt > 0f) edgeColor = Color.Lerp(edgeColor, HuntColor, hunt);
+            foreach (var edge in border) edge.color = edgeColor;
+            if (hunt > 0f && card.HuntText != null)
+            {
+                fact.text = "✓ " + card.HuntText;
+                fact.color = HuntColor;
+            }
+            else if (caption != null)
             {
                 fact.text = caption;
                 fact.color = rated ?? Bright;

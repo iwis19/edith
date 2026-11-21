@@ -18,6 +18,8 @@ namespace Edith.Snapshots
         const float ReturnFollow = 10f;
         // The canvas is laid out in millimetres so card text can use ordinary font sizes.
         const float UnitsPerMetre = 1000f;
+        // How long a hunt tick shows on the card, and its flash fades over that time.
+        const float HuntSeconds = 3f;
         static readonly Color EmptyPhoto = new Color(1f, 1f, 1f, 0.35f);
 
         static int nextId;
@@ -35,6 +37,8 @@ namespace Edith.Snapshots
         Vector3 fullScale;
         CardView view;
         string caption;
+        float huntUntil;
+        bool huntShown;
 
         public SightBox Box { get; private set; }
 
@@ -103,9 +107,15 @@ namespace Edith.Snapshots
             Card.Apply(e);
             // The cue plays once, as the rarity arrives, for a Look and for a scan pin opened as one.
             if (!rated && Card.Tier != null) RaritySounds.Play(Card.Tier, transform.position);
-            view.Show(Card, caption);
+            if (e.Kind == LookEventKind.Hunt) huntUntil = Time.time + HuntSeconds;
+            ShowCard();
             enabled = true;
         }
+
+        /// How strongly the hunt tick shows now, from 1 to 0.
+        float Hunting => Mathf.Clamp01((huntUntil - Time.time) / HuntSeconds);
+
+        void ShowCard() => view.Show(Card, caption, Hunting);
 
         /// Text the card says in place of the backend's fact, such as a scan pin's hook. The backend's answer still
         /// colours the card.
@@ -115,7 +125,7 @@ namespace Edith.Snapshots
             set
             {
                 caption = value;
-                view.Show(Card, caption);
+                ShowCard();
             }
         }
 
@@ -172,12 +182,12 @@ namespace Edith.Snapshots
             group.alpha = fade * fade * (3f - 2f * fade);
             var settled = pocketing ? Shrink() : Follow();
             var typing = Card.Typing && !Leaving;
-            if (typing)
-            {
-                Card.Advance(Time.deltaTime);
-                view.Show(Card, caption);
-            }
-            if (fade != target || !settled || typing) return;
+            if (typing) Card.Advance(Time.deltaTime);
+            var hunting = Hunting > 0f;
+            // One more draw once the tick has faded, to take it off the card.
+            if (typing || hunting || huntShown) ShowCard();
+            huntShown = hunting;
+            if (fade != target || !settled || typing || hunting) return;
             if (Leaving) Destroy(gameObject);
             else enabled = false;
         }
