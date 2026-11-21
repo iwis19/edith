@@ -14,7 +14,7 @@ namespace Edith.Snapshots
         const float FadeSeconds = 0.25f;
         const float PocketSeconds = 0.3f;
         // A new card opens out of the box round its photo while the backend is still looking.
-        const float OpenSeconds = 0.5f;
+        const float OpenSeconds = 1.2f;
         // Rates of the exponential approach to the pose, per second. A carried card trails the hand slightly,
         // which hides tracking jitter; a released one drifts back more slowly.
         const float CarryFollow = 30f;

@@ -94,7 +94,7 @@ namespace Edith.Tests
             Assert.AreEqual(closed.x - photo.rect.width, closed.y - photo.rect.height, 1e-3f, "hugs the photo, no room for text yet");
             Assert.AreEqual(0f, text.alpha);
 
-            snapshot.Step(1f);
+            snapshot.Step(2f);
             var open = GlassBody(snapshot).rect.size;
             Assert.Greater(open.y, closed.y + 1f, "grown down to hold the text");
             Assert.AreEqual(closed.x, open.x, 1e-3f, "same width");
