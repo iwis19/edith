@@ -29,7 +29,7 @@ namespace Edith.Tests
             snapshot.GetComponentsInChildren<Text>().Single(text => text.name == label).text;
 
         static Color[] BorderColors(Snapshot snapshot) =>
-            snapshot.GetComponentsInChildren<Image>().Where(image => image.name == "Border").Select(image => image.color).ToArray();
+            snapshot.GetComponentsInChildren<Image>().Where(image => image.name == "Border" && image.transform.parent.name == "Glass").Select(image => image.color).ToArray();
 
         [Test]
         public void A_new_snapshot_says_it_is_looking()
@@ -40,18 +40,20 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_card_says_looking_until_the_fact_then_shows_only_the_fact()
+        public void The_card_says_looking_until_the_fact_then_shows_the_name_above_it()
         {
             var snapshot = room.Place(Box(0f));
             snapshot.Apply(LookEvent.Named("Red m", pending: true));
             Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
             snapshot.Apply(LookEvent.Named("Red mug"));
             Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
+            Assert.AreEqual("Red mug", Shown(snapshot, "Title"));
             snapshot.Apply(LookEvent.Fact("Mugs are old."));
             snapshot.Card.Advance(10f);
             snapshot.Apply(LookEvent.Done());
             Assert.AreEqual("Mugs are old.", Shown(snapshot, "Fact"));
-            Assert.AreEqual(1, snapshot.GetComponentsInChildren<Text>().Length, "one line of text, no name above it");
+            Assert.AreEqual("Red mug", Shown(snapshot, "Title"));
+            Assert.AreEqual(2, snapshot.GetComponentsInChildren<Text>().Length, "a title and a body");
         }
 
         [Test]
@@ -63,6 +65,7 @@ namespace Edith.Tests
             snapshot.Card.Advance(10f);
             snapshot.Apply(LookEvent.Done());
             Assert.AreEqual("Red mug", Shown(snapshot, "Fact"));
+            Assert.AreEqual("", Shown(snapshot, "Title"), "the name is the fact, so it is not said twice");
         }
 
         [Test]
@@ -79,7 +82,7 @@ namespace Edith.Tests
             var snapshot = room.Place(Box(0f));
             snapshot.Apply(LookEvent.Fact("Mugs are old."));
             snapshot.Apply(LookEvent.Rated(Rarity.Epic));
-            Assert.AreEqual(Edith.UI.Theme.Ice, snapshot.GetComponentsInChildren<Text>().Single().color);
+            Assert.AreEqual(Edith.UI.Theme.Ice, snapshot.GetComponentsInChildren<Text>().Single(text => text.name == "Fact").color);
         }
 
         [Test]
