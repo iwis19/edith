@@ -1,0 +1,176 @@
+# EDITH: Product Requirements
+
+## Overview
+
+EDITH is a hands-only Quest 3/3S mixed-reality companion that makes whatever you look at entertaining, then remembers it for you. Entertainment comes first; the memory layer is what makes it more than a toy.
+
+**Goals**
+
+- Every interaction is fun on its own: a playful take, a rarity reveal, a déjà vu callback, pins on the most interesting things in sight.
+- Everything you save is easy to find again by meaning, with when it happened.
+- No controllers: every action works with bare hands, and voice is a backup.
+
+**Out of scope for now:** multiplayer, a walkable gallery.
+
+## Core loop
+
+| Step | Trigger | What you get | Saved? |
+| --- | --- | --- | --- |
+| Look | Pinch empty space, drag a box around an object, let go | A snapshot card pinned where you took it: what it is, a fun fact you haven't heard for that kind of object, a rarity glow | No |
+| Collect | Close a fist on the snapshot and pull it in toward your chest | A memory: cropped image, name, fun fact, rarity, sources behind a flip | Yes |
+| Ask | Thumb tap on the side of the index finger, then speak, about anything | A spoken answer plus a card that follows you and fades when the answer is over | Only if you grab and pin it |
+| Scan | Palms-out pose, aimed at what's in front of you | Pins on the 2 or 3 most interesting things in sight, each with a short hook; pinch one to open it as a snapshot card | Only cards you collect from it |
+| Remember | Open the Scrapbook from the wrist menu, or ask "what did I find today?" | Memories found by meaning, with when and where | Not applicable |
+
+## Features
+
+### Welcome
+
+A short guided start on first launch: EDITH introduces itself, you pick or say a few interests (menu, typing or voice), and it walks you through one practice Look. It also includes pairing the phone for location.
+
+### Look result
+
+- **Identify:** name the object as specifically as the photo allows, with a confidence. When unsure, say so playfully and offer a best guess; never invent a confident wrong name.
+- **Fun fact:** one short, true, surprising fact per Look, not repeated for that kind of object (kinds matched by embedding, so "mug" and "coffee cup" are one kind). When no fresh fact is left, EDITH owns it and reuses the one told longest ago. Fun wins over a strict check; sources sit behind the card's flip.
+- **Snapshot:** on release the box is filled with the cropped photo, where and how big you drew it, and it stays there. Only the fun fact shows under the photo, typed out in place; the name shows only when there is no fact. The rarity colour tints the text and border.
+- Up to four snapshots in the room; a fifth removes the oldest, and a new box erases the ones it covers.
+- A quick pinch in line with a photo clears it from any distance.
+- Real hands and objects in front of a snapshot hide it.
+
+### EDITH's voice
+
+Multiple voices to choose from on welcome page, light/calm/enthusiastic, with no narrator personas. Ask is the only part that speaks; Look cards are text. The voice is set on the backend, so it changes with no headset rebuild.
+
+### Rarity
+
+How rare the thing is in the world, judged on the first Look, with no collection needed. It measures how special the thing is, not how often people near it see it.
+
+| Tier | Colour | What earns it |
+| --- | --- | --- |
+| Common | Grey | Found almost anywhere |
+| Uncommon | Green | Typical of a region or a niche |
+| Rare | Blue | Notable in its place, or a genuinely unusual find |
+| Epic | Purple | A must-see of its city, or a famous collectible |
+| Legendary | Gold | Famous worldwide |
+| Mythic | Red until the UI pass | One of the world's few most famous sights or objects |
+
+- The card call that names the object also returns the tier. It judges the specific thing seen, not its category, and picks the lower tier when torn.
+- The snapshot card's frame glows the tier colour during a Look, before you collect.
+- Each tier has its own sound on collect.
+- A memory keeps the tier it had when collected.
+- When something would come in as Common, EDITH nudges you to find something new.
+- The Scrapbook can filter and sort by tier and shows a counter per tier.
+
+### Déjà vu
+
+Frame something close to an old memory and EDITH calls it back with a ghost of the old card. Needs embeddings of saved memories.
+
+### Scan
+
+Hold up your palms and EDITH points out what's worth a look in front of you. For exploring: no game and no points by default.
+
+1. **Start:** both palms open and facing away for half a second, or say "EDITH, scan." A ring fills as you hold, a chime starts the scan, and the headset grabs one camera frame.
+2. **Pick:** one vision call finds the 2 or 3 most interesting things and skips the dull ones. Each gets a point, a loose box and a hook.
+3. **Pin:** a pin sits on each object, placed with depth, carrying the hook. Something beyond depth's reach gets a pin that points the way, marked "(far)".
+4. **Open:** pinch a pin and it becomes a normal snapshot card through the usual Look.
+
+The hook is not a fact: it is why the thing is worth a look, or something to do with it.
+
+- Pins appear within about 2 s of the gesture.
+- A new scan replaces the last one's pins. An opened pin's card counts toward the four snapshots.
+- The same object never gets the same hook twice in one session. EDITH prefers things you haven't collected.
+- Ask's hint is the pin or card nearest your line of sight.
+- A higher chime means pins landed; a low tone and a line of text mean none did, or EDITH could not be reached.
+- Recentring the view clears the pins.
+- Later, maybe: frames gathered while you look around, so one scan can pin more.
+
+### Scrapbook
+
+A curved panel at arm's length. Memories sit on pages grouped by topic, framed in their rarity colour. Thumb swipe flips pages and pinch opens a card. Voice search lights up matching cards, using embeddings over labels, stories and tags.
+
+### Where you are: the phone's location
+
+The headset has no GPS, so the phone that runs the hotspot shares its position with the backend.
+
+- **Pairing:** the headset shows a 4-digit code and a short link; the person opens the page on the phone, types the code and taps Share location.
+- **What it feeds:** the place and the nearest named sights go to the Scan, the Look's place context and Ask. With no fix, the Look's photo-based place guess is the fallback.
+- **Privacy:** the position is kept in memory only, for six hours, never written to the database, and never shown to anyone else.
+- There is no hand-written list of sights: a new place needs nothing from us.
+
+### Under consideration
+
+- **Scroll mode:** a toggle where EDITH tags interesting things around you by itself; the always-on version of Scan.
+- **Spots:** a small globe beside the Scrapbook with a pin per confirmed place.
+
+## Hands-only controls
+
+| Action | Gesture |
+| --- | --- |
+| Look | Pinch empty space, drag at least about 5 cm, let go; a shorter pinch is a tap |
+| Collect | Fist on the snapshot, pull toward the chest; open the hand first to let it float back |
+| Ask | Thumb tap on the side of the index finger; stops on silence |
+| Page or dismiss cards | Thumb swipe left or right |
+| Pin an answer card | Grab it and let go where you want it |
+| Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |
+| App menu | Turn the left wrist inward and poke with the right index |
+| Scrapbook | Thumb swipe to flip; pinch to open; grab to pull closer |
+| Spots globe | One-hand grab to spin; two-hand pull to zoom |
+
+**Rules**
+
+- Never use a pinch with the palm facing you: that is Quest's system menu gesture.
+- Keep gestures in front of the chest and under a second long.
+- Every gesture gets visual or audio feedback.
+- It should also be made easy at the end for people to start a new profile (new interests, new voices, new wtv yk)
+
+## Architecture
+
+- **Headset:** Unity with the Meta XR SDK v74 or later; camera frames from the Passthrough Camera API. The app stays thin.
+- **Backend:** FastAPI with hosted Postgres and pgvector. Every AI call, the search and the memory sit behind it, so API keys never touch the device.
+- **Agents:** four, one endpoint each, with no general orchestration layer: Welcome (first launch), Card (Look), Query (Ask), Scan (Scan).
+- **Models:** OpenAI for the Card agent and embeddings; Gemini for the Scan's picks, with OpenAI as backup; Gemini Live for the Welcome and Ask voice sessions. Model IDs live in backend config.
+- **Targets:** Card results stream, with first words within 1.5 s of letting go of the pinch. Hold the frame rate with no dropped frames; read the camera only on demand; keep JPEG encoding off the main thread; no debug recording in release builds.
+
+## What needs building
+
+Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's location, then the Scrapbook and Spots. An item is done only when it is finished end to end, UI included.
+
+**Headset (Unity)**
+
+- [ ] Passthrough camera permission and frame capture
+- [ ] Pinch-and-drag frame and crop
+- [ ] Label, Collect by grab and pocket, memory card with flip and rarity reveal
+- [ ] Thumb-tap Ask, follow-me answer card, swipe and grab-to-pin
+- [ ] Scan: palms-out pose, one front frame, pins with hooks placed by depth, pinch a pin to open its card, Ask aimed at the nearest pin or card
+- [ ] Wrist menu
+- [ ] Welcome: intro, interests, practice Look
+- [ ] Performance budget
+
+**Backend and AI**
+
+- [ ] FastAPI backend and hosted Postgres with pgvector; API keys server-side only
+- [ ] Agent endpoints (Welcome, Card, Query, Scan) with streamed Card results and the 1.5 s first-words target
+- [ ] Vision call: label, card text, rarity tier, place guess
+- [ ] Scan: pick the 2 or 3 most interesting things in one frame with a point, a box and a hook each; no repeated hook per object in a session
+- [ ] EDITH's voice
+- [ ] Rarity tier and place guess from the card call; déjà vu matching from embeddings
+- [ ] Web-search answers with sources for Ask
+- [ ] Phone location: place context for Look, Scan and Ask; named sights nearby for the Scan
+- [ ] Place confirm and geocoding (only if Spots ships)
+
+**Scrapbook and visuals**
+
+- [ ] Scrapbook panel: pages by topic, rarity frames, filters, voice search
+- [ ] Spots globe with pins and labelled seeded sample data (only if Spots ships)
+- [ ] A sound per rarity tier on collect
+- [ ] UI design pass across the headset app. Target feel: liquid glass.
+
+## Open decisions
+
+- [ ] **Scroll mode and Spots:** in or out.
+- [ ] **Challenge mode for Scan:** an optional mode where EDITH builds a challenge from what a scan found.
+- [ ] **Name:** EDITH for now; Magpie, Goose and Nosy are the backups.
+- [ ] **Sponsor API:** pick the sponsor prize early and use it somewhere visible.
+- [ ] **Team roles:** who owns the headset, backend and AI, and the Scrapbook.
+- [ ] **Unlocked badge:** a badge the first time a kind of thing enters your collection.
+- [ ] **Ask as a passive companion or a capture tool.**
