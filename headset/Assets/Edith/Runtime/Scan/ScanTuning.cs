@@ -48,9 +48,10 @@ namespace Edith.Scan
         /// An opened pin's card hangs at the nearer of this depth and this share of the way to the pin.
         public float cardDepthMeters = 0.45f;
         public float cardDepthShare = 0.8f;
-        /// Looking at a pin opens it: the pin must stay within this angle of the gaze for gazeOpenSeconds while the
-        /// head turns no faster than gazeStillDegreesPerSecond. The card hangs on the pin's object.
-        public float gazeOpenDegrees = 3.5f;
+        /// Looking at a pin opens it: the pin must stay within this angle of where the head points for
+        /// gazeOpenSeconds while the head turns no faster than gazeStillDegreesPerSecond. The card hangs on the pin's
+        /// object. The headset does not track the eyes, so this is wider than an eye would need.
+        public float gazeOpenDegrees = 6f;
         public float gazeOpenSeconds = 0.8f;
         public float gazeStillDegreesPerSecond = 20f;
     }

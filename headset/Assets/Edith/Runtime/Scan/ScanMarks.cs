@@ -27,8 +27,9 @@ namespace Edith.Scan
         // The ring is about 9 cm across at ReferenceMeters. Its line is a share of its radius, and it breathes this
         // fast and this much while the reply is awaited.
         const float RingSize = 180f, RingThickness = 0.14f, PulseHz = 1.4f, PulseScale = 0.08f;
-        const float GazeSize = 84f;
+        const float GazeSize = 84f, CursorSize = 36f;
         static readonly Color GazeColor = new Color(0.35f, 0.9f, 0.5f);
+        static readonly Color CursorColor = new Color(0.95f, 0.95f, 0.97f, 0.8f);
         static readonly Color TextColor = new Color(0.95f, 0.95f, 0.97f);
         static readonly Color HoldColor = new Color(0.95f, 0.95f, 0.97f, 0.55f);
         static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
@@ -38,7 +39,7 @@ namespace Edith.Scan
         readonly List<Mark> pins = new List<Mark>();
         readonly Sprite dot = Circle(64, 0f);
         readonly Sprite ringSprite = Circle(256, 1f - RingThickness);
-        Mark ring, status;
+        Mark ring, status, cursor;
         Image ringFill;
         Text statusText;
         float statusHideAt;
@@ -84,6 +85,27 @@ namespace Edith.Scan
 
         /// Fills the ring around `pin` to `progress` while it is looked at.
         public void SetGaze(Mark pin, float progress) => pin.Gaze.fillAmount = progress;
+
+        /// A small ring at `at`, where the head points, while `show`. Pins open by where the head points, not the
+        /// eyes, so this shows what aims.
+        public void SetCursor(Vector3 at, bool show)
+        {
+            if (cursor == null)
+            {
+                if (!show) return;
+                cursor = new Mark();
+                var root = NewCanvas("ScanCursor", cursor);
+                var image = new GameObject("Cursor", typeof(Image)).GetComponent<Image>();
+                image.sprite = ringSprite;
+                image.color = CursorColor;
+                image.raycastTarget = false;
+                image.material = material;
+                image.rectTransform.SetParent(root, false);
+                image.rectTransform.sizeDelta = new Vector2(CursorSize, CursorSize);
+            }
+            cursor.Target = show ? 1f : 0f;
+            if (show) cursor.At = at;
+        }
 
         public void Remove(Mark pin) => pin.Target = 0f;
 
@@ -153,6 +175,8 @@ namespace Edith.Scan
                 if (Time.time >= statusHideAt) status.Target = 0f;
                 Step(status, step, eye, 1f);
             }
+
+            if (cursor != null) Step(cursor, step, eye, 1f);
         }
 
         public void Dispose()
@@ -161,6 +185,7 @@ namespace Edith.Scan
             pins.Clear();
             if (ring != null) UnityEngine.Object.Destroy(ring.Go);
             if (status != null) UnityEngine.Object.Destroy(status.Go);
+            if (cursor != null) UnityEngine.Object.Destroy(cursor.Go);
             foreach (var sprite in new[] { dot, ringSprite })
             {
                 UnityEngine.Object.Destroy(sprite.texture);

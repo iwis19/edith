@@ -272,14 +272,18 @@ namespace Edith.Scan
 
             Placed looked = null;
             var index = -1;
+            var sight = new Ray(eye.position, eye.forward);
             if (!scanning)
             {
                 points.Clear();
                 // A far pin only points the way and is never opened by gaze; a point at the eye is skipped.
                 foreach (var pin in pins) points.Add(pin.Far ? eye.position : pin.Point);
-                index = ScanGeometry.NearestToLine(new Ray(eye.position, eye.forward), points, tuning.gazeOpenDegrees);
-                if (index >= 0) looked = placed[index];
+                index = ScanGeometry.NearestToLine(sight, points, 180f);
             }
+            // The cursor sits at the distance of the pin nearest the line of sight, so both eyes focus on it there.
+            marks.SetCursor(index >= 0 ? sight.GetPoint((points[index] - eye.position).magnitude) : default, index >= 0);
+            if (index >= 0 && Vector3.Angle(sight.direction, points[index] - eye.position) > tuning.gazeOpenDegrees) index = -1;
+            if (index >= 0) looked = placed[index];
 
             if (looked != gazed)
             {
