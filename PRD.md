@@ -39,7 +39,7 @@ A short guided start on first launch: EDITH introduces itself, you pick or say a
 
 ### EDITH's voice
 
-Multiple voices to choose from on welcome page, light/calm/enthusiastic, with no narrator personas. Ask is the only part that speaks; Look cards are text. The voice is set on the backend, so it changes with no headset rebuild.
+Multiple voices to choose from on welcome page, light/calm/enthusiastic, with no narrator personas. Ask is the only part that speaks; Look cards are text. The voice is a Gemini Live voice setting on the backend, so it changes with no headset rebuild.
 
 ### Rarity
 
@@ -125,11 +125,25 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 
 ## Architecture
 
-- **Headset:** Unity with the Meta XR SDK v74 or later; camera frames from the Passthrough Camera API. The app stays thin.
-- **Backend:** FastAPI with hosted Postgres and pgvector. Every AI call, the search and the memory sit behind it, so API keys never touch the device.
+- **Headset:** Unity and C# with the Meta XR SDK v74 or later; camera frames from the Passthrough Camera API. The app stays thin.
+- **Backend:** Python with FastAPI, hosted on Railway. Every AI call, the search and the memory sit behind it, so API keys never touch the device. Run a single instance: the phone's location is held in memory (see below).
+- **Database:** Tiger Data (Tiger Cloud, managed Postgres) with pgvector for embeddings, with pgvectorscale available if search needs it. This is also our Tiger Data sponsor track entry, so the database should be visible in the demo (for example, Scrapbook search and déjà vu both run on it).
 - **Agents:** four, one endpoint each, with no general orchestration layer: Welcome (first launch), Card (Look), Query (Ask), Scan (Scan).
-- **Models:** OpenAI for the Card agent and embeddings; Gemini for the Scan's picks, with OpenAI as backup; Gemini Live for the Welcome and Ask voice sessions. Model IDs live in backend config.
+- **Models:** Gemini API for everything, one key and one SDK. Model IDs live in backend config, so any row below can change with no headset rebuild. OpenAI stays as an optional fallback for Card and Scan only, and is not part of the first build.
 - **Targets:** Card results stream, with first words within 1.5 s of letting go of the pinch. Hold the frame rate with no dropped frames; read the camera only on demand; keep JPEG encoding off the main thread; no debug recording in release builds.
+
+### Model per feature
+
+| Feature | Agent | Model | Why |
+| --- | --- | --- | --- |
+| Look: name, fun fact, rarity, place guess | Card | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), streamed | Fastest option, needed for the 1.5 s first-words target. Step up to `gemini-3.8-flash` if rarity or fact quality is weak. |
+| Scan: pick 2 or 3 things with point, box and hook | Scan | Gemini 3.5 Flash (`gemini-3.5-flash`), structured JSON output | One image-in call that needs good spatial grounding for the boxes; fall back to Flash-Lite if pins miss the 2 s target. |
+| Ask: spoken answer | Query | Gemini 3.8 Live, the default low-latency variant | Native speech in and out, silence detection, and the voice choices for EDITH's voice; confirm the exact ID in the Live API docs. |
+| Ask: web answers with sources | Query | Gemini with Google Search grounding | Returns the sources behind the card's flip with no separate search service. |
+| Welcome: intro, interests, practice Look | Welcome | Gemini 3.8 Live, with the Card model for the practice Look | Same voice session as Ask, so the voice picked on welcome carries over. |
+| Fun-fact kind matching, déjà vu, Scrapbook voice search | none | `gemini-embedding-2`, stored in pgvector | Multimodal, so a cropped photo and its label share one space; déjà vu can match on the image itself. Fix the vector size in config before the first row is written. |
+
+Voice search in the Scrapbook transcribes through the same Live session; there is no separate speech-to-text service.
 
 ## What needs building
 
@@ -148,7 +162,7 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 
 **Backend and AI**
 
-- [ ] FastAPI backend and hosted Postgres with pgvector; API keys server-side only
+- [ ] FastAPI backend on Railway and Tiger Data Postgres with pgvector; API keys server-side only
 - [ ] Agent endpoints (Welcome, Card, Query, Scan) with streamed Card results and the 1.5 s first-words target
 - [ ] Vision call: label, card text, rarity tier, place guess
 - [ ] Scan: pick the 2 or 3 most interesting things in one frame with a point, a box and a hook each; no repeated hook per object in a session
@@ -167,10 +181,11 @@ Order: Look and Collect with rarity, then Ask, then the Scan, then the phone's l
 
 ## Open decisions
 
+- [ ] **Gemini only or Gemini plus OpenAI fallback:** start Gemini only; add OpenAI for Card and Scan only if Gemini quality or uptime is a problem.
 - [ ] **Scroll mode and Spots:** in or out.
 - [ ] **Challenge mode for Scan:** an optional mode where EDITH builds a challenge from what a scan found.
 - [ ] **Name:** EDITH for now; Magpie, Goose and Nosy are the backups.
-- [ ] **Sponsor API:** pick the sponsor prize early and use it somewhere visible.
+- [ ] **Sponsor API:** Tiger Data is the track we are going for; decide whether a second sponsor prize is worth chasing, and use each one somewhere visible.
 - [ ] **Team roles:** who owns the headset, backend and AI, and the Scrapbook.
 - [ ] **Unlocked badge:** a badge the first time a kind of thing enters your collection.
 - [ ] **Ask as a passive companion or a capture tool.**
