@@ -18,9 +18,10 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_middle_card_hangs_out_of_the_way_of_the_hands_and_a_little_below_the_eye()
+        public void The_middle_card_hangs_out_of_the_way_of_the_hands_at_eye_level()
         {
-            Assert.AreEqual(new Vector3(0f, -0.04f, 0.70f), DeckLayout.Pose(0f).Position);
+            Assert.AreEqual(ScrapbookPlacement.CardCentre.y, DeckLayout.Pose(0f).Position.y, 1e-6f);
+            Assert.AreEqual(0.70f, DeckLayout.Pose(0f).Position.z, 1e-6f);
         }
 
         [Test]
