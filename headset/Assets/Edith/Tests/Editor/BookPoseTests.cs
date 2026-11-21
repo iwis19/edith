@@ -67,30 +67,20 @@ namespace Edith.Tests
             return (Hand(middle - half, false, PalmUp, curl), Hand(middle + half, true, PalmUp, curl));
         }
 
-        /// Both palms facing each other, the palm points `gap` metres apart.
-        static (HandFrame left, HandFrame right) Together(float gap = 0.04f)
+        /// Steps the two hands for `seconds` and counts the times the book toggles.
+        int Hold((HandFrame left, HandFrame right) hands, float seconds)
         {
-            var half = new Vector3(gap * 0.5f, 0f, 0f);
-            var middle = new Vector3(0f, -0.3f, 0.35f);
-            return (Hand(middle - half, false, PalmRight), Hand(middle + half, true, PalmLeft));
-        }
-
-        /// Steps the two hands for `seconds` and counts the book's events.
-        (int opened, int closed) Hold((HandFrame left, HandFrame right) hands, float seconds, bool isOpen = false)
-        {
-            var opened = 0;
-            var closed = 0;
+            var toggles = 0;
             for (var end = time + seconds; time < end - 1e-4f;)
             {
                 time += Dt;
                 hands.left.Time = hands.right.Time = time;
                 hands.left.EyePosition = hands.right.EyePosition = eye.position;
                 hands.left.EyeRotation = hands.right.EyeRotation = eye.rotation;
-                last = pose.Step(hands.left, hands.right, isOpen);
-                if (last.Opened) opened++;
-                if (last.Closed) closed++;
+                last = pose.Step(hands.left, hands.right);
+                if (last.Toggled) toggles++;
             }
-            return (opened, closed);
+            return toggles;
         }
 
         static (HandFrame left, HandFrame right) Lost() => (default, default);
@@ -98,9 +88,9 @@ namespace Edith.Tests
         [Test]
         public void Palms_up_side_by_side_open_once_after_half_a_second()
         {
-            Assert.AreEqual((0, 0), Hold(Book(), 0.4f), "under the hold time");
-            Assert.AreEqual((1, 0), Hold(Book(), 0.2f), "past the hold time");
-            Assert.AreEqual((0, 0), Hold(Book(), 5f), "one hold opens once, however long it lasts");
+            Assert.AreEqual(0, Hold(Book(), 0.4f), "under the hold time");
+            Assert.AreEqual(1, Hold(Book(), 0.2f), "past the hold time");
+            Assert.AreEqual(0, Hold(Book(), 5f), "one hold opens once, however long it lasts");
         }
 
         [Test]
@@ -117,18 +107,10 @@ namespace Edith.Tests
         [Test]
         public void A_hold_that_ends_early_does_nothing_and_a_later_hold_opens()
         {
-            Assert.AreEqual((0, 0), Hold(Book(), 0.4f));
-            Assert.AreEqual((0, 0), Hold(Lost(), 0.5f));
-            Assert.AreEqual((0, 0), Hold(Book(), 0.4f), "the lost hands restarted the hold");
-            Assert.AreEqual((1, 0), Hold(Book(), 0.2f));
-        }
-
-        [Test]
-        public void The_open_pose_fires_again_only_after_the_hands_leave_it()
-        {
-            Assert.AreEqual((1, 0), Hold(Book(), 0.6f));
-            Assert.AreEqual((0, 0), Hold(Together(), 0.5f), "the book is closed again by some other way");
-            Assert.AreEqual((1, 0), Hold(Book(), 0.6f));
+            Assert.AreEqual(0, Hold(Book(), 0.4f));
+            Assert.AreEqual(0, Hold(Lost(), 0.5f));
+            Assert.AreEqual(0, Hold(Book(), 0.4f), "the lost hands restarted the hold");
+            Assert.AreEqual(1, Hold(Book(), 0.2f));
         }
 
         [Test]
@@ -136,7 +118,7 @@ namespace Edith.Tests
         {
             var (left, _) = Book();
             var right = Hand(RightWrist, true, PalmDown);
-            Assert.AreEqual((0, 0), Hold((left, right), 2f));
+            Assert.AreEqual(0, Hold((left, right), 2f));
         }
 
         [Test]
@@ -144,15 +126,15 @@ namespace Edith.Tests
         {
             var (left, _) = Book();
             var right = Hand(RightWrist, true, Quaternion.LookRotation(Vector3.up + Vector3.left * 1.5f, Vector3.forward));
-            Assert.AreEqual((0, 0), Hold((left, right), 2f));
+            Assert.AreEqual(0, Hold((left, right), 2f));
         }
 
         [Test]
         public void Hands_too_far_apart_or_too_close_do_not_open()
         {
-            Assert.AreEqual((0, 0), Hold(Book(apart: 0.5f), 2f), "wider than a book");
-            Assert.AreEqual((0, 0), Hold(Book(apart: 0.03f), 2f), "wrists touching");
-            Assert.AreEqual((1, 0), Hold(Book(apart: 0.3f), 0.6f), "a wide book still opens");
+            Assert.AreEqual(0, Hold(Book(apart: 0.5f), 2f), "wider than a book");
+            Assert.AreEqual(0, Hold(Book(apart: 0.03f), 2f), "wrists touching");
+            Assert.AreEqual(1, Hold(Book(apart: 0.3f), 0.6f), "a wide book still opens");
         }
 
         [Test]
@@ -160,27 +142,27 @@ namespace Edith.Tests
         {
             var (left, _) = Book();
             var right = Hand(RightWrist + Vector3.up * 0.15f, true, PalmUp);
-            Assert.AreEqual((0, 0), Hold((left, right), 2f));
+            Assert.AreEqual(0, Hold((left, right), 2f));
         }
 
         [Test]
         public void Hands_above_the_eye_do_not_open()
         {
-            Assert.AreEqual((0, 0), Hold(Book(height: 0.1f), 2f));
+            Assert.AreEqual(0, Hold(Book(height: 0.1f), 2f));
         }
 
         [Test]
         public void Hands_too_near_or_too_far_ahead_do_not_open()
         {
-            Assert.AreEqual((0, 0), Hold(Book(ahead: 0.1f), 2f), "against the face");
-            Assert.AreEqual((0, 0), Hold(Book(ahead: 0.8f), 2f), "arms stretched");
-            Assert.AreEqual((0, 0), Hold(Book(ahead: -0.3f), 2f), "behind the user");
+            Assert.AreEqual(0, Hold(Book(ahead: 0.1f), 2f), "against the face");
+            Assert.AreEqual(0, Hold(Book(ahead: 0.8f), 2f), "arms stretched");
+            Assert.AreEqual(0, Hold(Book(ahead: -0.3f), 2f), "behind the user");
         }
 
         [Test]
         public void Curled_fists_do_not_open()
         {
-            Assert.AreEqual((0, 0), Hold(Book(curl: 1.0f), 2f));
+            Assert.AreEqual(0, Hold(Book(curl: 1.0f), 2f));
         }
 
         [Test]
@@ -188,15 +170,15 @@ namespace Edith.Tests
         {
             var (left, right) = Book();
             left.Tracked = false;
-            Assert.AreEqual((0, 0), Hold((left, right), 2f));
+            Assert.AreEqual(0, Hold((left, right), 2f));
         }
 
         [Test]
         public void A_blip_shorter_than_a_tenth_of_a_second_does_not_restart_the_hold()
         {
-            Assert.AreEqual((0, 0), Hold(Book(), 0.3f));
-            Assert.AreEqual((0, 0), Hold(Lost(), 0.06f));
-            Assert.AreEqual((1, 0), Hold(Book(), 0.3f), "the hold carried on through the blip");
+            Assert.AreEqual(0, Hold(Book(), 0.3f));
+            Assert.AreEqual(0, Hold(Lost(), 0.06f));
+            Assert.AreEqual(1, Hold(Book(), 0.3f), "the hold carried on through the blip");
         }
 
         [Test]
@@ -204,84 +186,45 @@ namespace Edith.Tests
         {
             var (left, right) = Book();
             left.Tracked = false;
-            Assert.AreEqual((0, 0), Hold(Book(), 0.3f));
-            Assert.AreEqual((0, 0), Hold((left, right), 0.06f));
-            Assert.AreEqual((1, 0), Hold(Book(), 0.3f));
+            Assert.AreEqual(0, Hold(Book(), 0.3f));
+            Assert.AreEqual(0, Hold((left, right), 0.06f));
+            Assert.AreEqual(1, Hold(Book(), 0.3f));
         }
 
         [Test]
         public void A_loss_longer_than_the_grace_restarts_the_hold()
         {
-            Assert.AreEqual((0, 0), Hold(Book(), 0.3f));
-            Assert.AreEqual((0, 0), Hold(Lost(), 0.16f));
-            Assert.AreEqual((0, 0), Hold(Book(), 0.4f));
-            Assert.AreEqual((1, 0), Hold(Book(), 0.2f));
+            Assert.AreEqual(0, Hold(Book(), 0.3f));
+            Assert.AreEqual(0, Hold(Lost(), 0.16f));
+            Assert.AreEqual(0, Hold(Book(), 0.4f));
+            Assert.AreEqual(1, Hold(Book(), 0.2f));
         }
 
         [Test]
-        public void The_open_pose_does_nothing_while_the_book_is_open()
+        public void Each_hold_toggles_the_book_once_and_the_hands_must_leave_the_pose_between()
         {
-            Assert.AreEqual((0, 0), Hold(Book(), 2f, isOpen: true));
-            Assert.AreEqual(0f, last.Progress);
+            Assert.AreEqual(1, Hold(Book(), 0.6f), "opens");
+            Assert.AreEqual(0, Hold(Book(), 3f), "a pose held on never flips it back");
+            Assert.AreEqual(0, Hold(Lost(), 0.3f));
+            Assert.AreEqual(1, Hold(Book(), 0.6f), "the same pose again closes");
+            Assert.AreEqual(0, Hold(Lost(), 0.3f));
+            Assert.AreEqual(1, Hold(Book(), 0.6f), "and opens again");
         }
 
         [Test]
-        public void An_open_pose_held_through_the_book_closing_waits_for_the_hands_to_leave_it()
+        public void Lowering_the_hands_for_less_than_the_grace_does_not_count_as_leaving_the_pose()
         {
-            Assert.AreEqual((0, 0), Hold(Book(), 1f, isOpen: true));
-            Assert.AreEqual((0, 0), Hold(Book(), 1f, isOpen: false), "the hold was spent while the book was open");
-            Assert.AreEqual((0, 0), Hold(Together(), 0.3f));
-            Assert.AreEqual((1, 0), Hold(Book(), 0.6f));
+            Assert.AreEqual(1, Hold(Book(), 0.6f));
+            Assert.AreEqual(0, Hold(Lost(), 0.06f));
+            Assert.AreEqual(0, Hold(Book(), 1f));
         }
 
         [Test]
-        public void Palms_brought_together_close_once()
-        {
-            Assert.AreEqual((0, 0), Hold(Together(), 0.1f, isOpen: true), "under the hold time");
-            Assert.AreEqual((0, 1), Hold(Together(), 0.1f, isOpen: true));
-            Assert.AreEqual((0, 0), Hold(Together(), 2f, isOpen: true), "one hold closes once");
-        }
-
-        [Test]
-        public void Palms_together_do_nothing_while_the_book_is_closed()
-        {
-            Assert.AreEqual((0, 0), Hold(Together(), 2f));
-        }
-
-        [Test]
-        public void Palms_together_close_when_the_hands_are_only_visible()
-        {
-            var (left, right) = Together();
-            left.Tracked = right.Tracked = false;
-            Assert.AreEqual((0, 1), Hold((left, right), 0.3f, isOpen: true));
-        }
-
-        [Test]
-        public void Palms_apart_or_not_facing_each_other_do_not_close()
-        {
-            Assert.AreEqual((0, 0), Hold(Together(gap: 0.1f), 2f, isOpen: true), "palms 10 cm apart");
-            Assert.AreEqual((0, 0), Hold(Book(apart: 0.04f), 2f, isOpen: true), "both palms up");
-            var backToBack = (Hand(new Vector3(-0.03f, -0.3f, 0.35f), false, PalmLeft), Hand(new Vector3(0.03f, -0.3f, 0.35f), true, PalmRight));
-            Assert.AreEqual((0, 0), Hold(backToBack, 2f, isOpen: true), "backs of the hands together");
-        }
-
-        [Test]
-        public void A_close_rearms_only_after_the_palms_part_past_twelve_centimetres()
-        {
-            Assert.AreEqual((0, 1), Hold(Together(), 0.3f, isOpen: true));
-            Assert.AreEqual((0, 0), Hold(Together(gap: 0.09f), 0.3f, isOpen: true), "parted, but not past twelve");
-            Assert.AreEqual((0, 0), Hold(Together(), 0.5f, isOpen: true), "not rearmed");
-            Assert.AreEqual((0, 0), Hold(Together(gap: 0.2f), 0.3f, isOpen: true));
-            Assert.AreEqual((0, 1), Hold(Together(), 0.3f, isOpen: true), "rearmed");
-        }
-
-        [Test]
-        public void A_hand_a_grab_claims_blocks_both_poses()
+        public void A_hand_a_grab_claims_blocks_the_pose()
         {
             var (left, right) = Book();
-            Assert.AreEqual((0, 0), Hold((left, right.Unseen()), 2f), "open");
-            var (leftTogether, rightTogether) = Together();
-            Assert.AreEqual((0, 0), Hold((leftTogether.Unseen(), rightTogether), 2f, isOpen: true), "close");
+            Assert.AreEqual(0, Hold((left, right.Unseen()), 2f));
+            Assert.AreEqual(0, Hold((left.Unseen(), right), 2f));
         }
 
         [Test]
@@ -291,8 +234,6 @@ namespace Edith.Tests
             Assert.IsTrue(last.Near);
             Hold(Book(curl: 1.0f), 0.2f);
             Assert.IsFalse(last.Near);
-            Hold(Together(gap: 0.1f), 0.2f, isOpen: true);
-            Assert.IsTrue(last.Near);
         }
 
         [TestCase(0f)]

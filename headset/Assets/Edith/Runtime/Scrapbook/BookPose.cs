@@ -27,20 +27,9 @@ namespace Edith.Scrapbook
         /// A hand lost, or out of the pose, for no longer than this does not restart a hold.
         public float graceSeconds = 0.10f;
 
-        /// Palms face each other when dot(left palm normal, right palm normal) is below this.
-        public float facingMax = -0.6f;
-        /// Each palm normal must also point at least this much toward the other palm, so palms back to back do not close.
-        public float towardMin = 0.5f;
-        public float closeApartMeters = 0.07f;
-        public float closeSeconds = 0.15f;
-        /// After a close, the palms must part further than this before the next one.
-        public float rearmApartMeters = 0.12f;
-
         /// Looser limits that only decide when a pose is close enough to log.
         public float nearPalmUp = 0.5f;
         public float nearCurl = 1.25f;
-        public float nearCloseApartMeters = 0.15f;
-        public float nearFacingMax = -0.3f;
     }
 
     /// What one hand reads against the open pose, worth logging when the pose is near.
@@ -67,27 +56,22 @@ namespace Edith.Scrapbook
 
     public readonly struct BookReading
     {
-        /// True on the one step a held open pose opens the book while it is closed.
-        public readonly bool Opened;
-        /// True on the one step the palms held together close the book while it is open.
-        public readonly bool Closed;
-        /// The pose the book wants next is close enough to log, whether or not it passes.
+        /// True on the one step a held pose opens the book when it is closed, or closes it when it is open.
+        public readonly bool Toggled;
+        /// The pose is close enough to log, whether or not it passes.
         public readonly bool Near;
-        /// 0 out of the open pose, rising to 1 as the hold completes.
+        /// How far the hold has filled, 0 to 1.
         public readonly float Progress;
-        /// Halfway between the palms. Meaningful while Progress is above 0.
+        /// Between the palms, where the ring shows.
         public readonly Vector3 Between;
         public readonly BookRead Left, Right;
-        /// The wrists' horizontal distance and height difference.
+        /// The wrists' horizontal distance and their height difference, in metres.
         public readonly float Apart, HeightGap;
-        /// The palm points' distance, and dot(left palm normal, right palm normal).
-        public readonly float PalmGap, Facing;
 
-        public BookReading(bool opened, bool closed, bool near, float progress, Vector3 between, BookRead left, BookRead right,
-            float apart, float heightGap, float palmGap, float facing)
+        public BookReading(bool toggled, bool near, float progress, Vector3 between, BookRead left, BookRead right,
+            float apart, float heightGap)
         {
-            Opened = opened;
-            Closed = closed;
+            Toggled = toggled;
             Near = near;
             Progress = progress;
             Between = between;
@@ -95,70 +79,30 @@ namespace Edith.Scrapbook
             Right = right;
             Apart = apart;
             HeightGap = heightGap;
-            PalmGap = palmGap;
-            Facing = facing;
         }
 
-        public override string ToString() =>
-            $"left {Left}, right {Right}, apart={Apart:F2} heightGap={HeightGap:F2} palmGap={PalmGap:F2} facing={Facing:F2}";
+        public override string ToString() => $"left {Left}, right {Right}, apart={Apart:F2} heightGap={HeightGap:F2}";
     }
 
-    /// The pose that works the Scrapbook like a book. Open: both palms up side by side in front of the user, held.
-    /// Close: both palms brought together facing each other. The open pose counts only while the book is closed
-    /// and the close pose only while it is open; a hold that completes in the other state is spent, so the hands
-    /// must leave it before it counts. A caller blanks a hand with HandFrame.Unseen while a grab claims it.
-    /// Open needs HandFrame.Tracked, since joints read at low confidence can pass for a flat palm. Close needs
-    /// only Visible, because hands pressed together lose that confidence. Deterministic in HandFrame.Time.
+    /// The pose that opens and closes the Scrapbook like a book: both palms up side by side in front of the user,
+    /// held. Each completed hold toggles the book, and the hands must leave the pose before the next one counts, so
+    /// a held pose never flips it back. A caller blanks a hand with HandFrame.Unseen while a grab claims it. Needs
+    /// HandFrame.Tracked, since joints read at low confidence can pass for a flat palm. Deterministic in
+    /// HandFrame.Time.
     public sealed class BookPose
     {
-        sealed class Hold
-        {
-            readonly bool rearmsOnRelease;
-            bool holding, fired;
-            float since, lastPosed;
-
-            public Hold(bool rearmsOnRelease) => this.rearmsOnRelease = rearmsOnRelease;
-
-            public void Rearm() => fired = false;
-
-            /// True on the one step a pose held for `seconds` completes.
-            public bool Update(bool posed, float time, float seconds, float grace)
-            {
-                if (posed)
-                {
-                    if (!holding)
-                    {
-                        holding = true;
-                        since = time;
-                    }
-                    lastPosed = time;
-                }
-                else if (holding && time - lastPosed > grace)
-                {
-                    holding = false;
-                    if (rearmsOnRelease) fired = false;
-                }
-                if (!posed || fired || time - since < seconds - 1e-4f) return false;
-                fired = true;
-                return true;
-            }
-
-            public float Progress(float time, float seconds) => holding && !fired ? Mathf.Clamp01((time - since) / seconds) : 0f;
-        }
-
         readonly BookTuning tuning;
-        readonly Hold open = new Hold(true), close = new Hold(false);
+        bool holding, fired;
+        float since, lastPosed;
 
         public BookPose(BookTuning tuning) => this.tuning = tuning;
 
-        /// `isOpen` is whether the book is open now.
-        public BookReading Step(in HandFrame left, in HandFrame right, bool isOpen)
+        public BookReading Step(in HandFrame left, in HandFrame right)
         {
             var time = right.Time;
             if (!left.Visible || !right.Visible)
             {
-                open.Update(false, time, tuning.holdSeconds, tuning.graceSeconds);
-                close.Update(false, time, tuning.closeSeconds, tuning.graceSeconds);
+                Update(false, time);
                 return default;
             }
 
@@ -168,31 +112,39 @@ namespace Edith.Scrapbook
             var rightRead = Read(right);
             var apart = Horizontal(right.Wrist - left.Wrist);
             var heightGap = Mathf.Abs(right.Wrist.y - left.Wrist.y);
-            var palmGap = Vector3.Distance(leftPalm, rightPalm);
-            var leftNormal = left.PalmNormal;
-            var rightNormal = right.PalmNormal;
-            var facing = Vector3.Dot(leftNormal, rightNormal);
-            if (palmGap > tuning.rearmApartMeters) close.Rearm();
-
             var minUp = Mathf.Min(leftRead.Up, rightRead.Up);
             var minCurl = Mathf.Min(leftRead.Curl, rightRead.Curl);
             var placed = InFront(leftRead) && InFront(rightRead);
-            var openPosed = left.Tracked && right.Tracked && placed && minUp > tuning.palmUpMin && minCurl > tuning.openCurl
-                            && apart >= tuning.minApartMeters && apart <= tuning.maxApartMeters && heightGap <= tuning.heightGapMax;
-            var toRight = palmGap < 1e-3f ? Vector3.zero : (rightPalm - leftPalm) / palmGap;
-            var closePosed = facing < tuning.facingMax && palmGap <= tuning.closeApartMeters
-                             && (palmGap < 0.01f || (Vector3.Dot(leftNormal, toRight) > tuning.towardMin
-                                                     && Vector3.Dot(rightNormal, -toRight) > tuning.towardMin));
+            var posed = left.Tracked && right.Tracked && placed && minUp > tuning.palmUpMin && minCurl > tuning.openCurl
+                        && apart >= tuning.minApartMeters && apart <= tuning.maxApartMeters && heightGap <= tuning.heightGapMax;
 
-            if (!isOpen && !closePosed) close.Rearm();
-            var opened = open.Update(openPosed, time, tuning.holdSeconds, tuning.graceSeconds) && !isOpen;
-            var closed = close.Update(closePosed, time, tuning.closeSeconds, tuning.graceSeconds) && isOpen;
-            var near = isOpen
-                ? palmGap <= tuning.nearCloseApartMeters && facing < tuning.nearFacingMax
-                : placed && minUp > tuning.nearPalmUp && minCurl > tuning.nearCurl;
-            var progress = isOpen ? 0f : opened ? 1f : open.Progress(time, tuning.holdSeconds);
-            return new BookReading(opened, closed, near, progress, (leftPalm + rightPalm) * 0.5f, leftRead, rightRead,
-                apart, heightGap, palmGap, facing);
+            var toggled = Update(posed, time);
+            var near = placed && minUp > tuning.nearPalmUp && minCurl > tuning.nearCurl;
+            var progress = toggled ? 1f : holding && !fired ? Mathf.Clamp01((time - since) / tuning.holdSeconds) : 0f;
+            return new BookReading(toggled, near, progress, (leftPalm + rightPalm) * 0.5f, leftRead, rightRead, apart, heightGap);
+        }
+
+        /// True on the one step a pose held for the hold time completes. A gap no longer than the grace does not
+        /// restart the hold; a longer one ends it and lets the next hold count.
+        bool Update(bool posed, float time)
+        {
+            if (posed)
+            {
+                if (!holding)
+                {
+                    holding = true;
+                    since = time;
+                }
+                lastPosed = time;
+            }
+            else if (holding && time - lastPosed > tuning.graceSeconds)
+            {
+                holding = false;
+                fired = false;
+            }
+            if (!posed || fired || time - since < tuning.holdSeconds - 1e-4f) return false;
+            fired = true;
+            return true;
         }
 
         Vector3 Palm(in HandFrame hand) => Vector3.Lerp(hand.Wrist, hand.MiddleKnuckle, tuning.palmAlong);

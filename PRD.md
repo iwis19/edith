@@ -115,7 +115,7 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 | Page or dismiss cards | Thumb swipe left or right with either hand |
 | Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |
 | App menu | Turn the left wrist inward and poke with the right index |
-| Scrapbook | Hold both palms up side by side for half a second to open; bring the palms together to close; thumb swipe or pinch-drag to scroll; pinch a chip or a side card |
+| Scrapbook | Hold both palms up side by side for half a second to open, and again to close; thumb swipe or pinch-drag to scroll; pinch a chip or a side card |
 | Spots globe | One-hand grab to spin; two-hand pull to zoom |
 
 **Rules**

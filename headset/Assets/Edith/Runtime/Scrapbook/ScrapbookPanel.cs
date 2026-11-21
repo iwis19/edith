@@ -14,7 +14,7 @@ using UnityEngine;
 namespace Edith.Scrapbook
 {
     /// The Scrapbook: the collected memories as a deck of cards to scroll through. Both palms held up side by side
-    /// open it in front of the user, where it stays put in the room, and the palms brought together close it. A
+    /// open it in front of the user, where it stays put in the room, and the same pose held again closes it. A
     /// thumb swipe moves one card. A pinch chooses what was under the line of sight when it was pressed, once it
     /// ends, unless the pinch point moved 6 cm or more sideways, which scrubs the deck. The rarity chips under the
     /// deck narrow it to one tier, and the chip nearest the line of sight wins over a card. While it is open it holds
@@ -185,16 +185,16 @@ namespace Edith.Scrapbook
             // A hand closing on, holding or letting go of a card is busy, so it cannot pose.
             if (grab != null && grab.Claimed(HandSide.Left)) left = left.Unseen();
             if (grab != null && grab.Claimed(HandSide.Right)) right = right.Unseen();
-            var reading = pose.Step(left, right, Open);
+            var reading = pose.Step(left, right);
             ringProgress = reading.Progress;
             if (reading.Progress > 0f) ringAt = reading.Between + Vector3.up * RingAboveMeters;
-            if (reading.Opened)
+            if (reading.Toggled && !Open)
             {
                 Debug.Log($"[EDITH book] opened: {reading}");
                 Play(659.3f, 987.8f);
                 Show();
             }
-            else if (reading.Closed)
+            else if (reading.Toggled)
             {
                 Debug.Log($"[EDITH book] closed: {reading}");
                 Play(987.8f, 659.3f);
