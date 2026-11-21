@@ -27,8 +27,10 @@ class Settings(BaseSettings):
     # gpt-5.4-mini's facts beat gpt-4o's in blind comparison, at the same length and speed.
     openai_fact_model: str = "gpt-5.4-mini"
     openai_fact_reasoning_effort: str = "none"
-    # Writes both the name and the fact when card_provider is gemini.
-    gemini_card_model: str = "gemini-3.5-flash-lite"
+    # Writes both the name and the fact when card_provider is gemini. On 10 Looks, gemini-3.1-flash-lite finished name
+    # plus fact in a median of about 4.7 s against about 5.3 s for gemini-3.5-flash-lite, which names sooner (1.3 s vs
+    # 2.4 s) but writes facts slower (4.0 s vs 2.3 s), and 3.1 named objects more specifically.
+    gemini_card_model: str = "gemini-3.1-flash-lite"
     # Larger Gemini models reject "minimal" and think for seconds before writing, which is too slow for a Look.
     gemini_thinking_level: str = "minimal"
     scan_model: str = "gemini-3.5-flash"

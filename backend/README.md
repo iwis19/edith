@@ -14,7 +14,16 @@ Each Look makes two model calls:
 | `CARD_PROVIDER` | Naming call | Fact call | Key |
 | --- | --- | --- | --- |
 | `openai` (default) | `gpt-4o` | `gpt-5.4-mini`, reasoning effort none | `OPENAI_API_KEY` |
-| `gemini` | `gemini-3.5-flash-lite`, thinking level minimal | the same model | `GEMINI_API_KEY` |
+| `gemini` | `gemini-3.1-flash-lite`, thinking level minimal | the same model | `GEMINI_API_KEY` |
+
+Gemini Flash-Lite models measured on the Card agent's own prompts, with 5 headset crops each run twice (medians; Gemini's latency varied widely, with single calls up to 21 s):
+
+| Model | Final name | Fact call | Name plus fact | Naming |
+| --- | --- | --- | --- | --- |
+| `gemini-3.1-flash-lite` | 2.4 s | 2.3 s | about 4.7 s | more specific ("a grey MacBook Pro laptop", "a metal Khanda pendant on a silver chain") |
+| `gemini-3.5-flash-lite` | 1.3 s | 4.0 s | about 5.3 s | more generic, and more often named a person or the room instead of the framed object |
+
+The card shows the fact, so name plus fact is the time that counts. On the same photos `openai` gave the final name in about 0.6 to 1.3 s and the fact by about 1.6 to 2.5 s.
 
 Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The facts told and the places seen are kept per profile in process memory: places for 6 h, and both are lost on restart.
 
