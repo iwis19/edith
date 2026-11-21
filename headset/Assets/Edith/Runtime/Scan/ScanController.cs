@@ -139,10 +139,12 @@ namespace Edith.Scan
         // After hand tracking has updated, like the pinch and the grab.
         void LateUpdate()
         {
+            var left = leftHand.Read();
             var right = rightHand.Read();
             // A hand closing on, holding or letting go of a card is busy, so its open hand cannot pose.
-            if (grab != null && grab.Claimed) right.Tracked = false;
-            var pose = tracker.Step(leftHand.Read(), right);
+            if (grab != null && grab.Claimed(HandSide.Left)) left.Tracked = false;
+            if (grab != null && grab.Claimed(HandSide.Right)) right.Tracked = false;
+            var pose = tracker.Step(left, right);
             holdProgress = pose.Progress;
             if (pose.Progress > 0f) ringAt = pose.Between;
             if (pose.Fired)
