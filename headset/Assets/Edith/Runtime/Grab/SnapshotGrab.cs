@@ -112,7 +112,14 @@ namespace Edith.Grab
         static void Play(Rarity? tier, Vector3 point)
         {
             var clip = RaritySounds.For(tier);
-            if (clip != null) AudioSource.PlayClipAtPoint(clip, point);
+            if (clip == null) return;
+            // Plain 2D, so the stereo cue arrives at full level wherever the hand is.
+            var voice = new GameObject("EDITH pocket sound").AddComponent<AudioSource>();
+            voice.transform.position = point;
+            voice.spatialBlend = 0f;
+            voice.clip = clip;
+            voice.Play();
+            Destroy(voice.gameObject, clip.length + 0.5f);
         }
     }
 }
