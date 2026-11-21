@@ -253,7 +253,9 @@ Scan settings:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `SCAN_MODEL` | `gemini-3.5-flash` | The Gemini model that picks what to pin |
+| `SCAN_MODEL` | `gemini-3.5-flash-lite` | The Gemini model that picks what to pin |
+| `SCAN_BACKUP_MODEL` | `gpt-4o` | The OpenAI model asked as well when the Gemini call fails or is slow; needs `OPENAI_API_KEY` |
+| `SCAN_BACKUP_AFTER_S` | `3.5` | How long the Gemini call runs alone before the backup is asked too; 0 turns the backup off |
 | `SCAN_THINKING_LEVEL` | `minimal` | The model's thinking level; more thinking makes pins later |
 | `SCAN_TIMEOUT_S` | `7` | The time one scan may take. The headset waits 8 s |
 
@@ -310,7 +312,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/agents/ask.py`: the Ask persona prompt, the token request and the session setup.
 - `edith_backend/agents/card.py`: the `CardAgent` protocol, the stub, and `make_card_agent`, which picks the agent from `CARD_PROVIDER`.
 - `edith_backend/agents/card_model.py`: the two-call Card agent, its line parser, and the fact and place histories.
-- `edith_backend/agents/scan.py`: the Scan agent with its prompt, the repair of the model's picks, the Gemini call and the hook memory.
+- `edith_backend/agents/scan.py`: the Scan agent with its prompt, the repair of the model's picks, the Gemini call with its OpenAI backup, and the hook memory.
 - `edith_backend/agents/writers.py`: the OpenAI and Gemini streaming writers.
 - `edith_backend/events.py`: the stream's event types, the Look metadata and the details recorded but not streamed.
 - `edith_backend/pairing.py`: pairing codes with their throttle, and the signed phone tokens.

@@ -137,7 +137,7 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 | Feature | Agent | Model | Why |
 | --- | --- | --- | --- |
 | Look: name, fun fact, rarity, place guess | Card | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), streamed | Fastest option, needed for the 1.5 s first-words target. Step up to `gemini-3.8-flash` if rarity or fact quality is weak. |
-| Scan: pick 2 or 3 things with point, box and hook | Scan | Gemini 3.5 Flash (`gemini-3.5-flash`), structured JSON output | One image-in call that needs good spatial grounding for the boxes; fall back to Flash-Lite if pins miss the 2 s target. |
+| Scan: pick 2 or 3 things with point, box and hook | Scan | Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`), structured JSON output, with OpenAI `gpt-4o` asked as well after 3.5 s | One image-in call; Flash missed the 7 s scan budget on the headset. The first good answer of the two wins. |
 | Ask: spoken answer | Query | Gemini 3.8 Live, the default low-latency variant | Native speech in and out, silence detection, and the voice choices for EDITH's voice; confirm the exact ID in the Live API docs. |
 | Ask: web answers with sources | Query | Gemini with Google Search grounding | Returns the sources behind the card's flip with no separate search service. |
 | Welcome: intro, interests, practice Look | Welcome | Gemini 3.8 Live, with the Card model for the practice Look | Same voice session as Ask, so the voice picked on welcome carries over. |
