@@ -6,8 +6,7 @@ import re
 import time
 from array import array
 from collections import OrderedDict, defaultdict
-from collections.abc import AsyncIterator, Callable, Iterator, Sequence
-from dataclasses import replace
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Protocol
 from uuid import UUID
 
@@ -85,7 +84,6 @@ Other rules:
 confident is true.
 - Never build it around a different brand, model or product than the one named: the person reads that as a wrong \
 identification. When the name has no brand, stay on the kind of object, its materials, history or science.
-- Never repeat or closely paraphrase a fact this person was already told.
 - Around 30 words; never exceed 40. One or two sentences. Name the subject instead of saying "it".
 - Output ONLY the fact. No title, no preamble, no quotation marks, no emoji, no markdown, no "Did you know"."""
 FACT_ASK = "The person framed {name}. Write the fact about it."
@@ -367,26 +365,7 @@ class CardModelAgent:
                  "found" if photo_place else "none", fields.get("RARITY", "-"))
         if not fact:
             return
-        ignore = content_words(fields["NAME"], fields.get("KIND", ""))
-        told = self._facts.same_kind(profile_id, kind, embedding)
-        repeats = self._facts.matching(profile_id, fact, ignore)
-        if repeats:
-            # Framing the same thing again often brings back the same fact. One retry, told every fact for this kind.
-            log.info("look %s fact was already told, asking once more", meta.look_id)
-            retry = await self._write_fact(
-                image, profile_id, meta, fields["NAME"], avoid=[fact, *(t.fact for t in told)], warm=warm_task)
-            if retry:
-                if again := self._facts.matching(profile_id, retry, ignore):
-                    repeats += again
-                else:
-                    fact, repeats = retry, []
-        if repeats:
-            # No fresh fact is left, so the one told longest ago comes back, which is the least likely to be recalled.
-            oldest = min(told or repeats, key=lambda t: t.told_at)
-            log.info("look %s has no fresh fact, so one told before is shown again", meta.look_id)
-            fact, kept = oldest.fact, replace(oldest, told_at=self._clock())
-        else:
-            kept = ToldFact(kind, fact, embedding, self._clock())
+        kept = ToldFact(kind, fact, embedding, self._clock())
         self._facts.add(profile_id, kept)
         self._save(profile_id, kept)
         yield Fact(text=fact)
@@ -460,30 +439,14 @@ class CardModelAgent:
         task.add_done_callback(self._saving.discard)
 
     async def _write_fact(
-        self, image: bytes, profile_id: UUID, meta: LookMeta, name: str, avoid: Sequence[str] = (),
-        warm: asyncio.Task | None = None,
+        self, image: bytes, profile_id: UUID, meta: LookMeta, name: str, warm: asyncio.Task | None = None,
     ) -> str:
-        """The fact, or "" when the call fails, so a failed fact never costs the card its name. `avoid` lists facts
-        the new one must not repeat."""
+        """The fact, or "" when the call fails, so a failed fact never costs the card its name."""
         if warm is not None:
             await warm
-        parts = []
-        if told := self._facts.render(profile_id):
-            # Framed as unrelated and kept apart from the photo: a blurry photo beside a list of banana facts gets
-            # named as bananas.
-            parts.append(
-                "Facts this person was told on earlier, different photos, by kind. They say nothing about the new photo. "
-                f"Your fact must be about a different subject than every fact listed for the same kind:\n{told}"
-            )
-        if avoid:
-            listed = "\n".join(f"- {fact}" for fact in avoid)
-            parts.append(
-                "You just wrote the first of these, which repeats an earlier fact. Write about a subject different "
-                f"from every one of them:\n{listed}"
-            )
         try:
             ask = FACT_ASK.format(name=name.rstrip("."))
-            reply = [t async for t in self._fact_writer.stream(FACT_PROMPT, "\n\n".join(parts) or None, image, ask)]
+            reply = [t async for t in self._fact_writer.stream(FACT_PROMPT, None, image, ask)]
             if not (fact := clean_fact("".join(reply))):
                 log.warning("look %s fact call returned no text", meta.look_id)
             return fact
