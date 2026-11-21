@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace Edith.Snapshots
 {
     /// A snapshot's card: the photo sits in a liquid-glass panel whose outline and halo take the rarity's colour, with
-    /// a thin frame and four white sight corners around the photo. Under it, past a divider with a dot, the fact,
+    /// a thin frame and four white sight corners around the photo. Under it, past a dashed divider, the fact,
     /// "Looking…" until it types out. The photo's rect is in millimetres.
     sealed class CardView
     {
@@ -21,8 +21,8 @@ namespace Edith.Snapshots
         const float LineHeight = 1.25f;
         const int MinLines = 2;
         const float ArmMm = 6f, ThickMm = 1.3f, InsetMm = 3.5f;
-        // The divider's distance under the photo, and the gap from it to the fact.
-        const float DividerMm = 5f, TextGapMm = 6f, DotMm = 2.6f;
+        // The divider's distance under the photo and the gap from it to the fact, and its dashes: length, gap, thickness.
+        const float DividerMm = 5f, TextGapMm = 6f, DashMm = 2.4f, DashGapMm = 1.6f, DashThickMm = 0.5f;
         // The thin frame round the photo: how far out from it and its corner radius. The photo's own corners are cut
         // to sit concentric inside it.
         const float FrameEdgeMm = 3f, FrameRadiusMm = 7f;
@@ -110,7 +110,7 @@ namespace Edith.Snapshots
             glass.Rect.anchoredPosition = new Vector2(0f, photoMm.y * 0.5f + pad - height * 0.5f);
         }
 
-        /// The thin frame around the photo, and the line with a dot in it that separates photo from text.
+        /// The thin frame around the photo, and the dashed line that separates photo from text.
         void BuildDivider(RectTransform photo, Material material)
         {
             var edge = FrameEdgeMm * scale;
@@ -118,25 +118,21 @@ namespace Edith.Snapshots
             frame.Rect.SetSiblingIndex(1);
             divider = new GameObject("Divider", typeof(RectTransform)).GetComponent<RectTransform>();
             Anchor(divider, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0f, -(photoMm.y * 0.5f + DividerMm * scale)));
-            var half = textWidthMm * 0.5f - DotMm * scale * 3f;
             var line = new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.45f);
-            Segment(material, new Vector2(half, 0.5f * scale), new Vector2(-(half * 0.5f + DotMm * scale * 1.5f), 0f), line);
-            Segment(material, new Vector2(half, 0.5f * scale), new Vector2(half * 0.5f + DotMm * scale * 1.5f, 0f), line);
-            Segment(material, Vector2.one * (DotMm * scale), Vector2.zero, Theme.Accent, round: true);
+            float dash = DashMm * scale, step = (DashMm + DashGapMm) * scale;
+            // As many whole dashes as fit the text's width, centred under it.
+            var count = Mathf.Max(1, Mathf.FloorToInt((textWidthMm + DashGapMm * scale) / step));
+            var start = -((count - 1) * step) * 0.5f;
+            for (var i = 0; i < count; i++)
+                Segment(material, new Vector2(dash, DashThickMm * scale), new Vector2(start + i * step, 0f), line);
         }
 
-        void Segment(Material material, Vector2 size, Vector2 position, Color color, bool round = false)
+        void Segment(Material material, Vector2 size, Vector2 position, Color color)
         {
             var image = new GameObject("Mark", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
             image.color = color;
             image.raycastTarget = false;
             image.material = material;
-            if (round)
-            {
-                image.sprite = Theme.Fill;
-                image.type = Image.Type.Sliced;
-                image.pixelsPerUnitMultiplier = Theme.ShapeRadius / (size.x * 0.5f);
-            }
             Anchor(image.rectTransform, divider, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), size, position);
         }
 
