@@ -4,13 +4,17 @@ import asyncio
 import logging
 import re
 import time
+from array import array
 from collections import OrderedDict
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from dataclasses import replace
 from typing import Protocol
 from uuid import UUID
 
+from ..db import TOLD_FACTS_KEPT, Store, ToldFact
 from ..events import CardEvent, Fact, LookDetails, LookMeta, Name, Rarity, RarityEvent
 from ..location import Whereabouts, describe_place
+from .embeddings import KindEmbedder, cosine
 
 log = logging.getLogger("edith.look")
 
@@ -195,31 +199,54 @@ class ProfileLists[T]:
     def get(self, profile_id: UUID) -> list[T]:
         return self._lists.get(profile_id, [])
 
+    def has(self, profile_id: UUID) -> bool:
+        return profile_id in self._lists
+
     def append(self, profile_id: UUID, item: T) -> None:
-        items = self._lists.pop(profile_id, [])
-        items.append(item)
-        del items[: -self._max_kept]
-        self._lists[profile_id] = items
+        self.put(profile_id, [*self._lists.get(profile_id, []), item])
+
+    def put(self, profile_id: UUID, items: list[T]) -> None:
+        self._lists.pop(profile_id, None)
+        self._lists[profile_id] = items[-self._max_kept :]
         while len(self._lists) > self._max_profiles:
             self._lists.popitem(last=False)
 
 
 class FactHistory:
-    """Facts already told, per profile, with the kind of object each was about. Repeats are checked against every
-    kind, because one object's kind is named differently from Look to Look ("moka pot", "stovetop espresso maker")."""
+    """Facts already told, per profile, with the kind of object each was about and that kind's embedding when there was
+    one. Repeats are checked against every kind, because one object's kind is named differently from Look to Look
+    ("moka pot", "stovetop espresso maker"); `same_kind` finds the facts told for this Look's kind."""
 
-    def __init__(self, max_kept: int = 50, max_shown: int = 30) -> None:
-        self._told: ProfileLists[tuple[str, str]] = ProfileLists(max_kept)
-        self._max_shown = max_shown
+    def __init__(self, max_kept: int = TOLD_FACTS_KEPT, max_shown: int = 30, similarity: float = 0.8) -> None:
+        self._told: ProfileLists[ToldFact] = ProfileLists(max_kept)
+        self._max_shown, self._similarity = max_shown, similarity
 
-    def add(self, profile_id: UUID, kind: str, fact: str) -> None:
-        self._told.append(profile_id, (kind, fact))
+    def has(self, profile_id: UUID) -> bool:
+        return self._told.has(profile_id)
+
+    def load(self, profile_id: UUID, told: list[ToldFact]) -> None:
+        self._told.put(profile_id, told)
+
+    def add(self, profile_id: UUID, told: ToldFact) -> None:
+        """Records a fact as the newest told. A fact told again moves to the end with its new time."""
+        self._told.put(profile_id, [t for t in self._told.get(profile_id) if t.fact != told.fact] + [told])
 
     def render(self, profile_id: UUID) -> str:
-        return "\n".join(f"- {kind}: {fact}" for kind, fact in self._told.get(profile_id)[-self._max_shown :])
+        return "\n".join(f"- {t.kind}: {t.fact}" for t in self._told.get(profile_id)[-self._max_shown :])
 
-    def is_repeat(self, profile_id: UUID, fact: str, ignore: frozenset[str]) -> bool:
-        return any(is_same_fact(fact, told, ignore) for _, told in self._told.get(profile_id))
+    def matching(self, profile_id: UUID, fact: str, ignore: frozenset[str]) -> list[ToldFact]:
+        return [t for t in self._told.get(profile_id) if is_same_fact(fact, t.fact, ignore)]
+
+    def same_kind(self, profile_id: UUID, kind: str, embedding: array | None) -> list[ToldFact]:
+        """The facts told for this kind, oldest first. Kinds are compared by embedding where both have one, else by a
+        shared word."""
+        found = [t for t in self._told.get(profile_id) if self._is_same_kind(kind, embedding, t)]
+        return sorted(found, key=lambda t: t.told_at)
+
+    def _is_same_kind(self, kind: str, embedding: array | None, told: ToldFact) -> bool:
+        if embedding is not None and told.embedding is not None:
+            return cosine(embedding, told.embedding) >= self._similarity
+        return kind == told.kind or bool(content_words(kind) & content_words(told.kind))
 
 
 class PlaceHistory:
@@ -257,12 +284,20 @@ class CardModelAgent:
         name_writer: Writer,
         fact_writer: Writer,
         whereabouts: Callable[[UUID], Whereabouts | None] = lambda _: None,
+        embedder: KindEmbedder | None = None,
+        archive: Store | None = None,
+        facts: FactHistory | None = None,
+        clock: Callable[[], float] = time.time,
     ) -> None:
+        """`embedder` matches kinds by meaning and `archive` keeps the told facts across restarts; without them the
+        history lives in memory and kinds match by a shared word."""
         self._name_writer = name_writer
         self._fact_writer = fact_writer
         self._whereabouts = whereabouts
-        self._facts = FactHistory()
+        self._embedder, self._archive, self._clock = embedder, archive, clock
+        self._facts = facts or FactHistory()
         self._places = PlaceHistory()
+        self._saving: set[asyncio.Task] = set()
 
     async def run(self, image: bytes, meta: LookMeta, profile_id: UUID) -> AsyncIterator[CardEvent]:
         fields: dict[str, str] = {}
@@ -270,21 +305,29 @@ class CardModelAgent:
         # Started as soon as the name is final, while the naming call writes kind, place and rarity. A fact call
         # started blind beside the naming call often picked a different object in the crop.
         fact_task: asyncio.Task[str] | None = None
+        warm_task = asyncio.create_task(self._warm(profile_id))
+        embed_task: asyncio.Task[array | None] | None = None
         try:
             async for event in self._name(image, profile_id, fields, found):
                 if isinstance(event, Name) and not event.pending:
-                    fact_task = asyncio.create_task(self._write_fact(image, profile_id, meta, event.name))
+                    fact_task = asyncio.create_task(
+                        self._write_fact(image, profile_id, meta, event.name, warm=warm_task))
                 yield event
             if fact_task is None:
                 raise RuntimeError("The naming call ended without a name.")
             kind = normalize_kind(fields.get("KIND", "")) or normalize_kind(fields["NAME"])
+            # Embedded beside the fact call, after the name has gone out, so it never delays a name.
+            embed_task = asyncio.create_task(self._embed(kind))
             # The phone's place is exact where the photo's guess is a clue, so it wins when there is one.
             photo_place = parse_place(fields.get("PLACE", ""))
             yield LookDetails(kind=kind, place=(found.place if found else None) or photo_place)
             fact = await fact_task
+            embedding = await embed_task
+            await warm_task
         finally:
-            if fact_task is not None:
-                fact_task.cancel()
+            for task in (fact_task, embed_task, warm_task):
+                if task is not None:
+                    task.cancel()
 
         # The inferred place stays out of the logs.
         log.info("look %s kind %r place %s rarity %r", meta.look_id, kind,
@@ -292,14 +335,27 @@ class CardModelAgent:
         if not fact:
             return
         ignore = content_words(fields["NAME"], fields.get("KIND", ""))
-        if self._facts.is_repeat(profile_id, fact, ignore):
-            # Framing the same thing again often brings back the same fact. One retry, told which fact to avoid.
+        told = self._facts.same_kind(profile_id, kind, embedding)
+        repeats = self._facts.matching(profile_id, fact, ignore)
+        if repeats:
+            # Framing the same thing again often brings back the same fact. One retry, told every fact for this kind.
             log.info("look %s fact was already told, asking once more", meta.look_id)
-            fact = await self._write_fact(image, profile_id, meta, fields["NAME"], avoid=fact)
-            if not fact or self._facts.is_repeat(profile_id, fact, ignore):
-                log.info("look %s second fact was also told before, so none is shown", meta.look_id)
-                return
-        self._facts.add(profile_id, kind, fact)
+            retry = await self._write_fact(
+                image, profile_id, meta, fields["NAME"], avoid=[fact, *(t.fact for t in told)], warm=warm_task)
+            if retry:
+                if again := self._facts.matching(profile_id, retry, ignore):
+                    repeats += again
+                else:
+                    fact, repeats = retry, []
+        if repeats:
+            # No fresh fact is left, so the one told longest ago comes back, which is the least likely to be recalled.
+            oldest = min(told or repeats, key=lambda t: t.told_at)
+            log.info("look %s has no fresh fact, so one told before is shown again", meta.look_id)
+            fact, kept = oldest.fact, replace(oldest, told_at=self._clock())
+        else:
+            kept = ToldFact(kind, fact, embedding, self._clock())
+        self._facts.add(profile_id, kept)
+        self._save(profile_id, kept)
         yield Fact(text=fact, sources=[])
 
     async def _name(
@@ -358,8 +414,31 @@ class CardModelAgent:
         for event in updates():
             yield event
 
-    async def _write_fact(self, image: bytes, profile_id: UUID, meta: LookMeta, name: str, avoid: str = "") -> str:
-        """The fact, or "" when the call fails, so a failed fact never costs the card its name."""
+    async def _warm(self, profile_id: UUID) -> None:
+        """Loads the profile's told facts from the archive when this process has none, as after a restart."""
+        if self._archive is not None and not self._facts.has(profile_id):
+            if told := await self._archive.load_told_facts(profile_id):
+                if not self._facts.has(profile_id):
+                    self._facts.load(profile_id, told)
+
+    async def _embed(self, kind: str) -> array | None:
+        return await self._embedder.embed(kind) if self._embedder else None
+
+    def _save(self, profile_id: UUID, told: ToldFact) -> None:
+        if self._archive is None:
+            return
+        task = asyncio.create_task(self._archive.save_told_fact(profile_id, told))
+        self._saving.add(task)
+        task.add_done_callback(self._saving.discard)
+
+    async def _write_fact(
+        self, image: bytes, profile_id: UUID, meta: LookMeta, name: str, avoid: Sequence[str] = (),
+        warm: asyncio.Task | None = None,
+    ) -> str:
+        """The fact, or "" when the call fails, so a failed fact never costs the card its name. `avoid` lists facts
+        the new one must not repeat."""
+        if warm is not None:
+            await warm
         parts = []
         if told := self._facts.render(profile_id):
             # Framed as unrelated and kept apart from the photo: a blurry photo beside a list of banana facts gets
@@ -369,7 +448,11 @@ class CardModelAgent:
                 f"Your fact must be about a different subject than every fact listed for the same kind:\n{told}"
             )
         if avoid:
-            parts.append(f"You just wrote this, which repeats an earlier fact. Write about a different subject:\n- {avoid}")
+            listed = "\n".join(f"- {fact}" for fact in avoid)
+            parts.append(
+                "You just wrote the first of these, which repeats an earlier fact. Write about a subject different "
+                f"from every one of them:\n{listed}"
+            )
         try:
             ask = FACT_ASK.format(name=name.rstrip("."))
             reply = [t async for t in self._fact_writer.stream(FACT_PROMPT, "\n\n".join(parts) or None, image, ask)]

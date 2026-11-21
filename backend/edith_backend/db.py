@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import sys
 import time
+from array import array
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -48,6 +50,20 @@ class Memory:
     created_at: datetime
 
 
+@dataclass(frozen=True)
+class ToldFact:
+    """A fact a profile was told, the kind of object it was about, and that kind's embedding when there was one.
+    `told_at` is epoch seconds."""
+    kind: str
+    fact: str
+    embedding: array | None
+    told_at: float
+
+
+# How many told facts per profile are kept, in memory and in the table.
+TOLD_FACTS_KEPT = 50
+
+
 class StoreUnavailable(Exception):
     """The database is not configured or the query failed."""
 
@@ -65,6 +81,12 @@ class Store(Protocol):
         ...
     async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]: ...
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None: ...
+    async def load_told_facts(self, profile_id: UUID) -> list[ToldFact]:
+        """The profile's newest told facts, oldest first. Empty when there are none or the query failed."""
+        ...
+    async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
+        """Keeps the fact with its kind embedding. A fact told again only gets the new `told_at`. Never raises."""
+        ...
 
 
 class DisabledStore:
@@ -90,6 +112,12 @@ class DisabledStore:
 
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None:
         raise StoreUnavailable("There is no database.")
+
+    async def load_told_facts(self, profile_id: UUID) -> list[ToldFact]:
+        return []
+
+    async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
+        pass
 
 
 class PostgresStore:
@@ -203,6 +231,48 @@ class PostgresStore:
             log.exception("failed to read memory %s", memory_id)
             raise StoreUnavailable("The memory could not be read.") from exc
         return bytes(row[0]) if row else None
+
+    async def load_told_facts(self, profile_id: UUID) -> list[ToldFact]:
+        try:
+            async with self._pool.connection(timeout=5) as conn:
+                cursor = await conn.execute(
+                    """select kind, fact, kind_embedding::text, extract(epoch from told_at) from told_facts
+                       where profile_id = %s order by told_at desc, id desc limit %s""",
+                    (profile_id, TOLD_FACTS_KEPT),
+                )
+                rows = await cursor.fetchall()
+        except Exception:
+            log.exception("failed to load told facts")
+            return []
+        return [ToldFact(kind, fact, _parse_vector(vector), float(at)) for kind, fact, vector, at in reversed(rows)]
+
+    async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                await conn.execute(
+                    "insert into profiles (id) values (%s) on conflict (id) do nothing", (profile_id,)
+                )
+                await conn.execute(
+                    """insert into told_facts (profile_id, kind, kind_embedding, fact, told_at)
+                       values (%s, %s, %s::vector, %s, to_timestamp(%s))
+                       on conflict (profile_id, fact) do update set told_at = excluded.told_at""",
+                    (profile_id, told.kind, _vector_text(told.embedding), told.fact, told.told_at),
+                )
+                await conn.execute(
+                    """delete from told_facts where profile_id = %s and id not in
+                       (select id from told_facts where profile_id = %s order by told_at desc, id desc limit %s)""",
+                    (profile_id, profile_id, TOLD_FACTS_KEPT),
+                )
+        except Exception:
+            log.exception("failed to save a told fact")
+
+
+def _vector_text(embedding: array | None) -> str | None:
+    return None if embedding is None else "[" + ",".join(map(repr, embedding)) + "]"
+
+
+def _parse_vector(text: str | None) -> array | None:
+    return None if text is None else array("f", json.loads(text))
 
 
 def make_store(database_url: str | None, max_size: int) -> Store:

@@ -143,8 +143,8 @@ def create_app(
     # Made here and not per request: only the phone's position ever uses the resolver's client.
     locations = locations or Locations(HttpResolver(httpx.AsyncClient()))
     pairings = pairings or Pairings()
-    agent = agent or make_card_agent(settings, locations.whereabouts)
     store = store or make_store(settings.database_url, settings.db_pool_max)
+    agent = agent or make_card_agent(settings, locations.whereabouts, store)
     ask = ask or make_live_ask(settings)
     scanner = scanner or make_scan_agent(settings, store, locations.whereabouts)
     # Looks still streaming, by look_ref, so a /collect that arrives before the Look is recorded can wait for it. A
