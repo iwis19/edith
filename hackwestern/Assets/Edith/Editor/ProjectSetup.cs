@@ -16,6 +16,9 @@ namespace Edith.Editor
     {
         public const string ScenePath = "Assets/Edith/Scenes/Main.unity";
         const string ApkPath = "Builds/edith.apk";
+        const string RecordingApkPath = "Builds/edith-record.apk";
+        /// Compiles HandRecorder into the recording build only.
+        const string RecordHandsDefine = "EDITH_RECORD_HANDS";
         const string CameraRigPrefab = "Packages/com.meta.xr.sdk.core/Prefabs/OVRCameraRig.prefab";
 
         [MenuItem("EDITH/Configure Project")]
@@ -23,6 +26,9 @@ namespace Edith.Editor
 
         [MenuItem("EDITH/Build APK")]
         static void BuildMenu() => Build();
+
+        [MenuItem("EDITH/Build Recording APK")]
+        static void BuildRecordingMenu() => Build(recordHands: true);
 
         /// Batch entry. Run without -quit: Meta's fixes are async, so this exits the editor itself.
         public static async void BatchConfigure()
@@ -45,6 +51,12 @@ namespace Edith.Editor
         public static void BatchBuild()
         {
             if (!Build()) EditorApplication.Exit(1);
+        }
+
+        /// Batch entry for the recording build, which also writes every right-hand frame to the headset.
+        public static void BatchBuildRecording()
+        {
+            if (!Build(recordHands: true)) EditorApplication.Exit(1);
         }
 
         public static async Task Configure()
@@ -138,14 +150,15 @@ namespace Edith.Editor
                 Debug.Log($"[EDITH setup] OpenXR {(issue.error ? "error" : "warning")} left: {issue.message}");
         }
 
-        public static bool Build()
+        public static bool Build(bool recordHands = false)
         {
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },
-                locationPathName = ApkPath,
+                locationPathName = recordHands ? RecordingApkPath : ApkPath,
                 target = BuildTarget.Android,
                 options = BuildOptions.None,
+                extraScriptingDefines = recordHands ? new[] { RecordHandsDefine } : Array.Empty<string>(),
             });
             var summary = report.summary;
             Debug.Log($"[EDITH setup] build {summary.result} {summary.outputPath} {summary.totalSize} bytes, {summary.totalErrors} errors");
