@@ -263,7 +263,7 @@ Scan settings:
 | --- | --- | --- |
 | `SCAN_MODEL` | `gemini-3.5-flash-lite` | The Gemini model that picks what to pin |
 | `SCAN_BACKUP_MODEL` | `gpt-4o` | The OpenAI model asked as well when the Gemini call fails or is slow; needs `OPENAI_API_KEY` |
-| `SCAN_BACKUP_AFTER_S` | `3.5` | How long the Gemini call runs alone before the backup is asked too; 0 turns the backup off |
+| `SCAN_BACKUP_AFTER_S` | `2` | How long the Gemini call runs alone before the backup is asked too; 0 turns the backup off |
 | `SCAN_THINKING_LEVEL` | `minimal` | The model's thinking level; more thinking makes pins later |
 | `SCAN_TIMEOUT_S` | `7` | The time one scan may take. The headset waits 8 s |
 

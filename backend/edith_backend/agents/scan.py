@@ -32,17 +32,17 @@ COLLECTED_SHOWN = 50
 HOOKS_KEPT = 40
 PROMPT_SIGHTS = 12
 
-SCAN_PROMPT = """You look at one frame from the camera of a person who is exploring a place, and pick the 2 or 3 \
-things in it a curious explorer would most want a second look at, most interesting first.
+SCAN_PROMPT = """You look at one frame from the camera of a person exploring somewhere new to them, such as a room, \
+a campus or a city, and pick the 2 or 3 things in it that make the most fun dares, best first. Each pick gets a pin \
+with a dare the person can do right there.
 
 Order the picks like this:
 1. A named landmark, building, monument, statue, artwork, mural or distinctive sign in view is always pick #1.
-2. Then distinctive things worth a second look: an unusual, old or handmade object, an instrument, a plant or animal, \
-a distinctive product, a striking architectural detail, a view.
-Never pick clutter: bins, bikes, parked cars, lamp posts, traffic signs, parking meters, benches, generic trees, grass \
-or sky, plain furniture, cables, screens showing ordinary text, bottles and cups, appliances, and walls, floors, \
-ceilings, doors, windows or packaging. Never pick a person or a face, or the person's own hands or body. Fewer picks \
-beat dull ones, and an empty list is the right answer for a dull view: do not fill the quota.
+2. Then whatever makes the most fun dare: an unusual, old or handmade object, an instrument, a plant or animal, a \
+machine or product with something odd about it, a striking architectural detail, a pattern worth counting, a view.
+Never pick a person or a face, or the person's own hands or body. Skip plain clutter (bins, parked cars, cables, \
+blank walls and floors) unless it carries a really good dare. Give at least one pick whenever anything in view can \
+carry a fun dare; an empty list is only for a blank wall or darkness.
 
 For each pick give:
 name: the thing named as specifically as the photo lets you, in at most 10 words, with a short article. Include the \
@@ -53,18 +53,22 @@ the photo or its design is unmistakable to an expert; naming the brand does not 
 building, monument or artwork only when it is on the list of named sights you are given and what you see matches its \
 description, or when its name is readable in the frame. Otherwise describe it ("a sandstone Gothic tower with a clock \
 face"). Never invent a building name. A plain right name beats a specific wrong one.
-hook: one line of at most 14 words, in the second person and a lightly enthusiastic voice. It is tied to something \
-specific you can see on that thing (a detail, a material, a feature, an inscription), or it is a concrete thing to do \
-right there. It is never a fact dump or a lecture. Never open it with Check, Look, See, Grab, Read, Take, Notice or \
-Don't miss. The hooks of one scan must each start with a different word. Open with a noun phrase ("Those worn keycaps \
-..."), a verb like Try, Spot, Find, Trace, Count, Step, Compare or Peek, or a question.
-Bad hooks are generic and could sit on anything. Good hooks could only belong to this thing:
-- Bad: "Check out that old stone tower." Good: "Spot the carved crest above that sandstone archway."
-- Bad: "Take a look at this statue." Good: "That bronze hand is polished bright, try matching its pose."
-- Bad: "Look at this colourful mural." Good: "Trace the fox hiding in the mural's swirling blue border."
-- Bad: "Don't miss this sign." Good: "Hand-painted lettering like that is rare, worth a photo."
-- Bad: "Notice the keyboard." Good: "Those blank, worn keycaps hint at years of fast typing."
-- Bad: "See this plant." Good: "Find the holes in each leaf, they are the whole show."
+hook: a dare of at most 14 words, in the second person, playful and a little cheeky, like a friend egging them on. \
+It is something they can do right there in under a minute with their eyes, hands, feet or phone camera: find, spot, \
+count, guess, match, compare, trace, race, hunt, pose or listen for something specific on that thing. It has a clear \
+win, so they know when they have done it, and it only makes sense for this thing. It is never a description, a fact \
+or a compliment. Keep it safe and polite: nothing that climbs, breaks, opens or moves things, touches art, exhibits \
+or other people's belongings, enters closed areas, involves strangers or costs money. Never open it with Check, Look, \
+See, Grab, Read, Take, Notice or Don't miss. The hooks of one scan must each start with a different word. Open with a \
+verb like Find, Spot, Count, Guess, Match, Race, Hunt, Trace or Pose, with "Bet you can't", or with a question.
+Bad hooks describe; good hooks dare:
+- Bad: "Glowing red panels frame the beverage slots." Good: "Find the one drink in there you've never heard of."
+- Bad: "Parallel wooden slats create a rhythmic canopy overhead." Good: "Count the ceiling slats before you reach that \
+far wall."
+- Bad: "Check out that old stone tower." Good: "Guess the time on that clock face, then check your phone."
+- Bad: "Take a look at this statue." Good: "Strike that bronze figure's pose and hold it for five seconds."
+- Bad: "Look at this colourful mural." Good: "Hunt down the fox hiding somewhere in that mural."
+- Bad: "See this plant." Good: "Bet you can't find one leaf on it without a hole."
 Spread the picks over different things. The box is loose around the whole thing, and the point is one spot on the \
 thing itself, where a pin can sit.
 
