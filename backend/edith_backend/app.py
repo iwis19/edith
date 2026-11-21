@@ -20,9 +20,13 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from . import VERSION
 from .agents.ask import AskError, AskRequest, AskSession, LiveAsk, make_live_ask
 from .agents.card import CardAgent, make_card_agent
+from .agents.scan import ScanAgent, make_scan_agent
 from .config import Settings
 from .db import LookRecord, Store, StoreUnavailable, make_store
-from .events import Accepted, CollectMeta, Done, ErrorEvent, Fact, LookDetails, LookEvent, LookMeta, Name, RarityEvent
+from .events import (
+    Accepted, CollectMeta, Done, ErrorEvent, Fact, LookDetails, LookEvent, LookMeta, Name, RarityEvent, ScanMeta,
+    ScanReply,
+)
 from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
@@ -131,6 +135,7 @@ def create_app(
     ask: LiveAsk | None = None,
     locations: Locations | None = None,
     pairings: Pairings | None = None,
+    scanner: ScanAgent | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
@@ -141,6 +146,7 @@ def create_app(
     agent = agent or make_card_agent(settings, locations.whereabouts)
     store = store or make_store(settings.database_url, settings.db_pool_max)
     ask = ask or make_live_ask(settings)
+    scanner = scanner or make_scan_agent(settings, store, locations.whereabouts)
     # Looks still streaming, by look_ref, so a /collect that arrives before the Look is recorded can wait for it. A
     # per-process map is right because the backend runs as a single replica.
     inflight: dict[UUID, asyncio.Event] = {}
@@ -190,6 +196,30 @@ def create_app(
             _stream(agent, store, settings, inflight, profile_id, parsed, data, size, received),
             media_type="application/x-ndjson",
         )
+
+    @app.post("/scan")
+    async def scan(
+        image: UploadFile | None = File(None),
+        meta: str | None = Form(None),
+        profile_id: UUID = Depends(profile),
+    ) -> ScanReply:
+        received = time.monotonic()
+        parsed = _parse_meta(meta, ScanMeta)
+        data, _ = await _read_image(image, settings, settings.scan_max_image_side)
+        if scanner is None:
+            raise ApiError(503, "scan_unavailable", "Scan needs GEMINI_API_KEY on the backend.")
+        try:
+            async with asyncio.timeout(settings.scan_timeout_s):
+                picks = await scanner.scan(data, profile_id, parsed.session)
+        except TimeoutError:
+            log.warning("scan timed out after %.1f s", settings.scan_timeout_s)
+            raise ApiError(504, "scan_timeout", "The scan took too long.")
+        except Exception as exc:
+            log.warning("scan failed: %s: %s", type(exc).__name__, str(exc)[:200])
+            raise ApiError(502, "scan_failed", "The scan could not be completed.")
+        ms = round((time.monotonic() - received) * 1000)
+        log.info("scan %d picks in %d ms: %s", len(picks), ms, [p.name for p in picks])
+        return ScanReply(scan_ref=uuid.uuid4().hex, ms=ms, picks=picks)
 
     @app.post("/ask/session")
     async def ask_session(request: AskRequest | None = Body(None), profile_id: UUID = Depends(profile)) -> AskSession:
@@ -303,7 +333,10 @@ def _parse_meta[M: BaseModel](meta: str | None, model: type[M]) -> M:
         raise ApiError(422, "invalid_meta", f"The meta field is not valid ({type(exc).__name__}).")
 
 
-async def _read_image(image: UploadFile | None, settings: Settings) -> tuple[bytes, tuple[int, int]]:
+async def _read_image(
+    image: UploadFile | None, settings: Settings, max_side: int | None = None
+) -> tuple[bytes, tuple[int, int]]:
+    max_side = max_side or settings.max_image_side
     if image is None:
         raise ApiError(422, "missing_image", "The image field is required.")
     data = await image.read(settings.max_image_bytes + 1)
@@ -314,9 +347,8 @@ async def _read_image(image: UploadFile | None, settings: Settings) -> tuple[byt
     size = jpeg_size(data)
     if size is None:
         raise ApiError(422, "invalid_image", "The JPEG dimensions could not be read.")
-    if max(size) > settings.max_image_side:
-        raise ApiError(422, "image_dimensions",
-                       f"The longest side must be at most {settings.max_image_side} px, got {max(size)}.")
+    if max(size) > max_side:
+        raise ApiError(422, "image_dimensions", f"The longest side must be at most {max_side} px, got {max(size)}.")
     return data, size
 
 

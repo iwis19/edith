@@ -1,6 +1,6 @@
 # EDITH backend
 
-A FastAPI service that holds every AI call, the search and the memory, so API keys never reach the headset. It streams Look cards written by the Card agent and mints Gemini Live sessions for Ask.
+A FastAPI service that holds every AI call, the search and the memory, so API keys never reach the headset. It streams Look cards written by the Card agent, picks what a Scan pins, and mints Gemini Live sessions for Ask.
 
 ## Card agent
 
@@ -90,6 +90,32 @@ The response is `{"memories": [{"id", "look_ref", "name", "kind", "fact", "sourc
 
 Returns the memory's JPEG (`image/jpeg`). Answers 404 `unknown_memory` for an id that is missing or belongs to another profile, and 503 `db_unavailable` like `/collect`.
 
+### `POST /scan`
+
+Picks the 2 or 3 things in one camera frame most worth a look, with one Gemini call that answers in JSON held to a schema. A multipart form with two fields:
+
+- `image`: the whole camera frame as a JPEG, at most 2 MB and 1280 px on its longest side.
+- `meta`: JSON `{"captured_at": ISO 8601, "session": UUID}`. The headset makes `session` once per launch.
+
+The response is `{"scan_ref", "ms", "picks"}`. `picks` holds 0 to 3 items, most interesting first, and an empty list is a normal answer for a dull view. Each pick is:
+
+| Field | Value |
+| --- | --- |
+| `name` | The thing, in at most 10 words |
+| `hook` | One line saying why it is worth a look, or something to do with it |
+| `point` | `[x, y]`: one spot on the thing, where its pin sits |
+| `box` | `[x0, y0, x1, y1]`: a loose box around the whole thing, with `point` inside it |
+
+Coordinates are fractions of the upright image from 0 to 1, with the origin at the top left and y running down.
+
+The model is also told three things when they exist: the phone's place and up to 12 named sights nearby (see [Phone location](#phone-location)), the hooks this profile was already given in this `session`, and the profile's newest 50 memories, which it is asked to pass over for things not yet collected. A pick that repeats a hook for the same name within the session is dropped, and so is one whose hook opens with a generic word such as "Check" or "Look". The hooks are kept in process memory for one session per profile; a new `session` forgets the old one's. The memory lookup gets 0.6 s, after which the scan goes without it.
+
+| Status | `error.code` | Meaning |
+| --- | --- | --- |
+| 503 | `scan_unavailable` | `GEMINI_API_KEY` is not set |
+| 502 | `scan_failed` | The model call failed or its reply was not usable JSON |
+| 504 | `scan_timeout` | The scan took longer than `SCAN_TIMEOUT_S` |
+
 ### `POST /ask/session`
 
 Mints a Gemini Live session for one spoken question. The headset opens the websocket and talks to Gemini directly, so no audio passes through the backend and the API key never leaves it.
@@ -120,7 +146,7 @@ The headset pairs like this:
 
 A position becomes a place name and named sights through OpenStreetMap: Nominatim for the address and Overpass for the buildings, landmarks and campuses around the point, with no list of places kept in this repository. The backend sends each service the position rounded to about 11 m and a `User-Agent` of `EDITH/<version>` only. It asks Nominatim at most once a second, remembers each answer for 30 min per rounded point, and looks a profile up again only after it moves 75 m or its answer is 10 min old.
 
-The Look and Ask prompts use a position only while its latest fix is at most 30 min old. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights for the Scan agent to call, and `describe_place` turns them into prompt text.
+The Look and Ask prompts use a position only while its latest fix is at most 30 min old. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights, and `describe_place` turns them into prompt text. The Scan agent uses both.
 
 #### `POST /pair`
 
@@ -184,6 +210,14 @@ Ask settings:
 | `LIVE_VOICE` | `Kore` | The prebuilt Live voice. Gemini silently falls back to its default for a name it does not know, so the backend accepts only listed names |
 | `LIVE_SEARCH` | `false` | Adds Google Search to the session. A free-tier key refuses the session with it on |
 
+Scan settings:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `SCAN_MODEL` | `gemini-3.5-flash` | The Gemini model that picks what to pin |
+| `SCAN_THINKING_LEVEL` | `minimal` | The model's thinking level; more thinking makes pins later |
+| `SCAN_TIMEOUT_S` | `7` | The time one scan may take. The headset waits 8 s |
+
 Phone location settings:
 
 | Setting | Default | Meaning |
@@ -229,7 +263,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 
 1. Create a Railway service from this repository with the root directory set to `backend`. Railway builds the `Dockerfile`.
 2. Set `DATABASE_URL`, `DEVICE_TOKEN` and the key for `CARD_PROVIDER` (`OPENAI_API_KEY` by default, or `GEMINI_API_KEY` with `CARD_PROVIDER=gemini`) on the service. The image sets `PUBLIC_SERVER=1`, so the app refuses to start without `DEVICE_TOKEN`.
-3. Keep one replica: the facts told, the places seen and the phone's location are held in process memory.
+3. Keep one replica: the facts told, the places seen, the scan hooks and the phone's location are held in process memory.
 
 ## Layout
 
@@ -237,6 +271,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/agents/ask.py`: the Ask persona prompt, the token request and the session setup.
 - `edith_backend/agents/card.py`: the `CardAgent` protocol, the stub, and `make_card_agent`, which picks the agent from `CARD_PROVIDER`.
 - `edith_backend/agents/card_model.py`: the two-call Card agent, its line parser, and the fact and place histories.
+- `edith_backend/agents/scan.py`: the Scan agent with its prompt, the repair of the model's picks, the Gemini call and the hook memory.
 - `edith_backend/agents/writers.py`: the OpenAI and Gemini streaming writers.
 - `edith_backend/events.py`: the stream's event types, the Look metadata and the details recorded but not streamed.
 - `edith_backend/pairing.py`: pairing codes with their throttle, and the signed phone tokens.

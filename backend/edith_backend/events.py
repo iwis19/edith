@@ -17,6 +17,27 @@ class CollectMeta(BaseModel):
     look_ref: UUID
 
 
+class ScanMeta(BaseModel):
+    captured_at: datetime
+    # Made by the headset once per launch. Hooks are remembered for one session at a time.
+    session: UUID
+
+
+class ScanPick(BaseModel):
+    """One thing worth a look. Coordinates are fractions of the upright image: origin top-left, y down."""
+
+    name: str
+    hook: str
+    point: tuple[float, float]
+    box: tuple[float, float, float, float]
+
+
+class ScanReply(BaseModel):
+    scan_ref: str
+    ms: int
+    picks: list[ScanPick]
+
+
 class Source(BaseModel):
     title: str
     url: str
