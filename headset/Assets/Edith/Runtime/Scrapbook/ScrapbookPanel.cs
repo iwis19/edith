@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Edith.Ask;
 using Edith.Backend;
@@ -13,8 +14,8 @@ namespace Edith.Scrapbook
 {
     /// The Scrapbook: the collected memories as a deck of cards to scroll through. The wrist button opens it in
     /// front of the user, where it stays put in the room, and closes it. A thumb swipe moves one card, a sideways
-    /// pinch-drag scrubs, and a quick pinch on a side card brings it to the middle. The lens bar under the deck jumps
-    /// to a day, narrows the deck to a rarity, or shows the globe of places: a pinch on a city's pin dives into its
+    /// pinch-drag scrubs, and a quick pinch on a side card brings it to the middle. The tabs under the deck pick
+    /// the lens, and the chips under them jump to a day, narrows the deck to a rarity, or shows the globe of places: a pinch on a city's pin dives into its
     /// street map, and a pinch on a spot's pin narrows the deck to that spot. A pinch goes to the first thing in its
     /// line: a chip, a pin, the globe, a card, and otherwise the deck. While it is open it holds the hand gate, so
     /// pinches make no Looks and palms start no Scan.
@@ -52,7 +53,12 @@ namespace Edith.Scrapbook
         WristButton button;
         WristButtonView buttonView;
         Transform frame;
-        DeckView deckView;
+        DeckView deckView, leaving;
+        bool leavingShown;
+        /// The deck a change replaced, drawn fading out while the new one forms, and the card that stays in the middle.
+        readonly List<Memory> replaced = new List<Memory>();
+        float replacedAt;
+        Memory kept;
         LensBar bar;
         MapImages maps;
         PlacesView places;
@@ -133,6 +139,7 @@ namespace Edith.Scrapbook
             {
                 if (barShows != null) bar.Hide();
                 barShows = null;
+                HideLeaving();
                 var (title, body) = Notice(content);
                 deckView.ShowNotice(title, body, eased);
                 places.Hide();
@@ -141,7 +148,8 @@ namespace Edith.Scrapbook
 
             deck.Advance(Time.deltaTime);
             if (Open) LoadPhotosInReach();
-            deckView.Show(browse.Visible, deck.Position, photoOf, eased);
+            deckView.Show(browse.Visible, deck.Position, photoOf, eased, deck.Form, kept);
+            DrawLeaving(eased);
             places.Draw(browse, eased, eye.position, Time.deltaTime, Open ? client : null, session);
             var shows = (browse.Lens, browse.Filter, (Place)browse.Spot ?? browse.City, browse.Visible[deck.Target].Date, browse.Visible.Count);
             if (barShows is { } had && had.Equals(shows)) return;
@@ -149,6 +157,25 @@ namespace Edith.Scrapbook
             browse.Tabs(tabs);
             browse.Chips(shows.Date, chips);
             bar.Show(tabs, chips);
+        }
+
+        void DrawLeaving(float eased)
+        {
+            if (deck.Form >= 1f)
+            {
+                HideLeaving();
+                return;
+            }
+            leaving ??= new DeckView(frame, font, material);
+            leavingShown = true;
+            leaving.Show(replaced, replacedAt, photoOf, eased, 1f - deck.Form, null, kept);
+        }
+
+        void HideLeaving()
+        {
+            if (!leavingShown) return;
+            leavingShown = false;
+            leaving.Hide();
         }
 
         // After hand tracking has updated, like the pinch and the grab.
@@ -297,17 +324,24 @@ namespace Edith.Scrapbook
                     case ChipKind.City: browse.Dive(chosen.City); break;
                     case ChipKind.Globe: browse.Surface(); break;
                     case ChipKind.Spot: browse.ToggleSpot(chosen.Spot); break;
-                    default: browse.ToggleFilter(chosen.Kind == ChipKind.Tier ? chosen.Tier : (Rarity?)null); break;
+                    case ChipKind.Tier: browse.ToggleFilter(chosen.Tier); break;
                 }
             });
         }
 
-        /// Changes what the deck is narrowed to. The card in the middle stays there when it is still in the deck.
+        /// Changes what the deck is narrowed to. The card in the middle stays there when it is still in the deck, and
+        /// the others fold away and fan out again.
         void Narrow(Action change)
         {
-            var keep = browse.Visible[deck.Target].Id;
+            var middle = browse.Visible[deck.Target];
+            replaced.Clear();
+            replaced.AddRange(browse.Visible);
+            replacedAt = deck.Position;
             change();
-            deck = new Deck(browse.Visible.Count, Mathf.Max(0, browse.IndexOf(keep)));
+            if (browse.Visible.Count == replaced.Count && browse.Visible.SequenceEqual(replaced)) return;
+            var at = browse.IndexOf(middle.Id);
+            kept = at >= 0 ? middle : null;
+            deck = new Deck(browse.Visible.Count, Mathf.Max(0, at), true);
             Debug.Log($"[EDITH scrapbook] {browse.Lens} lens, {(browse.Filter is Rarity tier ? tier.ToString() : "every")} tier, " +
                       $"{((Place)browse.Spot ?? browse.City)?.Label ?? "every place"}, {browse.Visible.Count} cards");
         }

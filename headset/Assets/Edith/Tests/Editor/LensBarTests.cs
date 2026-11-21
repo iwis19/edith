@@ -43,6 +43,10 @@ namespace Edith.Tests
         /// The world position of the chip that says `label`.
         Vector3 At(string label) => parent.GetComponentsInChildren<Text>().Single(text => text.text == label).transform.position;
 
+        Image Backing(string label) => parent.GetComponentsInChildren<Text>().Single(text => text.text == label).GetComponentInParent<Image>();
+
+        Color Ink(string label) => parent.GetComponentsInChildren<Text>().Single(text => text.text == label).color;
+
         bool Pinch(string label, out Chip chip) => bar.Hit(Vector3.zero, At(label) * 0.7f, out chip);
 
         [Test]
@@ -53,11 +57,12 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_rarity_lens_shows_all_and_its_tiers()
+        public void The_rarity_lens_shows_all_six_tiers_with_their_counts()
         {
             browse.SetLens(Lens.Rarity);
             Show();
-            CollectionAssert.AreEqual(new[] { "Places", "Time", "Rarity", "All 3", "Common 1", "Epic 2" }, bar.Labels);
+            CollectionAssert.AreEqual(
+                new[] { "Places", "Time", "Rarity", "Common 1", "Uncommon 0", "Rare 0", "Epic 2", "Legendary 0", "Mythic 0" }, bar.Labels);
         }
 
         [Test]
@@ -67,7 +72,7 @@ namespace Edith.Tests
             Show();
             browse.SetLens(Lens.Time);
             Show(new DateTime(2026, 11, 21));
-            Assert.IsFalse(parent.GetComponentsInChildren<Text>().Any(text => text.text == "All 3"));
+            Assert.IsFalse(parent.GetComponentsInChildren<Text>().Any(text => text.text == "Epic 2"));
         }
 
         [Test]
@@ -96,8 +101,59 @@ namespace Edith.Tests
             Assert.IsTrue(Pinch("Epic 2", out var chip));
             Assert.AreEqual(ChipKind.Tier, chip.Kind);
             Assert.AreEqual(Rarity.Epic, chip.Tier);
-            Assert.IsTrue(Pinch("All 3", out chip));
-            Assert.AreEqual(ChipKind.AllTiers, chip.Kind);
+        }
+
+        [Test]
+        public void A_tier_with_no_memory_is_dimmed_and_a_pinch_on_it_chooses_nothing()
+        {
+            browse.SetLens(Lens.Rarity);
+            Show();
+            Assert.IsFalse(Pinch("Mythic 0", out _));
+            Assert.IsFalse(Pinch("Uncommon 0", out _));
+            Assert.That(Backing("Mythic 0").color.a, Is.LessThan(Backing("Epic 2").color.a));
+            Assert.That(Ink("Mythic 0").a, Is.LessThan(Ink("Epic 2").a));
+        }
+
+        [Test]
+        public void The_selected_tier_is_filled_with_its_colour_and_the_others_are_not()
+        {
+            browse.SetLens(Lens.Rarity);
+            browse.ToggleFilter(Rarity.Epic);
+            Show();
+            var filled = Backing("Epic 2").color;
+            Assert.AreEqual(RarityColors.For(Rarity.Epic).r, filled.r, 1e-4f);
+            Assert.AreEqual(RarityColors.For(Rarity.Epic).b, filled.b, 1e-4f);
+            Assert.AreNotEqual(filled, Backing("Common 1").color);
+        }
+
+        [Test]
+        public void The_selected_tab_is_marked()
+        {
+            Show();
+            Assert.AreNotEqual(Backing("Time").color, Backing("Rarity").color);
+            Assert.AreEqual(Backing("Places").color, Backing("Rarity").color, "only the tab in use stands out");
+        }
+
+        [Test]
+        public void Pinching_a_chip_by_its_text_when_all_six_tiers_show_still_picks_the_right_one()
+        {
+            browse.SetLens(Lens.Rarity);
+            Show();
+            foreach (var (label, tier) in new[] { ("Common 1", Rarity.Common), ("Epic 2", Rarity.Epic) })
+            {
+                Assert.IsTrue(Pinch(label, out var chip));
+                Assert.AreEqual(tier, chip.Tier);
+            }
+        }
+
+        [Test]
+        public void The_six_tier_chips_fit_the_width_of_the_deck()
+        {
+            browse.SetLens(Lens.Rarity);
+            Show();
+            Assert.That(Mathf.Abs(At("Common 1").x), Is.LessThan(0.17f));
+            Assert.That(Mathf.Abs(At("Mythic 0").x), Is.LessThan(0.17f));
+            Assert.That(At("Mythic 0").x - At("Common 1").x, Is.GreaterThan(0.15f), "and do not overlap");
         }
 
         [Test]
@@ -122,13 +178,27 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_bar_sits_under_the_cards_within_reach()
+        public void The_tabs_sit_over_the_chips_and_both_rows_are_under_the_deck_within_reach()
         {
-            Show();
+            Show(new DateTime(2026, 11, 21));
             var deckBottom = DeckLayout.Pose(0f).Position.y - 0.105f;
-            Assert.That(At("Time").y, Is.LessThan(deckBottom));
-            Assert.That(At("11/21").y, Is.GreaterThan(-0.3f));
-            Assert.That(At("11/21").z, Is.InRange(0.35f, 0.5f));
+            foreach (var label in new[] { "Places", "Time", "Rarity", "11/21", "11/20", "11/18" })
+            {
+                Assert.That(At(label).y, Is.LessThan(deckBottom), label);
+                Assert.That(At(label).y, Is.GreaterThan(-0.3f), label);
+                Assert.That(At(label).z, Is.InRange(0.35f, 0.5f), label);
+            }
+            Assert.That(At("Time").y, Is.GreaterThan(At("11/21").y));
+        }
+
+        [Test]
+        public void A_pinch_finds_a_tab_and_a_chip()
+        {
+            Show(new DateTime(2026, 11, 21));
+            Assert.IsTrue(Pinch("Time", out var tab));
+            Assert.AreEqual(ChipKind.Tab, tab.Kind);
+            Assert.IsTrue(Pinch("11/20", out var day));
+            Assert.AreEqual(ChipKind.Date, day.Kind);
         }
 
         [Test]

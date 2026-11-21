@@ -103,18 +103,25 @@ namespace Edith.Scrapbook
             Cities = cities;
         }
 
-        /// The part of the newest named place among `memories` that names a town or a spot. A place reads
-        /// "spot, town, region, country", or "town, region" when it has no spot.
+        /// The part of the newest named place among `memories` that names a town or a spot.
         static string Part(List<Memory> memories, bool town)
         {
             foreach (var memory in memories)
-            {
-                if (memory.Place == null) continue;
-                var parts = memory.Place.Split(new[] { ", " }, StringSplitOptions.None);
-                return town && parts.Length >= 3 ? parts[1] : parts[0];
-            }
+                if (memory.Place != null) return Part(memory.Place, town);
             return Unnamed;
         }
+
+        /// The part of `place` that names a town or a spot. A place reads "spot, town, region, country", or
+        /// "town, region" when it has no spot.
+        public static string Part(string place, bool town)
+        {
+            var parts = place.Split(new[] { ", " }, StringSplitOptions.None);
+            return town && parts.Length >= 3 ? parts[1] : parts[0];
+        }
+
+        /// "Spot · Town" for a place that has both, else its first part.
+        public static string Line(string place) =>
+            place.Split(new[] { ", " }, StringSplitOptions.None).Length >= 3 ? $"{Part(place, false)} · {Part(place, true)}" : Part(place, false);
 
         /// Single-link groups: two memories share a group when a chain of memories joins them, each within `metres`
         /// of the next. Groups and their members keep the order of `memories`.

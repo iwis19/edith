@@ -7,7 +7,7 @@ namespace Edith.Scrapbook
     /// A way to reach the past. Each lens has a tab on the lens bar, in this order, and its own row of chips under it.
     public enum Lens { Places, Time, Rarity }
 
-    public enum ChipKind { Tab, Date, AllTiers, Tier, City, Globe, Spot }
+    public enum ChipKind { Tab, Date, Tier, City, Globe, Spot }
 
     /// One thing on the lens bar a pinch can choose. Only the field of its Kind is set.
     public readonly struct Chip
@@ -18,18 +18,21 @@ namespace Edith.Scrapbook
         public readonly ChipKind Kind;
         public readonly string Label;
         public readonly bool Selected;
+        /// False for a chip that offers nothing, like a tier with no memory: it is drawn dimmed and a pinch passes through it.
+        public readonly bool Enabled;
         public readonly Lens Lens;
         public readonly DateTime Date;
         public readonly Rarity Tier;
         public readonly City City;
         public readonly Spot Spot;
 
-        Chip(ChipKind kind, string label, bool selected, Lens lens = default, DateTime date = default, Rarity tier = default,
+        Chip(ChipKind kind, string label, bool selected, bool enabled = true, Lens lens = default, DateTime date = default, Rarity tier = default,
             City city = null, Spot spot = null)
         {
             Kind = kind;
             Label = label;
             Selected = selected;
+            Enabled = enabled;
             Lens = lens;
             Date = date;
             Tier = tier;
@@ -39,8 +42,8 @@ namespace Edith.Scrapbook
 
         public static Chip Tab(Lens lens, bool selected) => new Chip(ChipKind.Tab, lens.ToString(), selected, lens: lens);
         public static Chip Day(DateTime date, bool selected) => new Chip(ChipKind.Date, Memory.Day(date), selected, date: date);
-        public static Chip All(int count, bool selected) => new Chip(ChipKind.AllTiers, $"All {count}", selected);
-        public static Chip Of(Rarity tier, int count, bool selected) => new Chip(ChipKind.Tier, $"{tier} {count}", selected, tier: tier);
+        public static Chip Of(Rarity tier, int count, bool selected) =>
+            new Chip(ChipKind.Tier, $"{tier} {count}", selected, enabled: count > 0, tier: tier);
         public static Chip Of(City city) => new Chip(ChipKind.City, Counted(city), false, city: city);
         public static Chip Of(Spot spot, bool selected) => new Chip(ChipKind.Spot, Counted(spot), selected, spot: spot);
         public static Chip Globe() => new Chip(ChipKind.Globe, "Globe", false);
@@ -167,7 +170,8 @@ namespace Edith.Scrapbook
 
         /// The chips under the tabs. Places: at the globe one chip per city, and in a city "Globe" and one chip per
         /// spot. Time: up to DateChips days, newest first, around `centred`, the day of the card in the middle of the
-        /// deck. Rarity: "All" and one chip per tier that has a memory.
+        /// deck. Rarity: one chip per tier, rarest last, whether or not
+        /// it has a memory.
         public void Chips(DateTime? centred, List<Chip> into)
         {
             into.Clear();
@@ -186,9 +190,7 @@ namespace Edith.Scrapbook
                     for (var i = first; i < dates.Count && i < first + DateChips; i++) into.Add(Chip.Day(dates[i], i == at));
                     break;
                 case Lens.Rarity:
-                    into.Add(Chip.All(all.Count, Filter == null));
-                    foreach (var tier in Tiers)
-                        if (Count(tier) > 0) into.Add(Chip.Of(tier, Count(tier), Filter == tier));
+                    foreach (var tier in Tiers) into.Add(Chip.Of(tier, Count(tier), Filter == tier));
                     break;
             }
         }
