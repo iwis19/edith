@@ -25,11 +25,6 @@
 </head>
 <body>
 <h1>EDITH location</h1>
-<form id="pair" class="hidden" autocomplete="off">
-  <p>Look in your headset for the code</p>
-  <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code from the headset" placeholder="----">
-  <button id="connect" type="submit">Connect</button>
-</form>
 <button id="share" type="button" class="hidden">Share location</button>
 <div id="error" class="card error hidden" role="alert"></div>
 <div id="status" class="card hidden">
@@ -41,6 +36,11 @@
   <ul id="sights"><li>Nothing yet</li></ul>
 </div>
 <p id="hint" class="hidden">Keep this page open and the screen on. The phone stops sharing when it locks.</p>
+<form id="pair" autocomplete="off">
+  <p id="codeLabel">Look in your headset for the code</p>
+  <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code from the headset" placeholder="----">
+  <button id="connect" type="submit">Connect</button>
+</form>
 <script>
 (function () {
   "use strict";
@@ -66,7 +66,7 @@
 
   function showScreen() {
     var paired = !!token;
-    $("pair").classList.toggle("hidden", paired);
+    $("codeLabel").textContent = paired ? "Enter a new code" : "Look in your headset for the code";
     $("share").classList.toggle("hidden", !paired);
     $("status").classList.toggle("hidden", !paired);
     $("hint").classList.toggle("hidden", !paired);

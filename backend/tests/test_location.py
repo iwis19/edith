@@ -295,6 +295,13 @@ async def test_the_phone_page_is_served_without_the_device_token_and_holds_no_se
     assert '"/pair/claim"' in response.text and "X-Edith-Phone" in response.text
 
 
+async def test_the_phone_page_offers_a_code_box_even_while_paired(http):
+    page = (await http.get("/phone")).text
+    assert '<form id="pair" autocomplete="off">' in page, "the code form is never hidden by markup"
+    assert 'paired ? "Enter a new code"' in page
+    assert '$("pair").classList' not in page, "the script never hides the code form"
+
+
 async def test_no_other_route_is_open_without_the_device_token(http):
     for method, path in [("post", "/look"), ("post", "/collect"), ("get", "/memories"), ("post", "/ask/session"),
                          ("post", "/pair"), ("get", "/location"), ("get", "/pair/1234"), ("post", "/phone"),
