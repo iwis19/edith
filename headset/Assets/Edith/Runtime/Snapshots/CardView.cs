@@ -8,7 +8,7 @@ namespace Edith.Snapshots
 {
     /// A snapshot's card: the photo sits in a liquid-glass panel whose outline and halo take the rarity's colour, with
     /// a thin frame and four white sight corners around the photo. Under it, past a dashed divider, the fact,
-    /// "Looking…" until it types out. The photo's rect is in millimetres. The text wraps within the photo's width.
+    /// "Looking" with one to three dots cycling until it types out. The photo's rect is in millimetres. The text wraps within the photo's width.
     /// The Scrapbook draws its memories with the same card.
     sealed class CardView
     {
@@ -132,13 +132,24 @@ namespace Edith.Snapshots
             frame.SetLook(Color.clear, Color.clear, new Color(rimLook.r, rimLook.g, rimLook.b, thick ? 1f : 0.75f), Color.clear);
         }
 
-        /// `caption`, when given, is said in place of the card's fact.
-        public void Show(LookCard card, string caption)
+        // How long each of "Looking.", "Looking.." and "Looking..." shows.
+        const float DotSeconds = 0.45f;
+
+        /// True while the card has nothing to say yet but "Looking".
+        public static bool IsLooking(LookCard card, string caption) =>
+            caption == null && card.Phase != LookPhase.Failed && card.Fact.Empty && !card.Finished;
+
+        /// "Looking" and one, two or three dots, by how many `seconds` it has been looking.
+        public static string LookingText(float seconds) =>
+            "Looking" + new string('.', 1 + Mathf.FloorToInt(Mathf.Max(0f, seconds) / DotSeconds) % 3);
+
+        /// `caption`, when given, is said in place of the card's fact. `lookingSeconds` picks the dots while it looks.
+        public void Show(LookCard card, string caption, float lookingSeconds = 0f)
         {
             Tint(card.Tier, bold: true);
-            fact.text = caption
-                ?? (card.Phase == LookPhase.Failed ? card.Error
-                    : card.Fact.Empty ? (card.Finished ? "" : "Looking…")
+            fact.text = IsLooking(card, caption) ? LookingText(lookingSeconds)
+                : caption ?? (card.Phase == LookPhase.Failed ? card.Error
+                    : card.Fact.Empty ? ""
                     : card.Fact.Render());
             if (fact.text.Length != fittedLength) Fit();
         }

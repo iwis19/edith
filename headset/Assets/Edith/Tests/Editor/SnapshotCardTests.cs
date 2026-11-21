@@ -35,8 +35,22 @@ namespace Edith.Tests
         public void A_new_snapshot_says_it_is_looking()
         {
             var snapshot = room.Place(Box(0f));
-            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
+            Assert.AreEqual("Looking.", Shown(snapshot, "Fact"));
             Assert.AreEqual(LookPhase.Looking, snapshot.Card.Phase);
+        }
+
+        [Test]
+        public void Looking_cycles_one_to_three_dots()
+        {
+            var snapshot = room.Place(Box(0f));
+            var shown = new List<string>();
+            for (var i = 0; i < 4; i++)
+            {
+                shown.Add(Shown(snapshot, "Fact"));
+                snapshot.Step(0.46f);
+            }
+            CollectionAssert.AreEqual(new[] { "Looking.", "Looking..", "Looking...", "Looking." }, shown);
+            Assert.IsTrue(snapshot.enabled, "keeps ticking while it looks");
         }
 
         [Test]
@@ -44,9 +58,9 @@ namespace Edith.Tests
         {
             var snapshot = room.Place(Box(0f));
             snapshot.Apply(LookEvent.Named("Red m", pending: true));
-            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
+            Assert.AreEqual("Looking.", Shown(snapshot, "Fact"));
             snapshot.Apply(LookEvent.Named("Red mug"));
-            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
+            Assert.AreEqual("Looking.", Shown(snapshot, "Fact"));
             snapshot.Apply(LookEvent.Fact("Mugs are old."));
             snapshot.Card.Advance(10f);
             snapshot.Apply(LookEvent.Done());

@@ -29,6 +29,7 @@ namespace Edith.Snapshots
         float fade;
         float target = 1f;
         float opened;
+        float looked;
         bool carried;
         Vector3 carryPosition;
         Quaternion carryRotation;
@@ -113,7 +114,7 @@ namespace Edith.Snapshots
             Card.Apply(e);
             // The cue plays once, as the rarity arrives, for a Look and for a scan pin opened as one.
             if (!rated && Card.Tier != null) RaritySounds.Play(Card.Tier, transform.position);
-            view.Show(Card, caption);
+            view.Show(Card, caption, looked);
             enabled = true;
         }
 
@@ -125,7 +126,8 @@ namespace Edith.Snapshots
             set
             {
                 caption = value;
-                view.Show(Card, caption);
+                view.Show(Card, caption, looked);
+                enabled = true;
             }
         }
 
@@ -215,12 +217,11 @@ namespace Edith.Snapshots
             }
             var settled = pocketing ? Shrink(seconds) : Follow(seconds);
             var typing = Card.Typing && !Leaving;
-            if (typing)
-            {
-                Card.Advance(seconds);
-                view.Show(Card, caption);
-            }
-            if (fade != target || !settled || typing || opening) return;
+            var looking = CardView.IsLooking(Card, caption) && !Leaving;
+            if (looking) looked += seconds;
+            if (typing) Card.Advance(seconds);
+            if (typing || looking) view.Show(Card, caption, looked);
+            if (fade != target || !settled || typing || looking || opening) return;
             if (Leaving) Destroy(gameObject);
             else enabled = false;
         }
