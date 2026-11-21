@@ -10,18 +10,19 @@ namespace Edith.Scrapbook
     public sealed class CityMapView
     {
         /// The map is this far across.
-        public const float Width = 0.30f;
-        /// In the deck's frame: where the globe was.
-        public static readonly Vector3 Centre = new Vector3(0f, -0.36f, 0.44f);
-        /// The map leans back this far from upright, which leaves it nearly square to the eye above it.
-        public const float Lean = 50f;
+        public const float Width = ScrapbookPlacement.MapWidth;
+        /// In the deck's frame, where the globe was.
+        public static readonly Vector3 Centre = ScrapbookPlacement.MapCentre;
+        /// The map leans back this far from upright.
+        public const float Lean = ScrapbookPlacement.MapLean;
 
-        // Four canvas units per millimetre, so the font is rasterised sharply enough at this size.
-        const float UnitsPerMetre = 4000f;
-        const float HeadRadius = 0.006f, HeadHeight = 0.016f, StalkRadius = 0.0012f;
+        const float Detail = ScrapbookPlacement.MapDetailScale;
+        // Four canvas units per millimetre at the labels' old size, so the font is rasterised sharply enough.
+        const float UnitsPerMetre = 4000f / Detail;
+        const float HeadRadius = 0.006f * Detail, HeadHeight = 0.016f * Detail, StalkRadius = 0.0012f * Detail;
         // A spot beyond the map's edge is pinned on the edge.
         const float PinReach = 0.47f * Width;
-        const float LabelLift = 0.002f, LabelAbove = 0.014f;
+        const float LabelLift = 0.002f * Detail, LabelAbove = 0.014f * Detail;
         const float CaptionBelow = 0.42f * Width;
         const float LabelHeight = 56f, LabelInset = 16f;
         const int FontSize = 24;

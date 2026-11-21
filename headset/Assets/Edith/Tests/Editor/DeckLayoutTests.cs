@@ -18,11 +18,9 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_middle_card_is_within_reach_and_a_little_below_the_eye()
+        public void The_middle_card_hangs_out_of_the_way_of_the_hands_and_a_little_below_the_eye()
         {
-            var position = DeckLayout.Pose(0f).Position;
-            Assert.That(position.z, Is.InRange(0.4f, 0.55f));
-            Assert.That(position.y, Is.InRange(-0.12f, 0f));
+            Assert.AreEqual(new Vector3(0f, -0.04f, 0.70f), DeckLayout.Pose(0f).Position);
         }
 
         [Test]

@@ -46,7 +46,7 @@ namespace Edith.Scrapbook
             card.photo = image.GetComponent<RawImage>();
             card.photo.raycastTarget = false;
             card.photo.material = material;
-            card.view = CardView.Build(rect, Room, DeckLayout.Ahead, font, material);
+            card.view = CardView.Build(rect, Room, ScrapbookPlacement.CardAhead, font, material);
             card.notice = NewNotice(card.root, font, material);
             card.SetPhoto(null);
             card.Hide();
@@ -119,10 +119,10 @@ namespace Edith.Scrapbook
         {
             var column = new GameObject("Notice", typeof(RectTransform)).GetComponent<RectTransform>();
             column.SetParent(parent, false);
-            column.localScale = Vector3.one * (CardView.ScaleAt(DeckLayout.Ahead) / CardView.TextUnitsPerMm);
+            column.localScale = Vector3.one * (CardView.ScaleAt(ScrapbookPlacement.CardAhead) / CardView.TextUnitsPerMm);
             var text = new GameObject("Message", typeof(RectTransform), typeof(Text), typeof(UnityEngine.UI.Shadow)).GetComponent<Text>();
             text.rectTransform.SetParent(column, false);
-            text.rectTransform.sizeDelta = new Vector2(Room.x * CardView.TextUnitsPerMm / CardView.ScaleAt(DeckLayout.Ahead), 400f);
+            text.rectTransform.sizeDelta = new Vector2(Room.x * CardView.TextUnitsPerMm / CardView.ScaleAt(ScrapbookPlacement.CardAhead), 400f);
             text.font = font;
             text.supportRichText = true;
             text.color = Bright;

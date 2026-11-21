@@ -9,19 +9,19 @@ namespace Edith.Scrapbook
     /// memories were collected, tinted by the city's best rarity. A pin on the far side is hidden.
     public sealed class GlobeView
     {
-        public const float Radius = 0.085f;
-        /// In the deck's frame: under the lens bar, and as near as it is.
-        public static readonly Vector3 Centre = new Vector3(0f, -0.34f, 0.42f);
+        public const float Radius = ScrapbookPlacement.GlobeRadius;
+        /// In the deck's frame, under the lens bar.
+        public static readonly Vector3 Centre = ScrapbookPlacement.GlobeCentre;
         /// How far above the globe's centre the eye that opened the Scrapbook is, in degrees.
         public static readonly float EyeElevation = Mathf.Atan2(-Centre.y, Centre.z) * Mathf.Rad2Deg;
 
         /// The Scrapbook's maps are drawn before its cards and lens bar, and their pins and captions over them.
         public const int SurfaceOrder = -1000, CaptionOrder = -999, PinOrder = -998;
 
-        const float PinRadius = 0.006f;
+        const float PinRadius = 0.006f * ScrapbookPlacement.MapDetailScale;
         // The globe before its image has arrived.
         const float BareAlpha = 0.3f;
-        const float CaptionGap = 0.014f;
+        const float CaptionGap = 0.014f * ScrapbookPlacement.MapDetailScale;
         static readonly Color Untiered = new Color(0.97f, 0.97f, 0.99f, 1f);
 
         readonly Transform root;
@@ -115,8 +115,8 @@ namespace Edith.Scrapbook
     /// One line of small text beside a map: who the map is from, or that it could not be loaded.
     public sealed class MapCaption
     {
-        // Four canvas units per millimetre, so the font is rasterised sharply enough at this size.
-        const float UnitsPerMetre = 4000f;
+        // Four canvas units per millimetre at the captions' old size, so the font is rasterised sharply enough.
+        const float UnitsPerMetre = 4000f / ScrapbookPlacement.MapDetailScale;
         const int FontSize = 20;
         static readonly Color Quiet = new Color(0.9f, 0.91f, 0.94f, 0.9f);
         static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);

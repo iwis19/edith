@@ -9,11 +9,11 @@ namespace Edith.Scrapbook
     /// leans back to face the eye.
     public sealed class LensBar
     {
-        // Four canvas units per millimetre, so the font is rasterised sharply enough at this size.
-        const float UnitsPerMetre = 4000f;
-        // In the deck's frame: under the card's text, and a little nearer than the cards so a hand reaches them first.
-        static readonly Vector3 TabsCentre = new Vector3(0f, -0.194f, 0.42f);
-        static readonly Vector3 ChipsCentre = new Vector3(0f, -0.215f, 0.42f);
+        // Four canvas units per millimetre at the bar's old size, so the font is rasterised sharply enough.
+        const float UnitsPerMetre = 4000f / ScrapbookPlacement.BarScale;
+        // In the deck's frame, under the card's text.
+        static readonly Vector3 TabsCentre = ScrapbookPlacement.BarCentre + Vector3.up * (ScrapbookPlacement.BarRowGap * 0.5f);
+        static readonly Vector3 ChipsCentre = ScrapbookPlacement.BarCentre - Vector3.up * (ScrapbookPlacement.BarRowGap * 0.5f);
         // A pinch this near a chip still chooses it: a fingertip is about this much wider than the chip's gap.
         const float HitMargin = 0.002f;
         // The alpha of a chip that offers nothing, relative to a live one.

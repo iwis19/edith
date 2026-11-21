@@ -134,9 +134,9 @@ namespace Edith.Tests
         {
             browse.SetLens(Lens.Rarity);
             Show();
-            Assert.That(Mathf.Abs(At("Common 1").x), Is.LessThan(0.17f));
-            Assert.That(Mathf.Abs(At("Mythic 0").x), Is.LessThan(0.17f));
-            Assert.That(At("Mythic 0").x - At("Common 1").x, Is.GreaterThan(0.15f), "and do not overlap");
+            Assert.That(Mathf.Abs(At("Common 1").x), Is.LessThan(0.26f));
+            Assert.That(Mathf.Abs(At("Mythic 0").x), Is.LessThan(0.26f));
+            Assert.That(At("Mythic 0").x - At("Common 1").x, Is.GreaterThan(0.2f), "and do not overlap");
         }
 
         [Test]
@@ -169,7 +169,7 @@ namespace Edith.Tests
             {
                 Assert.That(At(label).y, Is.LessThan(deckBottom), label);
                 Assert.That(At(label).y, Is.GreaterThan(-0.3f), label);
-                Assert.That(At(label).z, Is.InRange(0.35f, 0.5f), label);
+                Assert.That(At(label).z, Is.InRange(0.6f, 0.7f), label);
             }
             Assert.That(At("Rarity").y, Is.GreaterThan(At("Common 1").y));
         }

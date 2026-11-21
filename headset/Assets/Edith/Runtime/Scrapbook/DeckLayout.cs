@@ -31,17 +31,13 @@ namespace Edith.Scrapbook
     public static class DeckLayout
     {
         /// The card in the middle is this wide at Scale 1.
-        public const float CardWidth = 0.20f;
+        public const float CardWidth = ScrapbookPlacement.CardWidth;
         /// The room a card's photo is fitted into is this high.
         public const float CardHeight = CardWidth * 0.75f;
-        /// How far ahead of the eye the middle card hangs.
-        public const float Ahead = 0.45f;
         /// A card further than this from the middle is not drawn, so at most 2 * Reach + 1 cards exist.
         public const int Reach = 3;
 
-        // Arm's length is about 0.6 m: at 0.45 m the deck is in reach and nearer than most furniture.
-        const float Below = 0.06f;
-        const float FirstAside = 0.16f, NextAside = 0.07f, Back = 0.06f;
+        const float FirstAside = ScrapbookPlacement.FirstAside, NextAside = ScrapbookPlacement.NextAside, Back = ScrapbookPlacement.Back;
         const float SideYaw = 50f, SideScale = 0.7f;
         // Cards up to this far from the middle are fully drawn; they fade out over the next card's width.
         const float SolidReach = 2f;
@@ -55,7 +51,7 @@ namespace Edith.Scrapbook
             var away = Mathf.Abs(offset);
             var fold = Mathf.Clamp01(away);
             return new CardPose(
-                new Vector3(side * (FirstAside * fold + NextAside * Mathf.Max(0f, away - 1f)), -Below, Ahead + Back * Mathf.Min(away, Reach)),
+                new Vector3(side * (FirstAside * fold + NextAside * Mathf.Max(0f, away - 1f)), ScrapbookPlacement.CardCentre.y, ScrapbookPlacement.CardAhead + Back * Mathf.Min(away, Reach)),
                 side * SideYaw * fold,
                 Mathf.Lerp(1f, SideScale, fold),
                 1f - Mathf.Clamp01(away - SolidReach),
