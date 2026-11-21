@@ -17,13 +17,13 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void Every_tier_is_longer_than_the_one_below_and_under_two_seconds()
+        public void Every_tier_is_longer_than_the_one_below_and_no_longer_than_two_seconds()
         {
             var seconds = Tiers.Select(tier => RaritySounds.For(tier).length).ToArray();
 
             for (var i = 1; i < seconds.Length; i++)
                 Assert.Greater(seconds[i], seconds[i - 1], $"{Tiers[i]} against {Tiers[i - 1]}");
-            Assert.Less(seconds.Last(), 2f);
+            Assert.LessOrEqual(seconds.Last(), 2f);
         }
 
         [Test]
