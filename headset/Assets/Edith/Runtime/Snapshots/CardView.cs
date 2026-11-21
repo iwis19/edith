@@ -37,7 +37,7 @@ namespace Edith.Snapshots
         Glass glass, frame;
         Text fact;
         RectTransform column, divider;
-        CanvasGroup textGroup;
+        CanvasGroup textGroup, dividerGroup;
         readonly RectTransform[] corners = new RectTransform[8];
         readonly List<RectTransform> dashes = new List<RectTransform>();
         Material material;
@@ -45,6 +45,9 @@ namespace Edith.Snapshots
         Vector2 photoMm;
         float textWidthMm;
         int fittedLength = -1;
+        float textAlpha = 1f;
+        float opened = 1f;
+        Vector2 fullSize, fullCentre;
 
         /// The corner radius of the photo on a card hung `depth` metres from the eye, in millimetres.
         public static float PhotoRadiusMm(float depth) => (FrameRadiusMm - FrameEdgeMm) * ScaleAt(depth);
@@ -73,7 +76,22 @@ namespace Edith.Snapshots
         /// Opacity of the text under the photo.
         public float TextAlpha
         {
-            set => textGroup.alpha = value;
+            set
+            {
+                textAlpha = value;
+                Unfold();
+            }
+        }
+
+        /// How far the card has opened, 0 to 1. At 0 the glass hugs the photo's frame with no room for text; opening
+        /// grows it down to its full height, and the divider and text fade in over the second half.
+        public float Opened
+        {
+            set
+            {
+                opened = Mathf.Clamp01(value);
+                Unfold();
+            }
         }
 
         /// Lays the glass, frame, sight corners, divider and text out again around a photo of `photoSizeMm`.
@@ -133,8 +151,22 @@ namespace Edith.Snapshots
             var pad = PadMm * scale;
             var width = textWidthMm + 2f * pad;
             var height = photoMm.y + (DividerMm + TextGapMm) * scale + textMm + 2f * pad;
-            glass.Resize(new Vector2(width, height));
-            glass.Rect.anchoredPosition = new Vector2(0f, photoMm.y * 0.5f + pad - height * 0.5f);
+            fullSize = new Vector2(width, height);
+            fullCentre = new Vector2(0f, photoMm.y * 0.5f + pad - height * 0.5f);
+            Unfold();
+        }
+
+        /// Places the glass between its closed and full size by `opened`, eased out so it moves at once and settles.
+        /// The top and sides never move, so the glass only grows downward.
+        void Unfold()
+        {
+            var grow = 1f - (1f - opened) * (1f - opened) * (1f - opened);
+            var closed = new Vector2(fullSize.x, photoMm.y + 2f * PadMm * scale);
+            glass.Resize(Vector2.Lerp(closed, fullSize, grow));
+            glass.Rect.anchoredPosition = Vector2.Lerp(Vector2.zero, fullCentre, grow);
+            var reveal = Mathf.Clamp01(opened * 2f - 1f);
+            dividerGroup.alpha = reveal;
+            textGroup.alpha = textAlpha * reveal;
         }
 
         /// The thin frame around the photo, and the dashed line that separates photo from text.
@@ -142,7 +174,10 @@ namespace Edith.Snapshots
         {
             frame = Glass.Build(photo, "Frame", photoMm + Vector2.one * (2f * FrameEdgeMm * scale), FrameRadiusMm * scale, material);
             frame.Rect.SetSiblingIndex(1);
-            divider = new GameObject("Divider", typeof(RectTransform)).GetComponent<RectTransform>();
+            divider = new GameObject("Divider", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<RectTransform>();
+            dividerGroup = divider.GetComponent<CanvasGroup>();
+            dividerGroup.interactable = false;
+            dividerGroup.blocksRaycasts = false;
             Anchor(divider, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             PlaceDivider();
         }
