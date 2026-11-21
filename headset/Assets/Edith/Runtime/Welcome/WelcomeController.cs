@@ -24,8 +24,8 @@ namespace Edith.Welcome
         [SerializeField] RightHandSource right;
         [SerializeField] LeftHandSource left;
 
-        /// The person tapped a voice's play button. Playing a sample is up to whoever listens.
-        public event Action<VoiceStyle> PreviewRequested;
+        // EDITH's welcome line recorded in each voice, named after the VoiceStyle, from voice_samples.py.
+        const string VoiceFolder = "EdithUI/Voices/";
 
         /// The phone paired or the person skipped pairing.
         public event Action Finished;
@@ -78,7 +78,8 @@ namespace Edith.Welcome
         Glass spinner;
         Font regular, semibold;
         WelcomeStep shownStep = WelcomeStep.Done;
-        bool phoneKnown, leaving;
+        bool phoneKnown, leaving, greeted;
+        AudioSource speaker;
 
         void Start()
         {
@@ -173,8 +174,33 @@ namespace Edith.Welcome
             stepTwo.gameObject.SetActive(step == WelcomeStep.Pair);
             // Done fades out in the layout it was shown in.
             if (step != WelcomeStep.Done) Arrange(step == WelcomeStep.Pair);
+            if (step == WelcomeStep.Interests && !greeted)
+            {
+                greeted = true;
+                Say(flow.Voice);
+            }
             Refresh();
             if (step == WelcomeStep.Done) Leave();
+        }
+
+        /// Says EDITH's welcome line in `style`, cutting off whatever she was saying. Silent when the clip is missing.
+        void Say(VoiceStyle style)
+        {
+            var clip = Resources.Load<AudioClip>(VoiceFolder + style);
+            if (clip == null)
+            {
+                Debug.LogWarning($"[EDITH welcome] no voice sample for {style}");
+                return;
+            }
+            if (speaker == null)
+            {
+                speaker = gameObject.AddComponent<AudioSource>();
+                speaker.spatialBlend = 0f;
+                speaker.playOnAwake = false;
+            }
+            speaker.Stop();
+            speaker.clip = clip;
+            speaker.Play();
         }
 
         /// Step one fills the screen with EDITH beside it. Step two shows only its pane, scaled and held like
@@ -199,6 +225,7 @@ namespace Edith.Welcome
         {
             if (leaving) return;
             leaving = true;
+            if (speaker != null) speaker.Stop();
             // A paired phone completes the welcome. Skipping pairing also ends it, and brings the pairing panel back,
             // since the gate stays closed until a phone is paired.
             WelcomeStore.Done = true;
@@ -396,8 +423,7 @@ namespace Edith.Welcome
             AddTarget(play.Rect, WelcomeStep.Interests, () =>
             {
                 flow.ChooseVoice(style);
-                PreviewRequested?.Invoke(style);
-                Debug.Log($"[EDITH welcome] voice preview asked for {style}");
+                Say(style);
             });
             // Added after the play button, so the button wins where the two meet.
             targets.Insert(targets.Count - 1, new Target { Rect = glass.Rect, Step = WelcomeStep.Interests, Tap = () => flow.ChooseVoice(style) });
