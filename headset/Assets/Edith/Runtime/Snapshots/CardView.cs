@@ -27,6 +27,8 @@ namespace Edith.Snapshots
         const float DividerMm = 5f, TitleGapMm = 6f, FactGapMm = 1.5f, DotMm = 2.6f;
         static readonly Color Quiet = Theme.Muted;
         static readonly Color Waiting = new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f);
+        static readonly Color HuntColor = new Color(0.5f, 0.95f, 0.6f, 1f);
+        static readonly Color HuntGlow = new Color(HuntColor.r, HuntColor.g, HuntColor.b, 0.6f);
 
         // Sizes above are for a card at arm's length. A card hung farther away, such as one on the object a scan pin
         // marked, grows its glass, gap and text with its distance so they look the same size from the eye.
@@ -57,21 +59,33 @@ namespace Edith.Snapshots
             return view;
         }
 
-        /// `caption`, when given, is said in place of the card's fact.
-        public void Show(LookCard card, string caption)
+        /// `caption`, when given, is said in place of the card's fact. `hunt` is how strongly the Look's hunt tick
+        /// shows, from 1 as it lands to 0: the outline and halo flash green and the card says the target ticked.
+        public void Show(LookCard card, string caption, float hunt = 0f)
         {
             var rated = card.Tier is Rarity tier ? RarityColors.For(tier) : (Color?)null;
-            if (rated is Color tint)
-                glass.SetLook(Theme.PanelFill, new Color(tint.r, tint.g, tint.b, 0.16f), tint, new Color(tint.r, tint.g, tint.b, 0.4f));
-            else
-                glass.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.12f), Waiting, Color.clear);
+            var outline = rated ?? Waiting;
+            var rim = rated is Color tint ? new Color(tint.r, tint.g, tint.b, 0.16f) : new Color(1f, 1f, 1f, 0.12f);
+            var halo = rated is Color lit ? new Color(lit.r, lit.g, lit.b, 0.4f) : Color.clear;
+            if (hunt > 0f)
+            {
+                outline = Color.Lerp(outline, HuntColor, hunt);
+                halo = Color.Lerp(halo, HuntGlow, hunt);
+            }
+            glass.SetLook(Theme.PanelFill, rim, outline, halo);
 
             var rimLook = rated ?? Theme.Cyan;
+            if (hunt > 0f) rimLook = Color.Lerp(rimLook, HuntColor, hunt);
             frame.SetLook(Color.clear, Color.clear, new Color(rimLook.r, rimLook.g, rimLook.b, 0.75f), Color.clear);
 
             // The name leads once it arrives, unless the card has nothing else to say, when the name is the fact.
             title.text = card.Phase == LookPhase.Failed || card.Name == card.Fact.Visible ? "" : card.Name;
-            if (caption != null)
+            if (hunt > 0f && card.HuntText != null)
+            {
+                fact.text = "✓ " + card.HuntText;
+                fact.color = HuntColor;
+            }
+            else if (caption != null)
             {
                 fact.text = caption;
                 fact.color = Theme.Ice;

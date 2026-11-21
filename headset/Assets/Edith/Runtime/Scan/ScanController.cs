@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
+using System.Threading.Tasks;
 using Edith.Backend;
+using Edith.Bounty;
 using Edith.Capture;
 using Edith.Grab;
 using Edith.Hands;
@@ -19,14 +21,42 @@ namespace Edith.Scan
         public readonly string Name, Hook;
         /// Beyond depth's reach: the pin only points the way.
         public readonly bool Far;
+        /// The open hunt target the thing fits, or null.
+        public readonly int? Target;
 
-        public ScanPin(Vector3 point, string name, string hook, bool far)
+        public ScanPin(Vector3 point, string name, string hook, bool far, int? target = null)
         {
             Point = point;
             Name = name;
             Hook = hook;
             Far = far;
+            Target = target;
         }
+    }
+
+    /// How a scan ended: it placed pins, the backend found nothing worth one, it failed with the line its status
+    /// said, or another scan was still in flight, so this one never started.
+    public enum ScanEnd { Pinned, NothingFound, Failed, Busy }
+
+    public readonly struct ScanOutcome
+    {
+        public readonly ScanEnd End;
+        /// The pins it placed, most interesting first; empty unless Pinned.
+        public readonly ScanPin[] Pins;
+        /// What the status line said for a failure; null otherwise.
+        public readonly string Message;
+
+        ScanOutcome(ScanEnd end, ScanPin[] pins, string message)
+        {
+            End = end;
+            Pins = pins ?? new ScanPin[0];
+            Message = message;
+        }
+
+        public static ScanOutcome Pinned(ScanPin[] pins) => new ScanOutcome(ScanEnd.Pinned, pins, null);
+        public static readonly ScanOutcome NothingFound = new ScanOutcome(ScanEnd.NothingFound, null, null);
+        public static ScanOutcome Failed(string message) => new ScanOutcome(ScanEnd.Failed, null, message);
+        public static readonly ScanOutcome Busy = new ScanOutcome(ScanEnd.Busy, null, null);
     }
 
     /// Scan, end to end on the headset. Both palms held open and facing away send one whole camera frame to the
@@ -79,6 +109,7 @@ namespace Edith.Scan
         GrabInput grab;
         ScanMarks marks;
         ScanClient client;
+        HuntTracker hunt;
         AudioSource sound;
         Vector3 ringAt;
         float holdProgress;
@@ -121,6 +152,9 @@ namespace Edith.Scan
             var settings = BackendSettings.Load();
             if (settings != null) client = new ScanClient(settings.Url, settings.DeviceToken, BackendSettings.ProfileId);
         }
+
+        /// Where a pin's hunt target is read from. Optional: without it a target pin says only that it is one.
+        public void BindBounty(HuntTracker hunt) => this.hunt = hunt;
 
         void OnDisable()
         {
@@ -166,7 +200,7 @@ namespace Edith.Scan
             if (pose.Fired)
             {
                 Debug.Log($"[EDITH scan] pose fired: left {pose.Left}, right {pose.Right}");
-                Scan();
+                _ = Scan();
             }
             // A near miss logs what each hand read, so the thresholds can be tuned from real hands.
             else if (pose.Near && pose.Progress == 0f && !scanning && Time.time - nearLoggedAt >= NearLogSeconds)
@@ -176,22 +210,21 @@ namespace Edith.Scan
             }
         }
 
-        /// Starts a scan of what the camera sees now. The palms-out pose calls this; so can any other trigger.
-        /// Ignored while a scan is in flight.
-        public async void Scan()
+        /// Starts a scan of what the camera sees now, and ends once its pins have landed or it has said why none did.
+        /// The palms-out pose calls this, and so does Ask. Ignored while a scan is in flight. Never faults.
+        public async Task<ScanOutcome> Scan()
         {
             if (scanning)
             {
                 Debug.Log("[EDITH scan] ignored, a scan is still in flight");
-                return;
+                return ScanOutcome.Busy;
             }
             if (holdProgress == 0f) ringAt = eye.position + eye.forward * StatusAhead - eye.up * StatusBelow;
             marks.HideStatus();
             if (client == null || headsetCamera.Status != CameraStatus.Streaming)
             {
                 Debug.Log(client == null ? "[EDITH scan] no backend in this build" : $"[EDITH scan] camera is {headsetCamera.Status}");
-                Fail(client == null ? "Couldn't reach EDITH." : "The camera isn't ready.");
-                return;
+                return Fail(client == null ? "Couldn't reach EDITH." : "The camera isn't ready.");
             }
 
             scanning = true;
@@ -204,7 +237,7 @@ namespace Edith.Scan
             {
                 var capturedAt = DateTime.UtcNow;
                 var frame = await headsetCamera.CaptureFullAsync(FrameLongSide);
-                if (this == null) return;
+                if (this == null) return Gone;
                 Debug.Log($"[EDITH scan] {id} captured {frame.Size.x}x{frame.Size.y}, {frame.Jpeg.Length / 1024} KB, {Ms()} ms in");
                 if (environmentRaycast != null)
                 {
@@ -214,29 +247,31 @@ namespace Edith.Scan
                 }
                 using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(ReplySeconds));
                 var picks = await client.ScanAsync(frame.Jpeg, capturedAt, cancel.Token);
-                if (this == null) return;
+                if (this == null) return Gone;
                 Debug.Log($"[EDITH scan] {id} reply {Ms()} ms in, {picks.Count} picks");
                 if (space != recentres)
                 {
                     Debug.Log($"[EDITH scan] {id} dropped, the view was recentred while it was read");
-                    return;
+                    return ScanOutcome.Failed("The view was recentred while it was read.");
                 }
                 Place(id, frame.CameraPose, picks);
-                if (pins.Count > 0)
+                if (pins.Count == 0)
                 {
-                    LastResult = $"{id}: {pins.Count} pins";
-                    Play(1318.5f);
+                    Fail("Nothing stands out here.");
+                    return ScanOutcome.NothingFound;
                 }
-                else Fail("Nothing stands out here.");
+                LastResult = $"{id}: {pins.Count} pins";
+                Play(1318.5f);
+                return ScanOutcome.Pinned(pins.ToArray());
             }
             catch (Exception e)
             {
-                if (this == null) return;
+                if (this == null) return Gone;
                 var why = e is OperationCanceledException ? "timeout" : e.GetBaseException().Message;
                 Debug.Log($"[EDITH scan] {id} failed {Ms()} ms in: {why}\n{e}");
                 // No answer at all is nearly always the headset's Wi-Fi, such as a network waiting on a sign-in page.
                 var unreachable = e is OperationCanceledException || e is HttpRequestException;
-                Fail(unreachable ? "Couldn't reach EDITH. Check the Wi-Fi." : "Couldn't look around.");
+                return Fail(unreachable ? "Couldn't reach EDITH. Check the Wi-Fi." : "Couldn't look around.");
             }
             finally
             {
@@ -292,8 +327,13 @@ namespace Edith.Scan
 
             if (looked != gazed)
             {
-                if (gazed != null && placed.Contains(gazed)) marks.SetGaze(gazed.Mark, 0f);
+                if (gazed != null && placed.Contains(gazed))
+                {
+                    marks.SetGaze(gazed.Mark, 0f);
+                    marks.SetLooked(gazed.Mark, false);
+                }
                 gazed = looked;
+                if (gazed != null) marks.SetLooked(gazed.Mark, true);
                 gazeSeconds = 0f;
             }
             else if (looked != null && turning <= tuning.gazeStillDegreesPerSecond) gazeSeconds += Time.deltaTime;
@@ -405,11 +445,18 @@ namespace Edith.Scan
                 }
 
                 var far = source == PinSource.Far;
-                var pin = new ScanPin(onObject - ray.direction * LiftMeters, pick.Name, pick.Hook, far);
+                var pin = new ScanPin(onObject - ray.direction * LiftMeters, pick.Name, pick.Hook, far, pick.Target);
                 pins.Add(pin);
-                placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point) });
+                placed.Add(new Placed { Quad = quad.Value, Mark = marks.AddPin(pin.Point, TargetLabel(pin)) });
                 Debug.Log($"[EDITH scan] {id} pin \"{pick.Name}\" {meters:F2} m away ({source}, depth {answer}), hook \"{pick.Hook}\"");
             }
+        }
+
+        /// What a hunt target's pin says beside it: the target, then the pin's hook. Null for a pin that is no target.
+        string TargetLabel(in ScanPin pin)
+        {
+            if (pin.Target is not { } index) return null;
+            return "Bounty: " + (hunt?.TextOf(index) ?? "a hunt target") + "\n" + pin.Hook;
         }
 
         DepthAnswer Probe(Ray ray, out float meters)
@@ -436,12 +483,15 @@ namespace Edith.Scan
             pins.RemoveAt(index);
         }
 
+        static readonly ScanOutcome Gone = ScanOutcome.Failed("The scan was stopped.");
+
         /// A scan that ends with no pins says why where the ring was, with a low tone.
-        void Fail(string message)
+        ScanOutcome Fail(string message)
         {
             LastResult = message;
             marks.ShowStatus(ringAt, message);
             Play(440f);
+            return ScanOutcome.Failed(message);
         }
 
         void Play(float first, float second = 0f)

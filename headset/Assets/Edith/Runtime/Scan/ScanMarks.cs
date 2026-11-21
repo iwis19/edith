@@ -18,6 +18,9 @@ namespace Edith.Scan
             internal float Fade, Target = 1f;
             internal Image Gaze, Pulse;
             internal float Age;
+            // A hunt target's text, shown beside the pin while it is looked at.
+            internal Text Label;
+            internal float LabelFade, LabelTarget;
         }
 
         // 1 canvas unit is half a millimetre at ReferenceMeters.
@@ -32,6 +35,7 @@ namespace Edith.Scan
         // A new pin's ripple: each ring grows to this many times the dot's size over RippleSeconds, RippleCount times.
         const float RippleSeconds = 0.6f, RippleCount = 2f, RippleGrowth = 5f;
         const float OutlineWidth = 4f;
+        static readonly Color TargetColor = new Color(1f, 0.82f, 0.25f);
         static readonly Color GazeColor = new Color(0.35f, 0.9f, 0.5f);
         static readonly Color OutlineColor = new Color(0f, 0f, 0f, 0.75f);
         static readonly Color TextColor = new Color(0.95f, 0.95f, 0.97f);
@@ -56,11 +60,20 @@ namespace Edith.Scan
             this.material = material;
         }
 
-        /// A pin at `at`: a bare dot that fades in. Hand it to Remove to fade it out.
-        public Mark AddPin(Vector3 at)
+        /// A pin at `at`: a bare dot that fades in. Hand it to Remove to fade it out. A pin for a hunt target takes
+        /// `label`, which shows beside it while it is looked at, and a gold ring that marks it from afar.
+        public Mark AddPin(Vector3 at, string label = null)
         {
             var pin = new Mark { At = at };
             var root = NewCanvas("ScanPin", pin);
+            if (label != null)
+            {
+                Disc(root, ringSprite, TargetColor, DotSize * 2.4f);
+                pin.Label = Label(root, 22, TextAnchor.MiddleLeft, new Vector2(DotSize * 1.5f + LabelWidth * 0.5f, 0f));
+                pin.Label.text = label;
+                pin.Label.color = TargetColor;
+                pin.Label.canvasRenderer.SetAlpha(0f);
+            }
             pin.Pulse = Disc(root, ringSprite, TextColor, DotSize);
             // The dark disc behind the white one keeps the dot visible against sky, concrete or a lit window.
             Disc(root, dot, OutlineColor, DotSize + 2f * OutlineWidth);
@@ -96,6 +109,9 @@ namespace Edith.Scan
 
         /// Fills the ring around `pin` to `progress` while it is looked at.
         public void SetGaze(Mark pin, float progress) => pin.Gaze.fillAmount = progress;
+
+        /// Shows or hides a target pin's label.
+        public void SetLooked(Mark pin, bool looked) => pin.LabelTarget = looked ? 1f : 0f;
 
         public void Remove(Mark pin) => pin.Target = 0f;
 
@@ -149,6 +165,11 @@ namespace Edith.Scan
                 var pin = pins[i];
                 Step(pin, step, eye, 1f);
                 Ripple(pin);
+                if (pin.Label != null)
+                {
+                    pin.LabelFade = Mathf.MoveTowards(pin.LabelFade, pin.LabelTarget, step);
+                    pin.Label.canvasRenderer.SetAlpha(pin.LabelFade);
+                }
                 if (pin.Target > 0f || pin.Fade > 0f) continue;
                 UnityEngine.Object.Destroy(pin.Go);
                 pins.RemoveAt(i);

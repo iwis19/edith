@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Edith.Backend;
+using Edith.Bounty;
 using Edith.Capture;
+using Edith.Grab;
+using Edith.Navigation;
 using Edith.Scan;
 using Edith.Snapshots;
 using UnityEngine;
@@ -14,7 +18,10 @@ namespace Edith.Ask
     /// Scan pin's name and hook, or a snapshot's photo, whichever is nearer, and a picture of the view ahead when
     /// neither is near; Gemini's activity detection ends the question. The answer is spoken and typed out beside an orb
     /// that perches on that snapshot, or rests low in the view clear of every snapshot, and fades once the answer is
-    /// over. A thumb swipe flicks the orb away, and drawing a new box makes it vanish until the next tap.
+    /// over. A thumb swipe flicks the orb away, and drawing a new box makes it vanish until the next tap. When EDITH
+    /// calls a function to find a place, stop the directions, start or stop a hunt, or scan, collect a snapshot or
+    /// clear them for the hands, the question stays open while it runs, the call's result goes back to EDITH, and she
+    /// speaks it.
     public sealed class AskController : MonoBehaviour
     {
         [SerializeField] ThumbGestures gestures;
@@ -31,6 +38,9 @@ namespace Edith.Ask
         const int PhotoLongSide = 512;
         // The whole view holds more than one framed object, so it keeps more detail.
         const int ViewLongSide = 768;
+        // Where a snapshot collected by voice shrinks into: about where a fist pulls it to, below and just ahead of
+        // the eye.
+        const float PocketBelow = 0.35f, PocketAhead = 0.15f;
 
         readonly AskSession session = new AskSession();
         readonly List<Vector3> photoCentres = new List<Vector3>();
@@ -38,16 +48,37 @@ namespace Edith.Ask
         readonly StringBuilder said = new StringBuilder();
         readonly StringBuilder heard = new StringBuilder();
         readonly List<string> sources = new List<string>();
+        readonly List<PendingCall> calls = new List<PendingCall>();
+        BountyController bounty;
         AskPhase phase;
         float lastHeardAt, firstChunkAt;
         bool playingLogged;
         SnapshotRoom room;
         AnswerOrb current;
         LiveLink link;
+        BackendSettings backend;
         PhotoJpeg photo;
         Task<CameraFrame> view;
         HeadsetCamera headsetCamera;
         bool photoSent;
+
+        /// A function EDITH called, waiting on its result: a JSON object for the tool response. A faulted `Reply` sends
+        /// nothing, as when the session closed under it.
+        sealed class PendingCall
+        {
+            public LiveToolCall Call;
+            public Task<string> Reply;
+            /// EDITH no longer wants the result, but the call still finishes.
+            public bool Withdrawn;
+        }
+
+        /// What the hunt card needs to draw itself like the rest of Ask.
+        public Transform Eye => eye;
+        public Font Font => font;
+        public Material Material => material;
+
+        /// Where EDITH's hunt functions run. Without it she is told hunts are not available.
+        public void BindBounty(BountyController bounty) => this.bounty = bounty;
 
         /// The room whose snapshot photos can go with a question, and the camera that pictures the view when no
         /// snapshot is looked at. Without them, questions go without that photo.
@@ -154,6 +185,7 @@ namespace Edith.Ask
                 session.Fail(AskProblem.NotConfigured, Time.time);
                 return;
             }
+            backend = settings;
             link = LiveLink.Open(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, hint, voice.Speech,
                 AskVoice.ChunkSamples, navigate, Edith.Welcome.WelcomeStore.Voice);
             photo = asked != null ? PhotoJpeg.Start(asked.Photo, PhotoLongSide) : null;
@@ -185,8 +217,9 @@ namespace Edith.Ask
             return view != null && view.IsCompletedSuccessfully ? view.Result.Jpeg : null;
         }
 
-        /// The snapshot with a photo nearest the line of sight and its angle from it, or null when none is near it.
-        Snapshot NearestSnapshot(out float degrees)
+        /// The snapshot with a photo nearest the line of sight, within `maxDegrees` of it, and its angle from it, or
+        /// null when none is that near.
+        Snapshot NearestSnapshot(out float degrees, float maxDegrees = AskGeometry.MaxGazeDegrees)
         {
             degrees = float.PositiveInfinity;
             if (room == null) return null;
@@ -200,7 +233,7 @@ namespace Edith.Ask
                 photoCentres.Add(box.Center);
                 photographed.Add(snapshot);
             }
-            var nearest = AskGeometry.NearestToGaze(eye.position, eye.forward, photoCentres, out degrees);
+            var nearest = AskGeometry.NearestToGaze(eye.position, eye.forward, photoCentres, out degrees, maxDegrees);
             return nearest < 0 ? null : photographed[nearest];
         }
 
@@ -223,6 +256,7 @@ namespace Edith.Ask
                 Handle(e, now);
                 Sync(now);
             }
+            AnswerCalls(now);
             session.Tick(now, voice.Speech.Count);
             Sync(now);
             if (current != null)
@@ -304,11 +338,14 @@ namespace Edith.Ask
                 case LiveEventKind.TurnComplete:
                     session.TurnComplete(now);
                     return;
-                case LiveEventKind.Navigation:
-                    Edith.Navigation.NavArrow.Poke();
-                    return;
                 case LiveEventKind.Interrupted:
                     Debug.Log("[EDITH ask] Gemini was interrupted");
+                    return;
+                case LiveEventKind.ToolCall:
+                    RunCall(e.Call);
+                    return;
+                case LiveEventKind.ToolCancelled:
+                    DropCall(e.Text, now);
                     return;
                 case LiveEventKind.Closed:
                     session.Closed(now);
@@ -317,6 +354,120 @@ namespace Edith.Ask
                     session.Fail(e.Problem, now);
                     return;
             }
+        }
+
+        /// Starts the function EDITH called, chosen by its name. Its result goes back once it has finished.
+        void RunCall(LiveToolCall call)
+        {
+            Task<string> reply;
+            switch (call.Tool)
+            {
+                case AskTool.Navigation:
+                    string url = backend.Url, deviceToken = backend.DeviceToken, profileId = BackendSettings.ProfileId;
+                    var closing = link.Closing;
+                    reply = Task.Run(() => Navigate(call, url, deviceToken, profileId, closing));
+                    break;
+                case AskTool.Hunt:
+                    reply = Hunt(call);
+                    break;
+                case AskTool.Scan:
+                    reply = RunScan();
+                    break;
+                case AskTool.Collect:
+                    reply = Task.FromResult(CollectInView());
+                    break;
+                case AskTool.Clear:
+                    reply = Task.FromResult(room == null ? NoSnapshots : HandReplies.Cleared(room.Clear()));
+                    break;
+                default:
+                    reply = Task.FromResult(HuntReply.ErrorBody("unknown_function", "There is no function named " + call.Name + "."));
+                    break;
+            }
+            session.CallStarted();
+            calls.Add(new PendingCall { Call = call, Reply = reply });
+            Debug.Log($"[EDITH ask] running {call.Name} {call.Category} {call.PlaceName}".TrimEnd());
+        }
+
+        static readonly string NoSnapshots =
+            HuntReply.ErrorBody("unavailable", "Snapshots are not available on this headset.");
+
+        /// The scan the palms-out pose runs, answered once its pins land or it says why none did.
+        Task<string> RunScan()
+        {
+            if (scan == null)
+                return Task.FromResult(HuntReply.ErrorBody("unavailable", "Scan is not available on this headset."));
+            var scanned = scan.Scan().ContinueWith(done => HandReplies.Scanned(done.Result),
+                TaskContinuationOptions.ExecuteSynchronously);
+            return HandReplies.WithTimeout(scanned, HandReplies.ScanLimit, HandReplies.ScanTimedOut);
+        }
+
+        /// Collects the snapshot nearest the line of sight as a pull to the chest does, into a spot below the eye.
+        string CollectInView()
+        {
+            if (room == null) return NoSnapshots;
+            var snapshot = NearestSnapshot(out _, AskGeometry.CollectGazeDegrees);
+            if (snapshot == null) return HandReplies.NothingInView;
+            if (!SnapshotGrab.CanCarry(snapshot)) return HandReplies.StillLooking;
+            var name = snapshot.Card.Name;
+            var pocket = eye.position - Vector3.up * PocketBelow + eye.forward * PocketAhead;
+            if (!SnapshotGrab.Collect(room, snapshot, pocket)) return HandReplies.NothingInView;
+            Debug.Log($"[EDITH ask] snapshot {snapshot.Id} collected by voice");
+            return HandReplies.Collected(name);
+        }
+
+        Task<string> Hunt(LiveToolCall call)
+        {
+            if (bounty == null)
+                return Task.FromResult(HuntReply.ErrorBody("unavailable", "Hunts are not available on this headset."));
+            var hunt = call.Name == LiveToolCall.StartHunt ? bounty.StartHunt(call.Interests) : bounty.StopHunt();
+            if (hunt == null) return Task.FromResult(HuntReply.ErrorBody("not_configured", "The hunt service is not set up."));
+            return hunt.ContinueWith(done => done.Result.ToolResult, TaskContinuationOptions.ExecuteSynchronously);
+        }
+
+        /// Runs off the main thread. Ends faulted once the session closes, so no answer goes back on it.
+        static async Task<string> Navigate(LiveToolCall call, string url, string deviceToken, string profileId,
+            CancellationToken closing)
+        {
+            try
+            {
+                return call.Name == LiveToolCall.FindPlace
+                    ? await NavClient.FindAsync(url, deviceToken, profileId, call.Category, call.PlaceName, closing)
+                        .ConfigureAwait(false)
+                    : await NavClient.StopAsync(url, deviceToken, profileId, closing).ConfigureAwait(false);
+            }
+            catch (Exception e) when (!closing.IsCancellationRequested)
+            {
+                Debug.Log($"[EDITH ask] {call.Name} failed: {e.GetBaseException().Message}");
+                return NavClient.Problem("The map search did not answer.");
+            }
+        }
+
+        /// Sends back the result of each finished call. The question stays open until it has. A finished navigation
+        /// call also has the arrow ask for the new target at once instead of at its next poll.
+        void AnswerCalls(float now)
+        {
+            for (var i = calls.Count - 1; i >= 0; i--)
+            {
+                var pending = calls[i];
+                if (!pending.Reply.IsCompleted) continue;
+                calls.RemoveAt(i);
+                var answered = pending.Reply.Status == TaskStatus.RanToCompletion;
+                if (answered && pending.Call.Tool == AskTool.Navigation) NavArrow.Poke();
+                if (pending.Withdrawn) continue;
+                if (answered) link?.SendToolResponse(pending.Call.Id, pending.Call.Name, pending.Reply.Result);
+                session.CallFinished(now);
+                Debug.Log($"[EDITH ask] {pending.Call.Name} {(answered ? "answered" : "failed")}");
+            }
+        }
+
+        /// EDITH withdrew a call, so nothing is sent for it. The call itself still finishes and changes the hunt or the
+        /// directions.
+        void DropCall(string id, float now)
+        {
+            var pending = calls.Find(p => p.Call.Id == id && !p.Withdrawn);
+            if (pending == null) return;
+            pending.Withdrawn = true;
+            session.CallFinished(now);
         }
 
         /// Acts on a change of phase once, whatever caused it.
@@ -373,6 +524,7 @@ namespace Edith.Ask
             voice.StopMic();
             link?.Dispose();
             link = null;
+            calls.Clear();
             photo = null;
             view = null;
             voice.Speech.Clear();

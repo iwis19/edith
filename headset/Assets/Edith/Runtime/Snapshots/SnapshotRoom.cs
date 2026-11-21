@@ -81,6 +81,15 @@ namespace Edith.Snapshots
             return true;
         }
 
+        /// Fades out and destroys every snapshot, as a tap on each would. Returns how many there were.
+        public int Clear()
+        {
+            var all = new List<Snapshot>(shelf.Count);
+            foreach (var (item, _) in shelf.Items) all.Add(item);
+            foreach (var snapshot in all) Dismiss(snapshot);
+            return all.Count;
+        }
+
         /// Takes `snapshot` off the shelf and shrinks it into `point`, then destroys it. False when it is not in the room.
         public bool Pocket(Snapshot snapshot, Vector3 point)
         {

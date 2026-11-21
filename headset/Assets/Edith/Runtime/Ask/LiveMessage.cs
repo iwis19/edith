@@ -1,21 +1,54 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Edith.Backend;
 using UnityEngine;
 
 namespace Edith.Ask
 {
-    /// A function call Gemini asks the headset to make: find_place or stop_navigation, with their arguments.
-    public readonly struct ToolCall
-    {
-        public readonly string Id, Name, Category, PlaceName;
+    /// What runs a function EDITH calls: the backend's map search, the hunt, or one of the actions the hands can do.
+    public enum AskTool { Unknown, Navigation, Hunt, Scan, Collect, Clear }
 
-        public ToolCall(string id, string name, string category, string placeName)
+    /// A function EDITH asks the headset to run: its call id, its name and the arguments Ask knows how to read.
+    public sealed class LiveToolCall
+    {
+        public const string StartHunt = "start_hunt", StopHunt = "stop_hunt";
+        public const string FindPlace = "find_place", StopNavigation = "stop_navigation";
+        public const string Scan = "scan", CollectSnapshot = "collect_snapshot", ClearSnapshots = "clear_snapshots";
+
+        public readonly string Id, Name;
+        /// `start_hunt`'s optional `interests`; empty for any other call.
+        public readonly string[] Interests;
+        /// `find_place`'s `category` and optional `name`; empty for any other call.
+        public readonly string Category, PlaceName;
+
+        public LiveToolCall(string id, string name, string[] interests = null, string category = null,
+            string placeName = null)
         {
             Id = id ?? "";
             Name = name ?? "";
+            Interests = interests ?? new string[0];
             Category = category ?? "";
             PlaceName = placeName ?? "";
+        }
+
+        public AskTool Tool => ToolFor(Name);
+
+        public static AskTool ToolFor(string name)
+        {
+            switch (name)
+            {
+                case FindPlace:
+                case StopNavigation:
+                    return AskTool.Navigation;
+                case StartHunt:
+                case StopHunt:
+                    return AskTool.Hunt;
+                case Scan: return AskTool.Scan;
+                case CollectSnapshot: return AskTool.Collect;
+                case ClearSnapshots: return AskTool.Clear;
+                default: return AskTool.Unknown;
+            }
         }
     }
 
@@ -32,13 +65,18 @@ namespace Edith.Ask
         public bool TurnComplete, Interrupted;
         /// Short names of the web pages Google Search grounded the answer in, as SourceName gives them.
         public readonly List<string> Sources = new List<string>();
-        /// Function calls to answer with a tool response before Gemini goes on.
-        public readonly List<ToolCall> ToolCalls = new List<ToolCall>();
+        /// Functions EDITH wants run. The session waits for each one's answer.
+        public readonly List<LiveToolCall> ToolCalls = new List<LiveToolCall>();
+        /// Ids of calls EDITH no longer wants answered, because the person spoke over it.
+        public readonly List<string> CancelledCalls = new List<string>();
 
-        [Serializable] sealed class Wire { public ServerContent serverContent; public ToolCallWire toolCall; }
+        [Serializable] sealed class Wire { public ServerContent serverContent; public ToolCallWire toolCall; public Cancellation toolCallCancellation; }
+
         [Serializable] sealed class ToolCallWire { public FunctionCall[] functionCalls; }
-        [Serializable] sealed class FunctionCall { public string id, name; public ToolArgs args; }
-        [Serializable] sealed class ToolArgs { public string category, name; }
+        [Serializable] sealed class FunctionCall { public string id, name; public CallArgs args; }
+        /// Every argument of every function, since JsonUtility reads only declared fields. Each call reads its own.
+        [Serializable] sealed class CallArgs { public string[] interests; public string category, name; }
+        [Serializable] sealed class Cancellation { public string[] ids; }
 
         [Serializable] sealed class ServerContent
         {
@@ -75,11 +113,14 @@ namespace Edith.Ask
             {
                 return message;
             }
-            var calls = wire?.toolCall?.functionCalls;
-            if (calls != null)
-                foreach (var call in calls)
-                    if (!string.IsNullOrEmpty(call?.name))
-                        message.ToolCalls.Add(new ToolCall(call.id, call.name, call.args?.category, call.args?.name));
+            if (wire?.toolCall?.functionCalls != null)
+                foreach (var call in wire.toolCall.functionCalls)
+                    if (call != null && !string.IsNullOrEmpty(call.name))
+                        message.ToolCalls.Add(new LiveToolCall(call.id, call.name, call.args?.interests,
+                            call.args?.category, call.args?.name));
+            if (wire?.toolCallCancellation?.ids != null)
+                foreach (var id in wire.toolCallCancellation.ids)
+                    if (!string.IsNullOrEmpty(id)) message.CancelledCalls.Add(id);
             var content = wire?.serverContent;
             if (content == null) return message;
 
@@ -150,32 +191,10 @@ namespace Edith.Ask
             "{\"realtimeInput\":{\"audio\":{\"data\":\"" + Convert.ToBase64String(pcm, 0, byteCount) +
             "\",\"mimeType\":\"audio/pcm;rate=" + sampleRate.ToString(CultureInfo.InvariantCulture) + "\"}}}";
 
-        /// The answer to a function call. `responseJson` must be a JSON object.
+        /// The answer to function call `id`, which EDITH is waiting on. `responseJson` must be a JSON object.
         public static string ToolResponse(string id, string name, string responseJson) =>
-            "{\"toolResponse\":{\"functionResponses\":[{\"id\":" + Quote(id) + ",\"name\":" + Quote(name) +
+            "{\"toolResponse\":{\"functionResponses\":[{\"id\":" + JsonText.Quote(id) + ",\"name\":" + JsonText.Quote(name) +
             ",\"response\":" + responseJson + "}]}}";
-
-        /// `text` as a JSON string, quotes included.
-        public static string Quote(string text)
-        {
-            var b = new System.Text.StringBuilder("\"");
-            foreach (var ch in text ?? "")
-            {
-                switch (ch)
-                {
-                    case '"': b.Append("\\\""); break;
-                    case '\\': b.Append("\\\\"); break;
-                    case '\n': b.Append("\\n"); break;
-                    case '\r': b.Append("\\r"); break;
-                    case '\t': b.Append("\\t"); break;
-                    default:
-                        if (ch < ' ') b.Append("\\u").Append(((int)ch).ToString("x4", CultureInfo.InvariantCulture));
-                        else b.Append(ch);
-                        break;
-                }
-            }
-            return b.Append('"').ToString();
-        }
 
         /// A still photo for the question, sent as a realtime video frame.
         public static string Image(byte[] jpeg) =>

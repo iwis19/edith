@@ -3,7 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Edith.Ask;
+using Edith.Backend;
 using UnityEngine;
 
 namespace Edith.Navigation
@@ -37,22 +37,19 @@ namespace Edith.Navigation
     /// The backend's /navigate endpoints. Every call runs off the main thread and returns JSON for Gemini or the arrow.
     public static class NavClient
     {
-        public const string FindPlaceTool = "find_place";
-        public const string StopTool = "stop_navigation";
-
         /// A little longer than the backend's own eight-second cap on a search.
         static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
 
         /// The JSON object Gemini gets when a call could not be done, with a reason it can say.
-        public static string Problem(string reason) => "{\"found\":false,\"reason\":" + LiveRequest.Quote(reason) + "}";
+        public static string Problem(string reason) => "{\"found\":false,\"reason\":" + JsonText.Quote(reason) + "}";
 
         /// The backend's answer as Gemini gets it: the target and the other matches, or why there are none.
         public static async Task<string> FindAsync(string backendUrl, string deviceToken, string profileId,
             string category, string name, CancellationToken token)
         {
             category = string.IsNullOrWhiteSpace(category) ? "any" : category.Trim();
-            var body = "{\"category\":" + LiveRequest.Quote(category) +
-                       (string.IsNullOrWhiteSpace(name) ? "" : ",\"name\":" + LiveRequest.Quote(name.Trim())) + "}";
+            var body = "{\"category\":" + JsonText.Quote(category) +
+                       (string.IsNullOrWhiteSpace(name) ? "" : ",\"name\":" + JsonText.Quote(name.Trim())) + "}";
             var (status, reply) = await Send(HttpMethod.Post, backendUrl, deviceToken, profileId, body, token)
                 .ConfigureAwait(false);
             if (status >= 200 && status < 300) return reply;

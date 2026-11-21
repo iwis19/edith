@@ -5,7 +5,7 @@ namespace Edith.Look
     /// What a Look's card knows. Events from the backend move it along: Looking until a name starts to arrive,
     /// Naming while the name is still being written, Named once it is final and the fact types out, then Done, or
     /// Failed with a line to show. The card shows the fact, or the name when the Look ends without one. The rarity
-    /// can land at any time before the end. Nothing changes it after it ends.
+    /// can land at any time before the end, and so can a hunt tick. Nothing changes it after it ends.
     public sealed class LookCard
     {
         // A 150-character fact types out in about a second, which reads as being written.
@@ -19,6 +19,8 @@ namespace Edith.Look
         public Rarity? Tier { get; private set; }
         /// The line to show once Failed.
         public string Error { get; private set; } = "";
+        /// The hunt target this Look ticked, or null when it ticked none.
+        public string HuntText { get; private set; }
         public TypedText Fact { get; } = new TypedText(CharsPerSecond);
 
         public bool Finished => Phase == LookPhase.Done || Phase == LookPhase.Failed;
@@ -43,6 +45,9 @@ namespace Edith.Look
                     break;
                 case LookEventKind.Rarity:
                     Tier = e.Tier;
+                    break;
+                case LookEventKind.Hunt:
+                    HuntText = e.Text;
                     break;
                 case LookEventKind.Done:
                     // A Look with no fact shows its name instead, so the card is never blank.

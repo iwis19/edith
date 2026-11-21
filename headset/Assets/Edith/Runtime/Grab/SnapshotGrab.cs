@@ -55,6 +55,15 @@ namespace Edith.Grab
         /// one that failed never moves.
         public static bool CanCarry(Snapshot snapshot) => snapshot.Card.Phase == LookPhase.Done;
 
+        /// Pockets `snapshot` into `point` with the sound of its rarity, which collects it. A pull to the chest ends
+        /// here, and so does asking EDITH to save it. False when it is not in the room.
+        public static bool Collect(SnapshotRoom room, Snapshot snapshot, Vector3 point)
+        {
+            if (!room.Pocket(snapshot, point)) return false;
+            RaritySounds.Play(snapshot.Card.Tier, point);
+            return true;
+        }
+
         void OnStepped(HandSide side, GrabReading reading)
         {
             var hand = hands[(int)side];
@@ -68,11 +77,7 @@ namespace Edith.Grab
                     hand.Held = null;
                     return;
                 case GrabEvent.Pocketed:
-                    if (hand.Held != null && room.Pocket(hand.Held, reading.Grip))
-                    {
-                        hand.Pocketing = hand.Held;
-                        RaritySounds.Play(hand.Held.Card.Tier, reading.Grip);
-                    }
+                    if (hand.Held != null && Collect(room, hand.Held, reading.Grip)) hand.Pocketing = hand.Held;
                     hand.Held = null;
                     return;
             }

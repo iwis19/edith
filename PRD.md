@@ -129,6 +129,8 @@ Ask can guide the person to something nearby: "where's the nearest subway?", "ta
 | Scrapbook | Thumb swipe to flip; pinch to open; grab to pull closer |
 | Spots globe | One-hand grab to spin; two-hand pull to zoom |
 
+Scan, Collect and clearing the snapshots in the room can also be asked for by voice through Ask: tap, then say "scan" or "what's around me", "save this" while looking at a snapshot, or "clear my snapshots". Each runs as the gesture does, with the same sounds and animation, and EDITH says what happened.
+
 **Rules**
 
 - Never use a pinch with the palm facing you: that is Quest's system menu gesture.
