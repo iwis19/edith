@@ -33,10 +33,10 @@ namespace Edith.Tests
         [TearDown]
         public void TearDown() => Object.DestroyImmediate(parent);
 
-        void Show(DateTime? centred = null)
+        void Show()
         {
             browse.Tabs(tabs);
-            browse.Chips(centred, chips);
+            browse.Chips(chips);
             bar.Show(tabs, chips);
         }
 
@@ -50,19 +50,12 @@ namespace Edith.Tests
         bool Pinch(string label, out Chip chip) => bar.Hit(Vector3.zero, At(label) * 0.7f, out chip);
 
         [Test]
-        public void The_time_lens_shows_its_tabs_and_days()
-        {
-            Show(new DateTime(2026, 11, 20));
-            CollectionAssert.AreEqual(new[] { "Places", "Time", "Rarity", "11/21", "11/20", "11/18" }, bar.Labels);
-        }
-
-        [Test]
         public void The_rarity_lens_shows_all_six_tiers_with_their_counts()
         {
             browse.SetLens(Lens.Rarity);
             Show();
             CollectionAssert.AreEqual(
-                new[] { "Places", "Time", "Rarity", "Common 1", "Uncommon 0", "Rare 0", "Epic 2", "Legendary 0", "Mythic 0" }, bar.Labels);
+                new[] { "Places", "Rarity", "Common 1", "Uncommon 0", "Rare 0", "Epic 2", "Legendary 0", "Mythic 0" }, bar.Labels);
         }
 
         [Test]
@@ -70,18 +63,9 @@ namespace Edith.Tests
         {
             browse.SetLens(Lens.Rarity);
             Show();
-            browse.SetLens(Lens.Time);
-            Show(new DateTime(2026, 11, 21));
+            browse.SetLens(Lens.Places);
+            Show();
             Assert.IsFalse(parent.GetComponentsInChildren<Text>().Any(text => text.text == "Epic 2"));
-        }
-
-        [Test]
-        public void A_pinch_in_line_with_a_day_chooses_that_day()
-        {
-            Show(new DateTime(2026, 11, 21));
-            Assert.IsTrue(Pinch("11/18", out var chip));
-            Assert.AreEqual(ChipKind.Date, chip.Kind);
-            Assert.AreEqual(new DateTime(2026, 11, 18), chip.Date);
         }
 
         [Test]
@@ -130,8 +114,7 @@ namespace Edith.Tests
         public void The_selected_tab_is_marked()
         {
             Show();
-            Assert.AreNotEqual(Backing("Time").color, Backing("Rarity").color);
-            Assert.AreEqual(Backing("Places").color, Backing("Rarity").color, "only the tab in use stands out");
+            Assert.AreNotEqual(Backing("Places").color, Backing("Rarity").color, "the tab in use stands out");
         }
 
         [Test]
@@ -180,25 +163,25 @@ namespace Edith.Tests
         [Test]
         public void The_tabs_sit_over_the_chips_and_both_rows_are_under_the_deck_within_reach()
         {
-            Show(new DateTime(2026, 11, 21));
+            Show();
             var deckBottom = DeckLayout.Pose(0f).Position.y - 0.105f;
-            foreach (var label in new[] { "Places", "Time", "Rarity", "11/21", "11/20", "11/18" })
+            foreach (var label in new[] { "Places", "Rarity", "Common 1", "Uncommon 0", "Rare 0", "Epic 2", "Legendary 0", "Mythic 0" })
             {
                 Assert.That(At(label).y, Is.LessThan(deckBottom), label);
                 Assert.That(At(label).y, Is.GreaterThan(-0.3f), label);
                 Assert.That(At(label).z, Is.InRange(0.35f, 0.5f), label);
             }
-            Assert.That(At("Time").y, Is.GreaterThan(At("11/21").y));
+            Assert.That(At("Rarity").y, Is.GreaterThan(At("Common 1").y));
         }
 
         [Test]
         public void A_pinch_finds_a_tab_and_a_chip()
         {
-            Show(new DateTime(2026, 11, 21));
-            Assert.IsTrue(Pinch("Time", out var tab));
+            Show();
+            Assert.IsTrue(Pinch("Places", out var tab));
             Assert.AreEqual(ChipKind.Tab, tab.Kind);
-            Assert.IsTrue(Pinch("11/20", out var day));
-            Assert.AreEqual(ChipKind.Date, day.Kind);
+            Assert.IsTrue(Pinch("Epic 2", out var tier));
+            Assert.AreEqual(ChipKind.Tier, tier.Kind);
         }
 
         [Test]

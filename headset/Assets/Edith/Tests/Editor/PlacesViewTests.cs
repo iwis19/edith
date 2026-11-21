@@ -184,7 +184,7 @@ namespace Edith.Tests
         {
             var browse = Home();
             Draw(browse);
-            browse.SetLens(Lens.Time);
+            browse.SetLens(Lens.Rarity);
             Draw(browse, 1f);
             Assert.IsFalse(places.GlobeSpins);
             Assert.IsNull(places.HitPin(Eye, GlobeView.Centre * 0.6f));

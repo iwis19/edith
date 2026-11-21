@@ -24,35 +24,26 @@ namespace Edith.Tests
 
         static string[] Labels(List<Chip> chips) => chips.Select(chip => chip.Label).ToArray();
 
-        static List<Chip> Chips(Browse browse, DateTime? centred = null)
+        static List<Chip> Chips(Browse browse)
         {
             var chips = new List<Chip>();
-            browse.Chips(centred, chips);
+            browse.Chips(chips);
             return chips;
         }
 
         [Test]
-        public void Without_any_place_it_opens_on_the_time_lens_showing_everything_newest_first()
+        public void Without_any_place_it_opens_on_the_rarity_lens_showing_everything_newest_first()
         {
             var browse = Six();
-            Assert.AreEqual(Lens.Time, browse.Lens);
+            Assert.AreEqual(Lens.Rarity, browse.Lens);
             Assert.IsNull(browse.Filter);
             CollectionAssert.AreEqual(new[] { 6, 5, 4, 3, 2, 1 }, Ids(browse));
         }
 
         [Test]
-        public void Each_day_with_a_memory_is_listed_once_newest_first()
+        public void Places_and_rarity_are_the_only_lenses()
         {
-            CollectionAssert.AreEqual(new[] { Day(21), Day(20), Day(18), Day(12) }, Six().Dates);
-        }
-
-        [Test]
-        public void A_day_leads_to_its_first_card()
-        {
-            var browse = Six();
-            Assert.AreEqual(0, browse.IndexOfDate(Day(21)));
-            Assert.AreEqual(3, browse.IndexOfDate(Day(18)));
-            Assert.AreEqual(-1, browse.IndexOfDate(Day(19)));
+            CollectionAssert.AreEqual(new[] { "Places", "Rarity" }, Enum.GetNames(typeof(Lens)));
         }
 
         [Test]
@@ -66,13 +57,12 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_tier_narrows_the_deck_and_its_days()
+        public void A_tier_narrows_the_deck()
         {
             var browse = Six();
             browse.SetLens(Lens.Rarity);
             browse.ToggleFilter(Rarity.Rare);
             CollectionAssert.AreEqual(new[] { 6, 4 }, Ids(browse));
-            CollectionAssert.AreEqual(new[] { Day(21), Day(20) }, browse.Dates);
             Assert.AreEqual(1, browse.IndexOf(4));
             Assert.AreEqual(-1, browse.IndexOf(5));
         }
@@ -125,7 +115,7 @@ namespace Edith.Tests
             var browse = Six();
             browse.SetLens(Lens.Rarity);
             browse.ToggleFilter(Rarity.Rare);
-            browse.SetLens(Lens.Time);
+            browse.SetLens(Lens.Places);
             Assert.IsNull(browse.Filter);
             Assert.AreEqual(6, browse.Visible.Count);
         }
@@ -136,30 +126,11 @@ namespace Edith.Tests
             var browse = Six();
             var tabs = new List<Chip>();
             browse.Tabs(tabs);
-            CollectionAssert.AreEqual(new[] { "Places", "Time", "Rarity" }, Labels(tabs));
-            CollectionAssert.AreEqual(new[] { false, true, false }, tabs.Select(tab => tab.Selected).ToArray());
-            browse.SetLens(Lens.Rarity);
+            CollectionAssert.AreEqual(new[] { "Places", "Rarity" }, Labels(tabs));
+            CollectionAssert.AreEqual(new[] { false, true }, tabs.Select(tab => tab.Selected).ToArray());
+            browse.SetLens(Lens.Places);
             browse.Tabs(tabs);
-            CollectionAssert.AreEqual(new[] { false, false, true }, tabs.Select(tab => tab.Selected).ToArray());
-        }
-
-        [Test]
-        public void The_time_lens_offers_the_days_and_selects_the_one_in_the_middle()
-        {
-            var chips = Chips(Six(), Day(18));
-            CollectionAssert.AreEqual(new[] { "11/21", "11/20", "11/18", "11/12" }, Labels(chips));
-            CollectionAssert.AreEqual(new[] { false, false, true, false }, chips.Select(chip => chip.Selected).ToArray());
-            Assert.AreEqual(ChipKind.Date, chips[2].Kind);
-            Assert.AreEqual(Day(18), chips[2].Date);
-        }
-
-        [Test]
-        public void More_days_than_fit_show_the_five_around_the_one_in_the_middle()
-        {
-            var browse = new Browse(Enumerable.Range(0, 9).Select(i => Made(9 - i, 20 - i)).ToArray());
-            CollectionAssert.AreEqual(new[] { "11/16", "11/15", "11/14", "11/13", "11/12" }, Labels(Chips(browse, Day(14))));
-            CollectionAssert.AreEqual(new[] { "11/20", "11/19", "11/18", "11/17", "11/16" }, Labels(Chips(browse, Day(20))));
-            CollectionAssert.AreEqual(new[] { "11/16", "11/15", "11/14", "11/13", "11/12" }, Labels(Chips(browse, Day(12))));
+            CollectionAssert.AreEqual(new[] { true, false }, tabs.Select(tab => tab.Selected).ToArray());
         }
 
         [Test]
@@ -189,7 +160,6 @@ namespace Edith.Tests
         {
             var browse = new Browse(new Memory[0]);
             Assert.AreEqual(0, browse.Visible.Count);
-            Assert.AreEqual(0, browse.Dates.Count);
             Assert.AreEqual(0, Chips(browse).Count);
         }
     }

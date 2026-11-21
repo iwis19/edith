@@ -5,9 +5,9 @@ using Edith.Look;
 namespace Edith.Scrapbook
 {
     /// A way to reach the past. Each lens has a tab on the lens bar, in this order, and its own row of chips under it.
-    public enum Lens { Places, Time, Rarity }
+    public enum Lens { Places, Rarity }
 
-    public enum ChipKind { Tab, Date, Tier, City, Globe, Spot }
+    public enum ChipKind { Tab, Tier, City, Globe, Spot }
 
     /// One thing on the lens bar a pinch can choose. Only the field of its Kind is set.
     public readonly struct Chip
@@ -21,12 +21,11 @@ namespace Edith.Scrapbook
         /// False for a chip that offers nothing, like a tier with no memory: it is drawn dimmed and a pinch passes through it.
         public readonly bool Enabled;
         public readonly Lens Lens;
-        public readonly DateTime Date;
         public readonly Rarity Tier;
         public readonly City City;
         public readonly Spot Spot;
 
-        Chip(ChipKind kind, string label, bool selected, bool enabled = true, Lens lens = default, DateTime date = default, Rarity tier = default,
+        Chip(ChipKind kind, string label, bool selected, bool enabled = true, Lens lens = default, Rarity tier = default,
             City city = null, Spot spot = null)
         {
             Kind = kind;
@@ -34,14 +33,12 @@ namespace Edith.Scrapbook
             Selected = selected;
             Enabled = enabled;
             Lens = lens;
-            Date = date;
             Tier = tier;
             City = city;
             Spot = spot;
         }
 
         public static Chip Tab(Lens lens, bool selected) => new Chip(ChipKind.Tab, lens.ToString(), selected, lens: lens);
-        public static Chip Day(DateTime date, bool selected) => new Chip(ChipKind.Date, Memory.Day(date), selected, date: date);
         public static Chip Of(Rarity tier, int count, bool selected) =>
             new Chip(ChipKind.Tier, $"{tier} {count}", selected, enabled: count > 0, tier: tier);
         public static Chip Of(City city) => new Chip(ChipKind.City, Counted(city), false, city: city);
@@ -58,8 +55,6 @@ namespace Edith.Scrapbook
     /// its lens, so leaving the lens clears it.
     public sealed class Browse
     {
-        /// The most date chips shown at once.
-        public const int DateChips = 5;
         /// The most city chips, or spot chips, shown at once. The rest are reached by their pins.
         public const int PlaceChips = 4;
 
@@ -68,16 +63,15 @@ namespace Edith.Scrapbook
         readonly IReadOnlyList<Memory> all;
         readonly int[] counts = new int[Tiers.Length];
         readonly List<Memory> visible = new List<Memory>();
-        readonly List<DateTime> dates = new List<DateTime>();
 
-        /// `newestFirst` is kept in its order. The lens is Places when any memory has a point, else Time.
+        /// `newestFirst` is kept in its order. The lens is Places when any memory has a point, else Rarity.
         public Browse(IReadOnlyList<Memory> newestFirst)
         {
             all = newestFirst;
             foreach (var memory in all)
                 if (memory.Tier is Rarity tier) counts[(int)tier]++;
             Atlas = new Atlas(all);
-            Lens = Atlas.Cities.Count > 0 ? Lens.Places : Lens.Time;
+            Lens = Atlas.Cities.Count > 0 ? Lens.Places : Lens.Rarity;
             Refresh();
         }
 
@@ -96,9 +90,6 @@ namespace Edith.Scrapbook
 
         /// The memories the deck shows, newest first.
         public IReadOnlyList<Memory> Visible => visible;
-
-        /// The days that have a visible memory, newest first.
-        public IReadOnlyList<DateTime> Dates => dates;
 
         /// How many memories of `tier` there are, whatever the filter.
         public int Count(Rarity tier) => counts[(int)tier];
@@ -145,14 +136,6 @@ namespace Edith.Scrapbook
             Refresh();
         }
 
-        /// The first visible memory of that day, or -1.
-        public int IndexOfDate(DateTime date)
-        {
-            for (var i = 0; i < visible.Count; i++)
-                if (visible[i].Date == date.Date) return i;
-            return -1;
-        }
-
         /// The index in Visible of the memory with `id`, or -1.
         public int IndexOf(int id)
         {
@@ -169,10 +152,8 @@ namespace Edith.Scrapbook
         }
 
         /// The chips under the tabs. Places: at the globe one chip per city, and in a city "Globe" and one chip per
-        /// spot. Time: up to DateChips days, newest first, around `centred`, the day of the card in the middle of the
-        /// deck. Rarity: one chip per tier, rarest last, whether or not
-        /// it has a memory.
-        public void Chips(DateTime? centred, List<Chip> into)
+        /// spot. Rarity: one chip per tier, rarest last, whether or not it has a memory.
+        public void Chips(List<Chip> into)
         {
             into.Clear();
             switch (Lens)
@@ -184,11 +165,6 @@ namespace Edith.Scrapbook
                     into.Add(Chip.Globe());
                     for (var i = 0; i < City.Spots.Count && i < PlaceChips; i++) into.Add(Chip.Of(City.Spots[i], City.Spots[i] == Spot));
                     break;
-                case Lens.Time:
-                    var at = centred is DateTime day ? dates.IndexOf(day.Date) : -1;
-                    var first = Math.Max(0, Math.Min(Math.Max(at, 0) - DateChips / 2, dates.Count - DateChips));
-                    for (var i = first; i < dates.Count && i < first + DateChips; i++) into.Add(Chip.Day(dates[i], i == at));
-                    break;
                 case Lens.Rarity:
                     foreach (var tier in Tiers) into.Add(Chip.Of(tier, Count(tier), Filter == tier));
                     break;
@@ -198,12 +174,10 @@ namespace Edith.Scrapbook
         void Refresh()
         {
             visible.Clear();
-            dates.Clear();
             foreach (var memory in Spot?.Memories ?? City?.Memories ?? all)
             {
                 if (Filter != null && memory.Tier != Filter) continue;
                 visible.Add(memory);
-                if (dates.Count == 0 || dates[dates.Count - 1] != memory.Date) dates.Add(memory.Date);
             }
         }
     }

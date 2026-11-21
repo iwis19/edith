@@ -17,7 +17,7 @@ namespace Edith.Scrapbook
     /// open it in front of the user, where it stays put in the room, and the palms brought together close it. A
     /// thumb swipe moves one card, a sideways pinch-drag scrubs, and a quick pinch on a side card brings it to the
     /// middle. The tabs under the deck pick
-    /// the lens, and the chips under them jump to a day, narrows the deck to a rarity, or shows the globe of places: a pinch on a city's pin dives into its
+    /// the lens, and the chips under them narrow the deck to a rarity or show the globe of places: a pinch on a city's pin dives into its
     /// street map, and a pinch on a spot's pin narrows the deck to that spot. A pinch goes to the first thing in its
     /// line: a chip, a pin, the globe, a card, and otherwise the deck. While it is open it holds the hand gate, so
     /// pinches make no Looks and palms start no Scan.
@@ -75,7 +75,7 @@ namespace Edith.Scrapbook
         Content content;
         Browse browse;
         Deck deck;
-        (Lens lens, Rarity? filter, Place place, DateTime day, int count)? barShows;
+        (Lens lens, Rarity? filter, Place place, int count)? barShows;
         float fade;
         /// What the pinch-drag under way moves, or null between drags.
         DragTarget? dragging;
@@ -162,11 +162,11 @@ namespace Edith.Scrapbook
             deckView.Show(browse.Visible, deck.Position, photoOf, eased, deck.Form, kept);
             DrawLeaving(eased);
             places.Draw(browse, eased, eye.position, Time.deltaTime, Open ? client : null, session);
-            var shows = (browse.Lens, browse.Filter, (Place)browse.Spot ?? browse.City, browse.Visible[deck.Target].Date, browse.Visible.Count);
+            var shows = (browse.Lens, browse.Filter, (Place)browse.Spot ?? browse.City, browse.Visible.Count);
             if (barShows is { } had && had.Equals(shows)) return;
             barShows = shows;
             browse.Tabs(tabs);
-            browse.Chips(shows.Date, chips);
+            browse.Chips(chips);
             bar.Show(tabs, chips);
         }
 
@@ -334,11 +334,6 @@ namespace Edith.Scrapbook
 
         void Choose(in Chip chip)
         {
-            if (chip.Kind == ChipKind.Date)
-            {
-                deck.JumpTo(browse.IndexOfDate(chip.Date));
-                return;
-            }
             var chosen = chip;
             Narrow(() =>
             {

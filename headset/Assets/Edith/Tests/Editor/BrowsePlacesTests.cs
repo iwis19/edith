@@ -35,7 +35,7 @@ namespace Edith.Tests
         static List<Chip> Chips(Browse browse)
         {
             var chips = new List<Chip>();
-            browse.Chips(null, chips);
+            browse.Chips(chips);
             return chips;
         }
 
@@ -69,7 +69,6 @@ namespace Edith.Tests
             browse.Dive(London(browse));
             Assert.AreEqual("London", browse.City.Label);
             CollectionAssert.AreEqual(new[] { 6, 5, 3, 2 }, Ids(browse));
-            CollectionAssert.AreEqual(new[] { new DateTime(2026, 11, 21), new DateTime(2026, 11, 19), new DateTime(2026, 11, 18) }, browse.Dates);
         }
 
         [Test]
@@ -134,7 +133,7 @@ namespace Edith.Tests
         {
             var browse = Travels();
             browse.Dive(London(browse));
-            browse.SetLens(Lens.Time);
+            browse.SetLens(Lens.Rarity);
             Assert.AreEqual(6, browse.Visible.Count);
             browse.SetLens(Lens.Places);
             Assert.IsNull(browse.City);
