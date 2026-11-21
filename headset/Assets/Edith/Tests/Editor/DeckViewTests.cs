@@ -60,11 +60,12 @@ namespace Edith.Tests
             card.GetComponentsInChildren<RectTransform>(true).Single(part => part.name == name);
 
         [Test]
-        public void The_middle_card_shows_the_fact_in_the_rarity_colour()
+        public void The_middle_card_shows_the_fact_like_a_snapshot_card()
         {
             view.Show(Memories(5), 0f, NoPhoto);
             Assert.AreEqual("Fact 0.", Shown(Middle, "Fact"));
-            Assert.AreEqual(RarityColors.For(Rarity.Rare), Part(Middle, "Fact").GetComponent<Text>().color);
+            Assert.AreEqual(Edith.UI.Theme.Ice, Part(Middle, "Fact").GetComponent<Text>().color);
+            Assert.AreEqual(RarityColors.For(Rarity.Rare), Outline(Middle).color);
         }
 
         [Test]
