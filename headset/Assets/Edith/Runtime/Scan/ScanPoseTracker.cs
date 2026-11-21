@@ -47,6 +47,7 @@ namespace Edith.Scan
     }
 
     /// The Scan pose: both hands open, palms facing away from the user and not at the floor, held in front of them.
+    /// A hand counts only while HandFrame.Tracked, since joints read at low confidence can pass for an open palm.
     /// Fires once per hold. Deterministic in HandFrame.Time.
     public sealed class ScanPoseTracker
     {
@@ -60,7 +61,7 @@ namespace Edith.Scan
         public ScanPoseReading Step(in HandFrame left, in HandFrame right)
         {
             var time = right.Time;
-            if (!left.Visible || !right.Visible)
+            if (!left.Tracked || !right.Tracked)
             {
                 Release(time);
                 return default;
