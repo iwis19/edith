@@ -83,6 +83,8 @@ namespace Edith.Editor
             PlayerSettings.productName = "EDITH";
             PlayerSettings.SetApplicationIdentifier(android, "com.hackwestern.edith");
             PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
+            // Shares generic code at runtime instead of generating it per type, which cuts the C++ that rebuilds.
+            PlayerSettings.SetIl2CppCodeGeneration(android, Il2CppCodeGeneration.OptimizeSize);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
             PlayerSettings.colorSpace = ColorSpace.Linear;
