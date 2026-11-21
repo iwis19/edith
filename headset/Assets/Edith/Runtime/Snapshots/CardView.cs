@@ -12,12 +12,11 @@ namespace Edith.Snapshots
     {
         // Text is laid out in quarter millimetres and scaled down, so the font is rasterised sharply at this size.
         const float TextUnitsPerMm = 4f;
-        // The glass around the photo and its corner radius, the gap from the photo to the text, and the narrowest the
-        // text column goes.
+        // The glass around the photo and its corner radius, and the gap from the photo to the text. The text wraps
+        // within the photo's width, which LookController keeps from being skinny.
         const float PadMm = 7f;
         const float RadiusMm = 11f;
         const float GapMm = 5f;
-        const float MinTextWidthMm = 90f;
         const int FactSize = 36;
         const float LineHeight = 1.25f;
         const int MinLines = 2;
@@ -55,7 +54,7 @@ namespace Edith.Snapshots
                 scale = Scale(depth),
                 photoMm = photoSizeMm,
             };
-            view.textWidthMm = Mathf.Max(photoSizeMm.x, MinTextWidthMm * view.scale);
+            view.textWidthMm = photoSizeMm.x;
             view.BuildGlass(photo, material);
             view.BuildCorners(photo, material);
             view.BuildDivider(photo, material);
