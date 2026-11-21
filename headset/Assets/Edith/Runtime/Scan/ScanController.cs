@@ -215,7 +215,7 @@ namespace Edith.Scan
             {
                 if (this == null) return;
                 var why = e is OperationCanceledException ? "timeout" : e.GetBaseException().Message;
-                Debug.Log($"[EDITH scan] {id} failed {Ms()} ms in: {why}");
+                Debug.Log($"[EDITH scan] {id} failed {Ms()} ms in: {why}\n{e}");
                 // No answer at all is nearly always the headset's Wi-Fi, such as a network waiting on a sign-in page.
                 var unreachable = e is OperationCanceledException || e is HttpRequestException;
                 Fail(unreachable ? "Couldn't reach EDITH. Check the Wi-Fi." : "Couldn't look around.");
