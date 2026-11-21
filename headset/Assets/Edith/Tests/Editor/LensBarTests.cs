@@ -49,7 +49,7 @@ namespace Edith.Tests
         public void The_time_lens_shows_its_tabs_and_days()
         {
             Show(new DateTime(2026, 11, 20));
-            CollectionAssert.AreEqual(new[] { "Time", "Rarity", "11/21", "11/20", "11/18" }, bar.Labels);
+            CollectionAssert.AreEqual(new[] { "Places", "Time", "Rarity", "11/21", "11/20", "11/18" }, bar.Labels);
         }
 
         [Test]
@@ -57,7 +57,7 @@ namespace Edith.Tests
         {
             browse.SetLens(Lens.Rarity);
             Show();
-            CollectionAssert.AreEqual(new[] { "Time", "Rarity", "All 3", "Common 1", "Epic 2" }, bar.Labels);
+            CollectionAssert.AreEqual(new[] { "Places", "Time", "Rarity", "All 3", "Common 1", "Epic 2" }, bar.Labels);
         }
 
         [Test]

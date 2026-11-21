@@ -14,8 +14,10 @@ namespace Edith.Scrapbook
     /// The Scrapbook: the collected memories as a deck of cards to scroll through. The wrist button opens it in
     /// front of the user, where it stays put in the room, and closes it. A thumb swipe moves one card, a sideways
     /// pinch-drag scrubs, and a quick pinch on a side card brings it to the middle. The lens bar under the deck jumps
-    /// to a day or narrows the deck to a rarity. While it is open it holds the hand gate, so pinches make no Looks
-    /// and palms start no Scan.
+    /// to a day, narrows the deck to a rarity, or shows the globe of places: a pinch on a city's pin dives into its
+    /// street map, and a pinch on a spot's pin narrows the deck to that spot. A pinch goes to the first thing in its
+    /// line: a chip, a pin, the globe, a card, and otherwise the deck. While it is open it holds the hand gate, so
+    /// pinches make no Looks and palms start no Scan.
     public sealed class ScrapbookPanel : MonoBehaviour
     {
         [SerializeField] LeftHandSource leftHand;
@@ -27,6 +29,8 @@ namespace Edith.Scrapbook
         [SerializeField] Font font;
         /// Draws the cards so a hand in front of them hides them.
         [SerializeField] Material material;
+        /// Draws the globe and the street map, which a hand in front also hides.
+        [SerializeField] Material mapMaterial;
         [SerializeField] WristTuning wrist = new WristTuning();
 
         const float FadeSeconds = 0.25f;
@@ -50,15 +54,19 @@ namespace Edith.Scrapbook
         Transform frame;
         DeckView deckView;
         LensBar bar;
+        MapImages maps;
+        PlacesView places;
         AudioSource sound;
         CancellationTokenSource session;
         Content content;
         Browse browse;
         Deck deck;
-        (Lens lens, Rarity? filter, DateTime day, int count)? barShows;
+        (Lens lens, Rarity? filter, Place place, DateTime day, int count)? barShows;
         float fade;
-        bool scrubbing;
-        float scrubX;
+        /// What the pinch-drag under way moves, or null between drags.
+        DragTarget? dragging;
+        /// The dragging hand's pinch point in the deck's frame, a frame ago.
+        Vector3 draggedTo;
 
         public bool Open { get; private set; }
 
@@ -71,6 +79,8 @@ namespace Edith.Scrapbook
             frame.gameObject.SetActive(false);
             deckView = new DeckView(frame, font, material);
             bar = new LensBar(frame, font, material);
+            maps = new MapImages();
+            places = new PlacesView(frame, font, material, mapMaterial, maps);
             photos = new RecentCache<Texture2D>(PhotosKept, Destroy);
             photoOf = id => photos.TryGet(id, out var photo) ? photo : null;
             sound = gameObject.AddComponent<AudioSource>();
@@ -101,6 +111,8 @@ namespace Edith.Scrapbook
         {
             session?.Cancel();
             photos.Clear();
+            maps.Clear();
+            places.Release();
             buttonView.Release();
         }
 
@@ -123,13 +135,15 @@ namespace Edith.Scrapbook
                 barShows = null;
                 var (title, body) = Notice(content);
                 deckView.ShowNotice(title, body, eased);
+                places.Hide();
                 return;
             }
 
             deck.Advance(Time.deltaTime);
             if (Open) LoadPhotosInReach();
             deckView.Show(browse.Visible, deck.Position, photoOf, eased);
-            var shows = (browse.Lens, browse.Filter, browse.Visible[deck.Target].Date, browse.Visible.Count);
+            places.Draw(browse, eased, eye.position, Time.deltaTime, Open ? client : null, session);
+            var shows = (browse.Lens, browse.Filter, (Place)browse.Spot ?? browse.City, browse.Visible[deck.Target].Date, browse.Visible.Count);
             if (barShows is { } had && had.Equals(shows)) return;
             barShows = shows;
             browse.Tabs(tabs);
@@ -176,6 +190,7 @@ namespace Edith.Scrapbook
             barShows = null;
             bar.Hide();
             photosFailed.Clear();
+            maps.Retry();
             var at = DeckLayout.Frame(new Pose(eye.position, eye.rotation));
             frame.SetPositionAndRotation(at.position, at.rotation);
             frame.gameObject.SetActive(true);
@@ -207,7 +222,7 @@ namespace Edith.Scrapbook
         {
             Open = false;
             gate.Held = false;
-            scrubbing = false;
+            dragging = null;
             session.Cancel();
             Debug.Log("[EDITH scrapbook] closed");
         }
@@ -228,14 +243,16 @@ namespace Edith.Scrapbook
                 var hand = pinch.Owner == HandSide.Left ? leftHand.Read() : rightHand.Read();
                 // A hand lost mid-drag reads wherever its joints were left.
                 if (!hand.Tracked) return;
-                var x = Vector3.Dot(hand.PinchPoint - frame.position, frame.right);
-                if (scrubbing) deck.Scrub((scrubX - x) / MetersPerCard);
-                scrubbing = true;
-                scrubX = x;
+                var at = frame.InverseTransformPoint(hand.PinchPoint);
+                if (dragging == null)
+                    dragging = PinchRoute.DragStart(places.GlobeSpins, eye.position, reading.Start, places.GlobePosition, GlobeView.Radius);
+                else if (dragging == DragTarget.Globe) places.Drag(at - draggedTo);
+                else deck.Scrub((draggedTo.x - at.x) / MetersPerCard);
+                draggedTo = at;
             }
-            else if (scrubbing)
+            else if (dragging != null)
             {
-                scrubbing = false;
+                dragging = null;
                 deck.Release();
             }
             if (reading.Event == PinchEvent.Tap) Tap(reading.Start);
@@ -249,6 +266,17 @@ namespace Edith.Scrapbook
                 Play(1318.5f);
                 return;
             }
+            var pin = places.HitPin(eye.position, point);
+            if (pin != null)
+            {
+                Narrow(() =>
+                {
+                    if (pin is City city) browse.Dive(city);
+                    else browse.ToggleSpot((Spot)pin);
+                });
+                Play(880f);
+                return;
+            }
             var card = deckView.Hit(eye.position, point);
             if (card >= 0) deck.JumpTo(card);
         }
@@ -260,12 +288,28 @@ namespace Edith.Scrapbook
                 deck.JumpTo(browse.IndexOfDate(chip.Date));
                 return;
             }
-            // The card in the middle stays there when it is still in the deck.
+            var chosen = chip;
+            Narrow(() =>
+            {
+                switch (chosen.Kind)
+                {
+                    case ChipKind.Tab: browse.SetLens(chosen.Lens); break;
+                    case ChipKind.City: browse.Dive(chosen.City); break;
+                    case ChipKind.Globe: browse.Surface(); break;
+                    case ChipKind.Spot: browse.ToggleSpot(chosen.Spot); break;
+                    default: browse.ToggleFilter(chosen.Kind == ChipKind.Tier ? chosen.Tier : (Rarity?)null); break;
+                }
+            });
+        }
+
+        /// Changes what the deck is narrowed to. The card in the middle stays there when it is still in the deck.
+        void Narrow(Action change)
+        {
             var keep = browse.Visible[deck.Target].Id;
-            if (chip.Kind == ChipKind.Tab) browse.SetLens(chip.Lens);
-            else browse.ToggleFilter(chip.Kind == ChipKind.Tier ? chip.Tier : (Rarity?)null);
+            change();
             deck = new Deck(browse.Visible.Count, Mathf.Max(0, browse.IndexOf(keep)));
-            Debug.Log($"[EDITH scrapbook] {browse.Lens} lens, {(browse.Filter is Rarity tier ? tier.ToString() : "every")} tier, {browse.Visible.Count} cards");
+            Debug.Log($"[EDITH scrapbook] {browse.Lens} lens, {(browse.Filter is Rarity tier ? tier.ToString() : "every")} tier, " +
+                      $"{((Place)browse.Spot ?? browse.City)?.Label ?? "every place"}, {browse.Visible.Count} cards");
         }
 
         void LoadPhotosInReach()

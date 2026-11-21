@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
@@ -6,9 +7,9 @@ using Edith.Look;
 
 namespace Edith.Scrapbook
 {
-    /// The headset's reads of collected memories: GET /memories and GET /memories/{id}/image. Both throw
-    /// HttpRequestException when the backend cannot be reached or refuses, and OperationCanceledException when the
-    /// token fires.
+    /// The headset's reads of collected memories and of the maps they are pinned on: GET /memories,
+    /// GET /memories/{id}/image, GET /map/world and GET /map/area. All throw HttpRequestException when the backend
+    /// cannot be reached or refuses, and OperationCanceledException when the token fires.
     public sealed class ScrapbookClient
     {
         /// The most memories one Scrapbook holds.
@@ -34,6 +35,22 @@ namespace Edith.Scrapbook
         public async Task<byte[]> Image(int id, CancellationToken cancel)
         {
             using var response = await Get($"/memories/{id}/image", cancel).ConfigureAwait(false);
+            return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+        }
+
+        /// The whole world as a square Web Mercator PNG.
+        public async Task<byte[]> WorldMap(CancellationToken cancel)
+        {
+            using var response = await Get("/map/world", cancel).ConfigureAwait(false);
+            return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+        }
+
+        /// The street map around `centre` at tile `zoom` as a square PNG. The backend centres the image on `centre`
+        /// rounded to four decimal places, so pass a point rounded that way.
+        public async Task<byte[]> AreaMap(GeoPoint centre, int zoom, CancellationToken cancel)
+        {
+            var path = FormattableString.Invariant($"/map/area?lat={centre.Lat:0.####}&lon={centre.Lon:0.####}&zoom={zoom}");
+            using var response = await Get(path, cancel).ConfigureAwait(false);
             return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         }
 

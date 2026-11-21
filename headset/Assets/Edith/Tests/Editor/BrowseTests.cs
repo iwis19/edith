@@ -32,7 +32,7 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void It_opens_on_the_time_lens_showing_everything_newest_first()
+        public void Without_any_place_it_opens_on_the_time_lens_showing_everything_newest_first()
         {
             var browse = Six();
             Assert.AreEqual(Lens.Time, browse.Lens);
@@ -134,12 +134,11 @@ namespace Edith.Tests
             var browse = Six();
             var tabs = new List<Chip>();
             browse.Tabs(tabs);
-            CollectionAssert.AreEqual(new[] { "Time", "Rarity" }, Labels(tabs));
-            Assert.IsTrue(tabs[0].Selected);
-            Assert.IsFalse(tabs[1].Selected);
+            CollectionAssert.AreEqual(new[] { "Places", "Time", "Rarity" }, Labels(tabs));
+            CollectionAssert.AreEqual(new[] { false, true, false }, tabs.Select(tab => tab.Selected).ToArray());
             browse.SetLens(Lens.Rarity);
             browse.Tabs(tabs);
-            Assert.IsTrue(tabs[1].Selected);
+            CollectionAssert.AreEqual(new[] { false, false, true }, tabs.Select(tab => tab.Selected).ToArray());
         }
 
         [Test]

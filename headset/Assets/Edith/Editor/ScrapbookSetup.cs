@@ -12,12 +12,14 @@ using UnityEngine.SceneManagement;
 
 namespace Edith.Editor
 {
-    /// The Scrapbook in the scene: the panel, wired to both hands, the pinch and the thumb gestures, and the hand
-    /// gate it holds while open, which Look, Scan and the pinch outline check. Every step converges, so running it
-    /// again is safe.
+    /// The Scrapbook in the scene: the panel, wired to both hands, the pinch and the thumb gestures, the materials
+    /// its cards and maps are drawn with, and the hand gate it holds while open, which Look, Scan and the pinch
+    /// outline check. Every step converges, so running it again is safe.
     public static class ScrapbookSetup
     {
         const string ScrapbookObjectName = "Scrapbook";
+        /// The globe and the street map of the Places lens use this material.
+        const string MapSurfaceMaterialPath = "Assets/Edith/Occlusion/MapSurface.mat";
 
         /// Batch entry for adding the Scrapbook to an already configured scene.
         public static void BatchAdd()
@@ -62,6 +64,7 @@ namespace Edith.Editor
             PinchSetup.SetObject(panel, "material",
                 AssetDatabase.LoadAssetAtPath<Material>(DepthSetup.OccludedUIMaterialPath)
                 ?? throw new InvalidOperationException($"Missing {DepthSetup.OccludedUIMaterialPath}; run DepthSetup first"));
+            PinchSetup.SetObject(panel, "mapMaterial", DepthSetup.MaterialAsset(MapSurfaceMaterialPath, "Edith/MapSurface"));
 
             PinchSetup.SetObject(Find<LookController>(nameof(LookSetup)), "gate", gate);
             PinchSetup.SetObject(Find<ScanController>(nameof(ScanSetup)), "gate", gate);

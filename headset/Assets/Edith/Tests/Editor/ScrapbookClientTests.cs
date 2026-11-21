@@ -133,6 +133,41 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void The_world_map_is_the_bytes_of_that_image()
+        {
+            using var backend = new FakeBackend(response => Write(response, Jpeg, "image/png"));
+            var bytes = Wait(() => new ScrapbookClient(backend.Url, "secret", Profile).WorldMap(CancellationToken.None));
+            CollectionAssert.AreEqual(Jpeg, bytes);
+            Assert.IsTrue(backend.Requests.TryPeek(out var request));
+            Assert.AreEqual("GET", request.Method);
+            Assert.AreEqual("/map/world", request.PathAndQuery);
+            Assert.AreEqual("secret", request.Token);
+            Assert.AreEqual(Profile, request.Profile);
+        }
+
+        [Test]
+        public void An_area_map_is_asked_for_by_its_centre_and_zoom()
+        {
+            using var backend = new FakeBackend(response => Write(response, Jpeg, "image/png"));
+            var client = new ScrapbookClient(backend.Url, "secret", Profile);
+            var bytes = Wait(() => client.AreaMap(new GeoPoint(43.0054, -81.2748), 14, CancellationToken.None));
+            CollectionAssert.AreEqual(Jpeg, bytes);
+            Assert.IsTrue(backend.Requests.TryPeek(out var request));
+            Assert.AreEqual("/map/area?lat=43.0054&lon=-81.2748&zoom=14", request.PathAndQuery);
+            Assert.AreEqual("secret", request.Token);
+            Assert.AreEqual(Profile, request.Profile);
+        }
+
+        [Test]
+        public void A_refused_map_throws()
+        {
+            using var backend = new FakeBackend(response => response.StatusCode = 502);
+            var client = new ScrapbookClient(backend.Url, "secret", Profile);
+            Assert.Throws<HttpRequestException>(() => Wait(() => client.WorldMap(CancellationToken.None)));
+            Assert.Throws<HttpRequestException>(() => Wait(() => client.AreaMap(new GeoPoint(43, -81), 12, CancellationToken.None)));
+        }
+
+        [Test]
         public void A_refusal_throws()
         {
             using var backend = new FakeBackend(response => response.StatusCode = 401);
