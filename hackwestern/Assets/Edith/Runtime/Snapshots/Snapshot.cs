@@ -4,20 +4,39 @@ using UnityEngine.UI;
 namespace Edith.Snapshots
 {
     /// A snapshot photo hanging where its box was drawn, at the box's size, facing the eye that drew it. It fades in
-    /// when placed, fades out while a new box covers it, and fades out for good when it leaves the room.
+    /// when placed, fades out while a new box covers it, and fades out for good when it leaves the room. A fist can
+    /// carry it off its hook and it floats back, or shrink it into a pocket point.
     public sealed class Snapshot : MonoBehaviour
     {
         const float FadeSeconds = 0.25f;
+        const float PocketSeconds = 0.3f;
+        // Rates of the exponential approach to the pose, per second. A carried card trails the hand slightly,
+        // which hides tracking jitter; a released one drifts back more slowly.
+        const float CarryFollow = 30f;
+        const float ReturnFollow = 10f;
         // The canvas is laid out in millimetres so card text can use ordinary font sizes.
         const float UnitsPerMetre = 1000f;
         static readonly Color EmptyPhoto = new Color(1f, 1f, 1f, 0.35f);
 
+        static int nextId;
+
         CanvasGroup group;
         float fade;
         float target = 1f;
+        bool carried;
+        Vector3 carryPosition;
+        Quaternion carryRotation;
+        bool pocketing;
+        float pocketProgress;
+        Vector3 pocketFrom;
+        Vector3 pocketPoint;
+        Vector3 fullScale;
 
         public SightBox Box { get; private set; }
         public bool Leaving { get; private set; }
+
+        /// Unique among snapshots, and stable for as long as this one lives.
+        public int Id { get; private set; }
 
         /// Shows on the plane of `box`. `parent` must have unit world scale. A null `photo` shows a plain panel.
         public static Snapshot Create(in SightBox box, Transform parent, Texture photo = null)
@@ -42,6 +61,7 @@ namespace Edith.Snapshots
             if (photo == null) raw.color = EmptyPhoto;
 
             var snapshot = root.AddComponent<Snapshot>();
+            snapshot.Id = nextId++;
             snapshot.Box = box;
             snapshot.group = root.GetComponent<CanvasGroup>();
             snapshot.group.alpha = 0f;
@@ -65,17 +85,75 @@ namespace Edith.Snapshots
         public void Leave()
         {
             Leaving = true;
+            carried = false;
             target = 0f;
             enabled = true;
+        }
+
+        /// Follows `position` and `rotation` until FloatBack or Leave. Ignored once leaving.
+        public void Hold(Vector3 position, Quaternion rotation)
+        {
+            if (Leaving) return;
+            carried = true;
+            carryPosition = position;
+            carryRotation = rotation;
+            enabled = true;
+        }
+
+        /// Eases back to the box it was drawn in.
+        public void FloatBack()
+        {
+            carried = false;
+            enabled = true;
+        }
+
+        /// Shrinks and fades into `point`, then destroys the snapshot.
+        public void Pocket(Vector3 point)
+        {
+            Leave();
+            pocketing = true;
+            pocketFrom = transform.position;
+            pocketPoint = point;
+            fullScale = transform.localScale;
         }
 
         void Update()
         {
             fade = Mathf.MoveTowards(fade, target, Time.deltaTime / FadeSeconds);
             group.alpha = fade * fade * (3f - 2f * fade);
-            if (fade != target) return;
+            var settled = pocketing ? Shrink() : Follow();
+            if (fade != target || !settled) return;
             if (Leaving) Destroy(gameObject);
             else enabled = false;
+        }
+
+        bool Shrink()
+        {
+            pocketProgress = Mathf.MoveTowards(pocketProgress, 1f, Time.deltaTime / PocketSeconds);
+            var eased = pocketProgress * pocketProgress * (3f - 2f * pocketProgress);
+            transform.position = Vector3.Lerp(pocketFrom, pocketPoint, eased);
+            transform.localScale = fullScale * (1f - eased);
+            return pocketProgress >= 1f;
+        }
+
+        /// True once it has come to rest at its box.
+        bool Follow()
+        {
+            var goalPosition = carried ? carryPosition : Box.Center;
+            var goalRotation = carried ? carryRotation : Box.Eye.rotation;
+            var blend = 1f - Mathf.Exp(-(carried ? CarryFollow : ReturnFollow) * Time.deltaTime);
+            var position = Vector3.Lerp(transform.position, goalPosition, blend);
+            var rotation = Quaternion.Slerp(transform.rotation, goalRotation, blend);
+            var arrived = !carried
+                && (position - goalPosition).sqrMagnitude < 1e-6f
+                && Quaternion.Angle(rotation, goalRotation) < 0.1f;
+            if (arrived)
+            {
+                position = goalPosition;
+                rotation = goalRotation;
+            }
+            transform.SetPositionAndRotation(position, rotation);
+            return arrived;
         }
     }
 }
