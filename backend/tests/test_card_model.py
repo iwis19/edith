@@ -74,9 +74,10 @@ async def test_a_failed_fact_call_still_leaves_the_name_and_tier():
     assert [e.type for e in events] == ["name", "rarity"]
 
 
-async def test_a_naming_reply_with_no_name_fails_the_look():
+@pytest.mark.parametrize("reply", ["", "I don't know who this is."])
+async def test_a_naming_reply_outside_the_line_format_fails_the_look_instead_of_naming_it(reply):
     with pytest.raises(ValueError):
-        await run(CardModelAgent(FakeWriter(""), FakeWriter("A fact.")))
+        await run(CardModelAgent(FakeWriter(reply), FakeWriter("A fact.")))
 
 
 async def test_a_repeated_fact_is_rewritten_once_and_dropped_if_it_repeats_again():
