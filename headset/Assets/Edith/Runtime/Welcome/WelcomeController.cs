@@ -83,9 +83,14 @@ namespace Edith.Welcome
         WelcomeFlow flow = new WelcomeFlow();
         bool open, phoneKnown, leaving, greeted;
         AudioSource speaker;
+        // What EDITH was last told to say and when, so a line cut off by an audio reset can start again.
+        VoiceStyle? saying;
+        float sayingUntil;
 
         void Start()
         {
+            // Ask resets the audio output shortly after launch and after every pause, which stops whatever is playing.
+            AudioSettings.OnAudioConfigurationChanged += OnAudioReset;
             Build();
             if (!WelcomeStore.Done || everyLaunch) Open();
         }
@@ -197,6 +202,18 @@ namespace Edith.Welcome
             if (step == WelcomeStep.Done) Leave();
         }
 
+        void OnDestroy() => AudioSettings.OnAudioConfigurationChanged -= OnAudioReset;
+
+        /// Starts the line again when an audio reset cut it off.
+        void OnAudioReset(bool deviceWasChanged)
+        {
+            if (saying is VoiceStyle style && !leaving && Time.realtimeSinceStartup < sayingUntil)
+            {
+                Debug.Log($"[EDITH welcome] audio reset cut the {style} line, saying it again");
+                Say(style);
+            }
+        }
+
         /// Says EDITH's welcome line in `style`, cutting off whatever she was saying. Silent when the clip is missing.
         void Say(VoiceStyle style)
         {
@@ -215,6 +232,9 @@ namespace Edith.Welcome
             speaker.Stop();
             speaker.clip = clip;
             speaker.Play();
+            saying = style;
+            sayingUntil = Time.realtimeSinceStartup + clip.length;
+            Debug.Log($"[EDITH welcome] saying the {style} line, {clip.length:F1} s");
         }
 
         /// Step one fills the screen with EDITH beside it. Step two shows only its pane, scaled and held like
@@ -240,6 +260,7 @@ namespace Edith.Welcome
             if (leaving) return;
             leaving = true;
             if (speaker != null) speaker.Stop();
+            saying = null;
             // A paired phone completes the welcome. Skipping pairing also ends it, and brings the pairing panel back,
             // since the gate stays closed until a phone is paired.
             WelcomeStore.Done = true;
