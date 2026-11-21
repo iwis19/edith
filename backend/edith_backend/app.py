@@ -293,7 +293,7 @@ def create_app(
                 await asyncio.wait_for(recording.wait(), settings.look_timeout_s + 5)
             except TimeoutError:
                 pass
-        memory_id = await _stored(store.collect(profile_id, parsed.look_ref, data))
+        memory_id = await _stored(store.collect(profile_id, parsed.look_ref, data, parsed.collected_at))
         if memory_id is None:
             raise ApiError(404, "unknown_look", "This profile has no finished Look with that look_ref.")
         return {"memory_id": memory_id}

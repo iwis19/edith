@@ -57,7 +57,9 @@ class Store(Protocol):
     async def close(self) -> None: ...
     async def status(self) -> str: ...
     async def record_look(self, record: LookRecord) -> None: ...
-    async def collect(self, profile_id: UUID, look_ref: UUID, image: bytes) -> int | None:
+    async def collect(
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+    ) -> int | None:
         """Saves the finished Look as a memory, once per Look, and returns the memory's id. None when the profile has
         no finished Look with that ref. Raises StoreUnavailable."""
         ...
@@ -78,7 +80,9 @@ class DisabledStore:
     async def record_look(self, record: LookRecord) -> None:
         pass
 
-    async def collect(self, profile_id: UUID, look_ref: UUID, image: bytes) -> int | None:
+    async def collect(
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+    ) -> int | None:
         raise StoreUnavailable("There is no database.")
 
     async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]:
@@ -147,18 +151,22 @@ class PostgresStore:
         except Exception:
             log.exception("failed to record look %s", record.look_ref)
 
-    async def collect(self, profile_id: UUID, look_ref: UUID, image: bytes) -> int | None:
+    async def collect(
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+    ) -> int | None:
         try:
             async with self._pool.connection(timeout=10) as conn:
                 # The fields are copied from the stored Look, so the client cannot supply card text. A repeat inserts
-                # nothing and the existing row is read back.
+                # nothing and the existing row is read back. A headset clock ahead of the server is capped at now().
                 cursor = await conn.execute(
-                    """insert into memories (profile_id, look_ref, name, kind, fact, sources, rarity, place, image)
-                       select profile_id, id, name, kind, fact, fact_sources, rarity, place, %s from looks
+                    """insert into memories (profile_id, look_ref, name, kind, fact, sources, rarity, place, image,
+                                             created_at)
+                       select profile_id, id, name, kind, fact, fact_sources, rarity, place, %s,
+                              least(coalesce(%s::timestamptz, now()), now()) from looks
                        where id = %s and profile_id = %s and status = 'done' and name is not null
                        on conflict (look_ref) do nothing
                        returning id""",
-                    (image, look_ref, profile_id),
+                    (image, collected_at, look_ref, profile_id),
                 )
                 row = await cursor.fetchone()
                 if row is None:

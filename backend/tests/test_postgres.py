@@ -94,7 +94,8 @@ async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(
         for record in (first, second, failed, a_look(other)):
             await store.record_look(record)
 
-        first_id = await store.collect(profile, first.look_ref, b"crop-1")
+        first_id = await store.collect(profile, first.look_ref, b"crop-1",
+                                       datetime(2026, 11, 21, 8, tzinfo=UTC))
         assert await store.collect(profile, first.look_ref, b"other bytes") == first_id
         second_id = await store.collect(profile, second.look_ref, b"crop-2")
         assert await store.collect(profile, failed.look_ref, b"x") is None
@@ -104,6 +105,7 @@ async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(
         memories = await store.list_memories(profile, 10)
         assert [(m.id, m.name, m.rarity) for m in memories] == [(second_id, "lamp", "epic"), (first_id, "mug", "rare")]
         assert memories[1].sources == first.fact_sources
+        assert memories[1].created_at == datetime(2026, 11, 21, 8, tzinfo=UTC)
         assert [(m.kind, m.place) for m in memories] == [(None, None), ("mug", "Waterloo, Ontario, Canada")]
         assert await store.list_memories(profile, 1) == memories[:1]
         assert await store.list_memories(other, 10) == []

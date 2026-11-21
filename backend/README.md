@@ -69,7 +69,7 @@ The stream always starts with `accepted` and ends with `done` or `error`. In bet
 Saves a finished Look as a memory. A multipart form with two fields:
 
 - `image`: the JPEG to keep, under the same limits as `/look`'s image. A Look keeps no image, so the headset sends the snapshot it is pocketing.
-- `meta`: JSON `{"look_ref": "<look_ref from the accepted event>"}`.
+- `meta`: JSON `{"look_ref": "<look_ref from the accepted event>", "collected_at": ISO 8601 with a timezone}`. `collected_at` is optional and becomes the memory's `created_at`; it defaults to the server time, and a time ahead of the server is capped at the server time.
 
 The name, kind, fact, sources, rarity tier and place are copied from the Look the backend recorded, never from the request. If the Look is still streaming, the request waits for it to be recorded (at most `LOOK_TIMEOUT_S` plus 5 s). Collecting a Look again returns the first memory and keeps its first image.
 
@@ -84,7 +84,7 @@ The response is `{"memory_id": int}`.
 
 Lists the profile's memories, newest first, without image bytes. The optional `limit` query parameter is 1 to 500 and defaults to 100.
 
-The response is `{"memories": [{"id", "look_ref", "name", "kind", "fact", "sources", "rarity", "place", "created_at"}]}`. `kind` and `place` are `null` until the Card agent reports them. Answers 503 `db_unavailable` like `/collect`.
+The response is `{"memories": [{"id", "look_ref", "name", "kind", "fact", "sources", "rarity", "place", "created_at"}]}`. `kind` and `place` are `null` when the Card agent gave none. Answers 503 `db_unavailable` like `/collect`.
 
 ### `GET /memories/{id}/image`
 

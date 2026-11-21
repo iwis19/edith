@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 
 Rarity = Literal["common", "uncommon", "rare", "epic", "legendary", "mythic"]
 
@@ -15,6 +15,7 @@ class LookMeta(BaseModel):
 
 class CollectMeta(BaseModel):
     look_ref: UUID
+    collected_at: AwareDatetime | None = None
 
 
 class ScanMeta(BaseModel):

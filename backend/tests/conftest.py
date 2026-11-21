@@ -50,7 +50,7 @@ class RecordingStore:
     async def record_look(self, record: LookRecord) -> None:
         self.records.append(record)
 
-    async def collect(self, profile_id, look_ref, image):
+    async def collect(self, profile_id, look_ref, image, collected_at=None):
         for memory, owner, _ in self.memories.values():
             if memory.look_ref == look_ref and owner == profile_id:
                 return memory.id
@@ -59,7 +59,8 @@ class RecordingStore:
             return None
         memory = Memory(
             id=len(self.memories) + 1, look_ref=look_ref, name=record.name, kind=record.kind, fact=record.fact,
-            sources=record.fact_sources, rarity=record.rarity, place=record.place, created_at=datetime.now(UTC),
+            sources=record.fact_sources, rarity=record.rarity, place=record.place,
+            created_at=min(collected_at or datetime.now(UTC), datetime.now(UTC)),
         )
         self.memories[memory.id] = (memory, profile_id, image)
         return memory.id

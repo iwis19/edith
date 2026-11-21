@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 
 from edith_backend.app import create_app
@@ -19,9 +20,26 @@ async def look(client, headers=HEADERS) -> tuple[str, list[dict]]:
     return events[0]["look_ref"], events
 
 
-def collect(client, look_ref: str, image: bytes = CROP, headers=HEADERS):
-    files = {"image": ("crop.jpg", image, "image/jpeg"), "meta": (None, f'{{"look_ref": "{look_ref}"}}')}
+def collect(client, look_ref: str, image: bytes = CROP, headers=HEADERS, collected_at: str | None = None):
+    meta = {"look_ref": look_ref} | ({"collected_at": collected_at} if collected_at else {})
+    files = {"image": ("crop.jpg", image, "image/jpeg"), "meta": (None, json.dumps(meta))}
     return client.post("/collect", files=files, headers=headers)
+
+
+async def test_a_memory_is_dated_when_it_was_collected_but_never_in_the_future(client):
+    past, future = await look(client), await look(client)
+    await collect(client, past[0], collected_at="2026-11-21T08:00:00Z")
+    await collect(client, future[0], collected_at="2099-01-01T00:00:00Z")
+    dates = {m["look_ref"]: m["created_at"] for m in (await client.get("/memories", headers=HEADERS)).json()["memories"]}
+    assert dates[past[0]].startswith("2026-11-21T08:00:00")
+    assert not dates[future[0]].startswith("2099")
+
+
+async def test_a_collected_at_without_a_timezone_is_refused(client):
+    ref, _ = await look(client)
+    response = await collect(client, ref, collected_at="2026-11-21T08:00:00")
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_meta"
 
 
 async def test_collecting_a_finished_look_saves_a_memory_from_the_stored_card(client):
