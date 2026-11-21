@@ -164,13 +164,21 @@ The body is optional JSON. `{"voice": "Kore"}` picks the voice for this session;
 The response is `{"url", "setup", "model"}`:
 
 - `url`: the Live websocket address with a single-use token. The token opens one session, and that session must send its first message within about a minute.
-- `setup`: the JSON text the headset sends as its first message. It sets the model, spoken English, the voice, transcription of both sides (so the card can show the spoken answer) and EDITH's persona. With `LIVE_SEARCH=true` it adds Google Search.
+- `setup`: the JSON text the headset sends as its first message. It sets the model, spoken English, the voice, transcription of both sides (so the card can show the spoken answer) and EDITH's persona. With `LIVE_SEARCH=true` it adds the `googleSearch` tool and a persona line that limits searching to questions that need current or factual web information. The headset reads the sources from `serverContent.groundingMetadata.groundingChunks[].web` and shows up to three site names under the answer.
 - `model`: the Live model ID.
 
 | Status | `error.code` | Meaning |
 | --- | --- | --- |
 | 503 | `ask_unavailable` | `GEMINI_API_KEY` is not set |
 | 502 | `ask_failed` | Gemini refused to mint a token |
+
+To time a spoken-question turn with search on and off (five runs each, a weather question and a plain one), run in `backend/` with `GEMINI_API_KEY` set:
+
+```
+uv run python -m tools.search_latency --mode both --runs 5
+```
+
+It sends each question as realtime text and prints the milliseconds to the first answer audio, the end of the turn, and whether grounding came back.
 
 ### Phone location
 
@@ -247,7 +255,7 @@ Ask settings:
 | --- | --- | --- |
 | `LIVE_MODEL` | `gemini-3.8-live` | The Gemini Live model Ask talks to |
 | `LIVE_VOICE` | `Kore` | The prebuilt Live voice. Gemini silently falls back to its default for a name it does not know, so the backend accepts only listed names |
-| `LIVE_SEARCH` | `false` | Adds Google Search to the session. A free-tier key refuses the session with it on |
+| `LIVE_SEARCH` | `false` | Adds Google Search to the session. A free-tier key refuses the session with it on. Off until `tools/search_latency.py` shows the time to first audio stays acceptable |
 
 Scan settings:
 
