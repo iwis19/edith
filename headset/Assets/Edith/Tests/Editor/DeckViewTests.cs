@@ -165,7 +165,7 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_fact_hangs_under_the_photo_whatever_its_shape()
+        public void The_fact_hangs_under_the_photo_at_the_same_height_whatever_its_shape()
         {
             var wide = Photo(400, 100);
             view.Show(Memories(1), 0f, _ => wide);
@@ -174,7 +174,7 @@ namespace Edith.Tests
             var tall = Photo(100, 400);
             view.Show(Memories(1), 0f, _ => tall);
             Assert.That(Part(Middle, "Fact").position.y, Is.LessThan(PhotoBottom()));
-            Assert.That(Part(Middle, "Fact").position.y, Is.LessThan(wideFact), "it follows the taller photo's lower edge");
+            Assert.AreEqual(wideFact, Part(Middle, "Fact").position.y, 1e-4f, "a taller photo grows upward, so the fact stays clear of the chips");
         }
 
         float PhotoBottom()
