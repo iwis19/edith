@@ -263,5 +263,14 @@ namespace Edith.Tests
         {
             Assert.IsNull(PairingClient.ParseIssued(json));
         }
+
+        [Test]
+        public void A_shown_code_knows_when_it_runs_out()
+        {
+            var flow = new PairingFlow(false, 0f);
+            Assert.AreEqual(PairCall.RequestCode, flow.Next(0f));
+            flow.OnCode("4821", "https://edith.example/phone", 10f, 300f);
+            Assert.AreEqual(310f, flow.CodeExpiresAt, 1e-4f);
+        }
     }
 }

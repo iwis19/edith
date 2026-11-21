@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Edith.Snapshots;
+using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -24,11 +25,11 @@ namespace Edith.Ask
         const int SourcesFontSize = 36;
         public const int MaxSources = 3;
         public const float HomeCaptionMetres = 0.26f, MinCaptionMetres = 0.1f;
-        static readonly Color Quiet = new Color(0.78f, 0.8f, 0.85f, 0.85f);
-        static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
-        static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
-        static readonly Color Core = new Color(0.95f, 0.98f, 1f, 1f);
-        static readonly Color Rim = new Color(0.45f, 0.72f, 1f, 1f);
+        static readonly Color Quiet = Theme.Muted;
+        static readonly Color Bright = Theme.Ice;
+        const int ListeningFontSize = 34;
+        const float HeadShare = 0.64f;
+        const float PulseRate = 3f;
 
         // Rates of the exponential approach, per second: the position trails the head lazily, and the turn onto a
         // photo's plane or back to facing the eye is quicker.
@@ -47,9 +48,10 @@ namespace Edith.Ask
         bool atPerch;
         Vector2 spot = OrbPlacement.Home;
         float homeClearSince = -1f;
-        Text caption, sources;
-        RectTransform disc;
-        Texture2D discTexture;
+        Text caption, sources, listeningLabel;
+        RectTransform disc, halo;
+        Glass haloGlass;
+        bool listening;
         CanvasGroup group;
         float captionMetres;
         string shown = "";
@@ -87,37 +89,40 @@ namespace Edith.Ask
             orb.group.interactable = false;
             orb.group.blocksRaycasts = false;
 
-            orb.discTexture = Disc();
-            var image = new GameObject("Disc", typeof(RectTransform), typeof(RawImage)).GetComponent<RawImage>();
-            image.texture = orb.discTexture;
-            image.raycastTarget = false;
-            image.material = material;
-            orb.disc = image.rectTransform;
-            orb.disc.SetParent(rect, false);
-            orb.disc.anchorMin = Vector2.zero;
-            orb.disc.anchorMax = Vector2.one;
-            orb.disc.sizeDelta = Vector2.zero;
+            var diameter = OrbMetres * UnitsPerMetre;
+            var regular = Theme.Regular(font);
+            // The ring behind the disc: it breathes while EDITH listens and swells with the voice while it speaks.
+            orb.haloGlass = Glass.Build(rect, "Halo", Vector2.one * diameter, diameter * 0.5f, material);
+            orb.haloGlass.SetLook(Color.clear, Color.clear, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f), Color.clear);
+            orb.halo = orb.haloGlass.Rect;
 
-            var text = new GameObject("Caption", typeof(RectTransform), typeof(Text), typeof(UnityEngine.UI.Shadow)).GetComponent<Text>();
-            text.font = font;
-            text.fontSize = FontSize;
-            text.alignment = TextAnchor.MiddleLeft;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-            text.material = material;
-            var shadow = text.GetComponent<UnityEngine.UI.Shadow>();
-            shadow.effectColor = ShadowColor;
-            shadow.effectDistance = new Vector2(2f, -2f);
+            var body = Glass.Build(rect, "Disc", Vector2.one * diameter, diameter * 0.5f, material);
+            body.SetLook(Theme.DiscFill, new Color(1f, 1f, 1f, 0.1f), Theme.Cyan,
+                new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.38f));
+            orb.disc = body.Rect;
+            var head = Theme.Pixels(orb.disc, "Head", Theme.Head, material);
+            var headWidth = diameter * HeadShare;
+            head.rectTransform.sizeDelta = new Vector2(headWidth, headWidth * 17f / 21f);
+
+            var text = Theme.Label(rect, "Caption", regular, FontSize, Bright, TextAnchor.MiddleLeft, material);
             var captionRect = text.rectTransform;
-            captionRect.SetParent(rect, false);
             captionRect.anchorMin = captionRect.anchorMax = new Vector2(1f, 0.5f);
             captionRect.pivot = new Vector2(0f, 0.5f);
             captionRect.anchoredPosition = new Vector2(GapMetres * UnitsPerMetre, 0f);
             orb.caption = text;
 
+            orb.listeningLabel = Theme.Label(rect, "Listening", regular, ListeningFontSize, Bright, TextAnchor.UpperCenter, material);
+            orb.listeningLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var labelRect = orb.listeningLabel.rectTransform;
+            labelRect.anchorMin = labelRect.anchorMax = new Vector2(0.5f, 0f);
+            labelRect.pivot = new Vector2(0.5f, 1f);
+            labelRect.sizeDelta = new Vector2(diameter * 2f, ListeningFontSize * 1.4f);
+            labelRect.anchoredPosition = new Vector2(0f, -diameter * 0.08f);
+            orb.listeningLabel.text = "Listening";
+            orb.listeningLabel.enabled = false;
+
             var names = new GameObject("Sources", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
-            names.font = font;
+            names.font = regular;
             names.fontSize = SourcesFontSize;
             names.color = Quiet;
             names.alignment = TextAnchor.UpperLeft;
@@ -205,8 +210,27 @@ namespace Edith.Ask
             return OrbPlacement.Perch(new Pose(photo.position, photo.rotation), asked.Box.Size);
         }
 
-        public void ShowListening() => Show("listening…", Quiet);
-        public void ShowProblem(string line) => Show(line, Quiet);
+        /// True from the start of a question until the answer or a problem takes over: the orb breathes and says so
+        /// under itself, and the caption holds only what was heard.
+        public bool Listening => listening;
+
+        public void ShowListening()
+        {
+            SetListening(true);
+            Show("", Quiet);
+        }
+
+        public void ShowProblem(string line)
+        {
+            SetListening(false);
+            Show(line, Quiet);
+        }
+
+        void SetListening(bool value)
+        {
+            listening = value;
+            listeningLabel.enabled = value;
+        }
 
         /// Shows `words`, what was heard so far, in quotes. Nothing heard yet leaves the caption as it is.
         public void ShowHeard(string words)
@@ -225,6 +249,7 @@ namespace Edith.Ask
             if (text == answer && typed == revealed && caption.color == Bright) return;
             answer = text;
             revealed = typed;
+            SetListening(false);
             Show(text.Substring(0, revealed), Bright);
         }
 
@@ -318,31 +343,23 @@ namespace Edith.Ask
             var goal = Mathf.Clamp01(Level);
             level = Mathf.Lerp(level, goal, 1f - Mathf.Exp(-(goal > level ? LevelAttack : LevelRelease) * dt));
             disc.localScale = Vector3.one * (1f + SpeakPulse * level);
+            Breathe();
         }
 
-        void OnDestroy()
+        /// The ring behind the disc: a slow swell that fades as it grows while listening, and a ring that follows the
+        /// voice's loudness while speaking.
+        void Breathe()
         {
-            if (discTexture != null) Destroy(discTexture);
-        }
-
-        /// A soft disc, white at the centre and blue toward a feathered rim.
-        static Texture2D Disc()
-        {
-            const int size = 64;
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { name = "EDITH orb", wrapMode = TextureWrapMode.Clamp };
-            var pixels = new Color32[size * size];
-            var centre = (size - 1) * 0.5f;
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
+            var cyan = Theme.Cyan;
+            if (listening)
             {
-                var r = new Vector2(x - centre, y - centre).magnitude / (size * 0.5f);
-                var colour = Color.Lerp(Core, Rim, Mathf.SmoothStep(0f, 1f, r * 1.3f));
-                colour.a = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.6f, 1f, r));
-                pixels[y * size + x] = colour;
+                var swell = 0.5f + 0.5f * Mathf.Sin(Time.time * PulseRate);
+                halo.localScale = Vector3.one * (1f + 0.22f * swell);
+                haloGlass.SetOutline(new Color(cyan.r, cyan.g, cyan.b, Mathf.Lerp(0.55f, 0.08f, swell)));
+                return;
             }
-            texture.SetPixels32(pixels);
-            texture.Apply(false, true);
-            return texture;
+            halo.localScale = Vector3.one * (1f + 0.3f * level);
+            haloGlass.SetOutline(new Color(cyan.r, cyan.g, cyan.b, 0.12f + 0.4f * level));
         }
     }
 }

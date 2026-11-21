@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from edith_backend.agents.ask import ASK_PROMPT, NAV_NOTE, SEARCH_NOTE, LiveAsk
+from edith_backend.agents.ask import ASK_PROMPT, NAV_NOTE, NAV_START_NOTE, SEARCH_NOTE, LiveAsk
 from edith_backend.location import Locations, Sight, Whereabouts
 from edith_backend.app import create_app
 from edith_backend.config import LIVE_VOICES, Settings
@@ -167,3 +167,10 @@ async def test_a_malformed_hint_is_refused_before_a_token_is_minted(settings, st
     response = await ask_session(settings, store, live(seen), {"hint": hint})
     assert response.status_code == 422
     assert seen == []
+
+
+async def test_the_directions_gesture_tells_gemini_to_search_for_what_is_said(settings, store):
+    plain = setup_of(await ask_session(settings, store, live()))["systemInstruction"]["parts"][0]["text"]
+    assert NAV_START_NOTE not in plain
+    gesture = setup_of(await ask_session(settings, store, live(), {"navigate": True}))
+    assert NAV_START_NOTE in gesture["systemInstruction"]["parts"][0]["text"]

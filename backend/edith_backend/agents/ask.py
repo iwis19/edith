@@ -74,6 +74,14 @@ FIND_PLACE = {
         "required": ["category"],
     },
 }
+# Appended when the session was opened by the two-handed finger-gun gesture, whose prompt is already on screen.
+NAV_START_NOTE = (
+    "The person just made EDITH's directions gesture, and the headset is showing your question: \"Where's our next "
+    "adventure?\" Whatever they say now is where they want to go, even a word or two such as coffee or the library: "
+    "call find_place for it straight away, with the closest category and any name they gave. If it is unclear, pick "
+    "the most likely kind of place rather than asking back."
+)
+
 STOP_NAVIGATION = {"name": "stop_navigation", "description": "Stops the directions and hides the blue arrow."}
 
 # Appended to the persona when the person is looking at a Scan pin as they ask.
@@ -112,6 +120,8 @@ class AskHint(BaseModel):
 class AskRequest(BaseModel):
     voice: LiveVoice | None = None
     hint: AskHint | None = None
+    # True when the finger-gun gesture opened the session to ask where to go.
+    navigate: bool = False
 
 
 class AskSession(BaseModel):
@@ -145,7 +155,8 @@ class LiveAsk:
                     "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": request.voice or self._voice}},
                 },
             },
-            "systemInstruction": {"parts": [{"text": _persona(found, request.hint, self._search, hunt)}]},
+            "systemInstruction": {"parts": [{"text": _persona(found, request.hint, self._search, hunt,
+                                                              request.navigate)}]},
             "inputAudioTranscription": {},
             "outputAudioTranscription": {},
         }
@@ -170,11 +181,15 @@ class LiveAsk:
             raise AskError(f"{type(exc).__name__}: {exc}") from exc
 
 
-def _persona(found: Whereabouts | None, hint: AskHint | None, search: bool, hunt: HuntState | None) -> str:
+def _persona(
+    found: Whereabouts | None, hint: AskHint | None, search: bool, hunt: HuntState | None = None, navigate: bool = False
+) -> str:
     notes = [ASK_PROMPT]
     if search:
         notes.append(SEARCH_NOTE)
     notes.append(NAV_NOTE)
+    if navigate:
+        notes.append(NAV_START_NOTE)
     facts = describe_place(found, PROMPT_SIGHTS)
     if facts is not None:
         notes.append(PLACE_NOTE.format(facts=facts))

@@ -14,6 +14,10 @@ namespace Edith.Hands
 
         public abstract HandSide Side { get; }
 
+        /// The hand as tracked, even while the gate is closed. Only the welcome reads it, to tap its own buttons
+        /// before a phone is paired; every gesture reads Read.
+        public HandFrame ReadUngated() => (reader ??= new HandReader(Side, hand, skeleton, eye)).Read();
+
         public HandFrame Read() => (reader ??= new HandReader(Side, hand, skeleton, eye)).Read().Gated(PairingGate.Open);
     }
 }

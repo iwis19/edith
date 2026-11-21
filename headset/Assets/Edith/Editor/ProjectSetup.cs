@@ -111,6 +111,7 @@ namespace Edith.Editor
             AskSetup.AddToScene(ScenePath);
             NavigationSetup.AddToScene(ScenePath);
             PairingSetup.AddToScene(ScenePath);
+            WelcomeSetup.AddToScene(ScenePath);
             LookSetup.EnableCameraAccess();
             LookSetup.AddToScene(ScenePath);
             ScanSetup.AddToScene(ScenePath);
