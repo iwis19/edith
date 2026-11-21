@@ -58,7 +58,33 @@ The response is newline-delimited JSON (`application/x-ndjson`), one event per l
 | `done` | none |
 | `error` | `code` (`timeout` or `agent_failed`), `message` |
 
-The stream always starts with `accepted` and ends with `done` or `error`. In between, `fact` and `rarity` can each be missing (a repeated fact is dropped, an unreadable tier is skipped) and can come in either order, so a client must key on `type`, not position. A bad request is refused before streaming with an HTTP error and `{"error": {"code", "message"}}`. The token and the body size (the image cap plus 64 KB for the form) are checked before any of the body is read. Each finished Look is written to the `looks` table.
+The stream always starts with `accepted` and ends with `done` or `error`. In between, `fact` and `rarity` can each be missing (a repeated fact is dropped, an unreadable tier is skipped) and can come in either order, so a client must key on `type`, not position. A bad request is refused before streaming with an HTTP error and `{"error": {"code", "message"}}`. The token and the body size (the image cap plus 64 KB for the form) are checked before any of the body is read. Each finished Look is written to the `looks` table, and `/collect` turns one into a memory.
+
+### `POST /collect`
+
+Saves a finished Look as a memory. A multipart form with two fields:
+
+- `image`: the JPEG to keep, under the same limits as `/look`'s image. A Look keeps no image, so the headset sends the snapshot it is pocketing.
+- `meta`: JSON `{"look_ref": "<look_ref from the accepted event>"}`.
+
+The name, kind, fact, sources, rarity tier and place are copied from the Look the backend recorded, never from the request. If the Look is still streaming, the request waits for it to be recorded (at most `LOOK_TIMEOUT_S` plus 5 s). Collecting a Look again returns the first memory and keeps its first image.
+
+The response is `{"memory_id": int}`.
+
+| Status | `error.code` | Meaning |
+| --- | --- | --- |
+| 404 | `unknown_look` | The profile has no finished Look with that `look_ref`, or the Look ended in `error` |
+| 503 | `db_unavailable` | There is no database or the write failed |
+
+### `GET /memories`
+
+Lists the profile's memories, newest first, without image bytes. The optional `limit` query parameter is 1 to 500 and defaults to 100.
+
+The response is `{"memories": [{"id", "look_ref", "name", "kind", "fact", "sources", "rarity", "place", "created_at"}]}`. `kind` and `place` are `null` until the Card agent reports them. Answers 503 `db_unavailable` like `/collect`.
+
+### `GET /memories/{id}/image`
+
+Returns the memory's JPEG (`image/jpeg`). Answers 404 `unknown_memory` for an id that is missing or belongs to another profile, and 503 `db_unavailable` like `/collect`.
 
 ### `POST /ask/session`
 
@@ -155,5 +181,5 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/agents/writers.py`: the OpenAI and Gemini streaming writers.
 - `edith_backend/events.py`: the stream's event types and the Look metadata.
 - `edith_backend/db.py`: the pooled Postgres store, or a no-op store with no database.
-- `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema.
+- `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills.
 - `tools/stream_check.py`: prints the arrival time of each event of one Look.
