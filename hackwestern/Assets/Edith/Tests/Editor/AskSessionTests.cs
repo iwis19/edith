@@ -184,6 +184,18 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_point_more_than_25_degrees_off_the_line_of_sight_is_not_looked_at()
+        {
+            var eye = new Vector3(0f, 1.6f, 0f);
+            Vector3 At(float degrees) => eye + Quaternion.Euler(0f, degrees, 0f) * Vector3.forward * 2f;
+            Assert.AreEqual(0, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(24f) }));
+            Assert.AreEqual(-1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(26f) }));
+            Assert.AreEqual(-1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(90f), At(180f) }),
+                "beside and behind");
+            Assert.AreEqual(1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(-60f), At(20f) }));
+        }
+
+        [Test]
         public void A_tap_in_line_with_a_card_hits_it_from_any_distance()
         {
             var box = new SightBox(new Pose(Vector3.zero, Quaternion.identity), Rect.MinMaxRect(-0.2f, -0.1f, 0.2f, 0.1f), 2f);

@@ -107,7 +107,7 @@ namespace Edith.Ask
             Debug.Log($"[EDITH ask] listening, {(photo != null ? "with" : "without")} a photo");
         }
 
-        /// The photo of the snapshot nearest the line of sight, or null when no snapshot has one.
+        /// The photo of the snapshot nearest the line of sight, or null when no snapshot with a photo is near it.
         Texture NearestPhoto()
         {
             if (room == null) return null;

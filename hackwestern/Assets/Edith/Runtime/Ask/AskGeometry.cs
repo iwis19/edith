@@ -6,8 +6,11 @@ namespace Edith.Ask
 {
     public static class AskGeometry
     {
+        /// How far from the line of sight a point may be and still count as looked at.
+        public const float MaxGazeDegrees = 25f;
+
         /// The index of the point with the smallest angle between `gaze` and the direction from `eye` to it, or -1
-        /// when there are none.
+        /// when none is within MaxGazeDegrees of `gaze`.
         public static int NearestToGaze(Vector3 eye, Vector3 gaze, IReadOnlyList<Vector3> points)
         {
             var nearest = -1;
@@ -17,7 +20,7 @@ namespace Edith.Ask
                 var to = points[i] - eye;
                 if (to.sqrMagnitude < 1e-8f) continue;
                 var angle = Vector3.Angle(gaze, to);
-                if (angle >= best) continue;
+                if (angle > MaxGazeDegrees || angle >= best) continue;
                 best = angle;
                 nearest = i;
             }
