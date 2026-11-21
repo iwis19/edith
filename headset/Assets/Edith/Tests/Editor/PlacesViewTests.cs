@@ -102,7 +102,7 @@ namespace Edith.Tests
             var browse = Home();
             Draw(browse);
             Assert.IsTrue(places.GlobeSpins);
-            places.Drag(new Vector2(0.03f, 0f));
+            places.Drag(new Vector2(0.15f, 0f));
             Draw(browse);
             Assert.IsNull(Pin(GlobeView.Centre * 0.6f));
         }

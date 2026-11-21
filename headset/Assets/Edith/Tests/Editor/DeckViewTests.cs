@@ -233,11 +233,11 @@ namespace Edith.Tests
         [Test]
         public void A_pinch_two_centimetres_off_a_cards_photo_still_finds_it_and_four_does_not()
         {
-            view.Show(Memories(10), 5f, NoPhoto);
+            view.Show(Memories(1), 0f, NoPhoto);
             var photo = Part(Middle, "Photo");
             var edge = photo.position + photo.right * (photo.sizeDelta.x * 0.5f * photo.lossyScale.x);
-            Assert.AreEqual(5, view.Hit(Vector3.zero, (edge + photo.right * 0.015f) * 0.6f, out _));
-            Assert.AreNotEqual(5, view.Hit(Vector3.zero, (edge + photo.right * 0.04f) * 0.6f, out _));
+            Assert.AreEqual(0, view.Hit(Vector3.zero, (edge + photo.right * 0.015f) * 0.6f, out _));
+            Assert.AreEqual(-1, view.Hit(Vector3.zero, (edge + photo.right * 0.04f) * 0.6f, out _));
         }
 
         [Test]

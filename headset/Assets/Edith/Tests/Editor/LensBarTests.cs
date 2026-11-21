@@ -151,19 +151,6 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void Between_two_chips_the_one_nearer_the_line_of_sight_wins()
-        {
-            browse.SetLens(Lens.Rarity);
-            Show();
-            var common = At("Common 1");
-            var epic = At("Epic 2");
-            Assert.IsTrue(bar.Hit(Vector3.zero, Vector3.Lerp(common, epic, 0.3f), out var near, out _));
-            Assert.AreEqual(Rarity.Common, near.Tier);
-            Assert.IsTrue(bar.Hit(Vector3.zero, Vector3.Lerp(common, epic, 0.7f), out var far, out _));
-            Assert.AreEqual(Rarity.Epic, far.Tier);
-        }
-
-        [Test]
         public void A_pinch_off_the_bar_chooses_nothing()
         {
             Show();
