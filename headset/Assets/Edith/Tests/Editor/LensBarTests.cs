@@ -178,28 +178,21 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_tabs_sit_just_above_the_middle_card_and_the_chips_below_the_deck()
+        public void The_tabs_sit_over_the_chips_and_both_rows_are_under_the_deck_within_reach()
         {
             Show(new DateTime(2026, 11, 21));
-            var middle = DeckLayout.Pose(0f).Position;
-            var deckTop = middle.y + 0.105f;
-            var deckBottom = middle.y - 0.105f;
-            foreach (var tab in new[] { "Places", "Time", "Rarity" })
+            var deckBottom = DeckLayout.Pose(0f).Position.y - 0.105f;
+            foreach (var label in new[] { "Places", "Time", "Rarity", "11/21", "11/20", "11/18" })
             {
-                Assert.That(At(tab).y, Is.InRange(deckTop + 0.01f, deckTop + 0.06f), tab);
-                Assert.That(At(tab).z, Is.EqualTo(middle.z).Within(0.01f));
+                Assert.That(At(label).y, Is.LessThan(deckBottom), label);
+                Assert.That(At(label).y, Is.GreaterThan(-0.3f), label);
+                Assert.That(At(label).z, Is.InRange(0.35f, 0.5f), label);
             }
-            Assert.That(At("Time").x, Is.EqualTo(0f).Within(1e-3f), "the tabs are centred over the middle card");
-            foreach (var day in new[] { "11/21", "11/20", "11/18" })
-            {
-                Assert.That(At(day).y, Is.LessThan(deckBottom), day);
-                Assert.That(At(day).y, Is.GreaterThan(-0.3f));
-                Assert.That(At(day).z, Is.InRange(0.35f, 0.5f));
-            }
+            Assert.That(At("Time").y, Is.GreaterThan(At("11/21").y));
         }
 
         [Test]
-        public void A_pinch_finds_a_tab_above_the_deck_and_a_chip_below_it()
+        public void A_pinch_finds_a_tab_and_a_chip()
         {
             Show(new DateTime(2026, 11, 21));
             Assert.IsTrue(Pinch("Time", out var tab));

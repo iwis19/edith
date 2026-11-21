@@ -4,7 +4,7 @@ using Edith.Look;
 
 namespace Edith.Scrapbook
 {
-    /// A way to reach the past. Each lens has a tab above the deck, in this order, and its own row of chips under it.
+    /// A way to reach the past. Each lens has a tab on the lens bar, in this order, and its own row of chips under it.
     public enum Lens { Places, Time, Rarity }
 
     public enum ChipKind { Tab, Date, Tier, City, Globe, Spot }
@@ -168,7 +168,7 @@ namespace Edith.Scrapbook
             foreach (Lens lens in Enum.GetValues(typeof(Lens))) into.Add(Chip.Tab(lens, lens == Lens));
         }
 
-        /// The chips under the deck. Places: at the globe one chip per city, and in a city "Globe" and one chip per
+        /// The chips under the tabs. Places: at the globe one chip per city, and in a city "Globe" and one chip per
         /// spot. Time: up to DateChips days, newest first, around `centred`, the day of the card in the middle of the
         /// deck. Rarity: one chip per tier, rarest last, whether or not
         /// it has a memory.

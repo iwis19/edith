@@ -5,16 +5,15 @@ using UnityEngine.UI;
 
 namespace Edith.Scrapbook
 {
-    /// The lens bar in two rows: the tabs just above the deck's middle card, and under the deck the chips the lens
-    /// in use offers. Each row leans back to face the eye.
+    /// The bar under the deck in two rows: the lens tabs, and under them the chips the lens in use offers. Each row
+    /// leans back to face the eye.
     public sealed class LensBar
     {
         // Four canvas units per millimetre, so the font is rasterised sharply enough at this size.
         const float UnitsPerMetre = 4000f;
-        // In the deck's frame: the tabs about 3 cm over the middle card's top edge, and the chips under the card's
-        // text, a little nearer than the cards so a hand reaches them first.
-        static readonly Vector3 TabsCentre = new Vector3(0f, 0.075f, 0.45f);
-        static readonly Vector3 ChipsCentre = new Vector3(0f, -0.205f, 0.42f);
+        // In the deck's frame: under the card's text, and a little nearer than the cards so a hand reaches them first.
+        static readonly Vector3 TabsCentre = new Vector3(0f, -0.194f, 0.42f);
+        static readonly Vector3 ChipsCentre = new Vector3(0f, -0.215f, 0.42f);
         // A pinch this near a chip still chooses it: a fingertip is about this much wider than the chip's gap.
         const float HitMargin = 0.002f;
         // The alpha of a chip that offers nothing, relative to a live one.

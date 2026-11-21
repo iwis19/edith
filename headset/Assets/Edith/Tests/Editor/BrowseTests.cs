@@ -148,7 +148,7 @@ namespace Edith.Tests
         {
             var chips = Chips(Six(), Day(18));
             CollectionAssert.AreEqual(new[] { "11/21", "11/20", "11/18", "11/12" }, Labels(chips));
-            CollectionAssert.AreEqual(new[] { false, false, true, false, false, false }, chips.Select(chip => chip.Selected).ToArray());
+            CollectionAssert.AreEqual(new[] { false, false, true, false }, chips.Select(chip => chip.Selected).ToArray());
             Assert.AreEqual(ChipKind.Date, chips[2].Kind);
             Assert.AreEqual(Day(18), chips[2].Date);
         }
