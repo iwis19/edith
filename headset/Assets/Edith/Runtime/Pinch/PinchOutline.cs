@@ -45,7 +45,7 @@ namespace Edith.Pinch
         {
             if (gate != null && gate.Held)
             {
-                line.enabled = false;
+                canvas.enabled = false;
                 return;
             }
             switch (reading.Event)
