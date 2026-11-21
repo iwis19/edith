@@ -120,6 +120,7 @@ The headset has no GPS, so the phone that runs the hotspot shares its position w
 
 - Never use a pinch with the palm facing you: that is Quest's system menu gesture.
 - Keep gestures in front of the chest and under a second long.
+- A grab only counts when the hand was clearly open within the last second before it closes into a fist, so a hand relaxing after a pinch never grabs.
 - Every gesture gets visual or audio feedback.
 - It should also be made easy at the end for people to start a new profile (new interests, new voices, new wtv yk)
 
