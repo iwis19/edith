@@ -78,7 +78,9 @@ namespace Edith.Scan
             var rightPalm = Palm(right);
             var leftRead = Read(left, leftPalm, left.PalmNormal);
             var rightRead = Read(right, rightPalm, right.PalmNormal);
-            var ahead = Ahead(right, leftPalm) && Ahead(right, rightPalm);
+            // A peace sign is the welcome's gesture, and its two straight fingers would otherwise pass for an open hand.
+            var ahead = Ahead(right, leftPalm) && Ahead(right, rightPalm)
+                        && !HandShape.PeaceSign(left) && !HandShape.PeaceSign(right);
             var posed = ahead && Mathf.Min(leftRead.Away, rightRead.Away) > tuning.palmAwayMin
                               && !leftRead.FloorFacing(tuning) && !rightRead.FloorFacing(tuning)
                               && Mathf.Min(leftRead.Curl, rightRead.Curl) > tuning.openCurl;

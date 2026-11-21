@@ -157,13 +157,6 @@ namespace Edith.Pairing
                 andType.text = "and type";
                 ShowCode(flow.Code);
             }
-            else if (flow.Phase == PairPhase.Connected)
-            {
-                title.text = "Phone connected";
-                line.text = "EDITH knows where you are.";
-                address.text = andType.text = "";
-                ShowCode(null);
-            }
             var target = flow.Visible && !Suppressed ? 1f : 0f;
             group.alpha = Mathf.MoveTowards(group.alpha, target, Time.deltaTime / FadeSeconds);
             canvas.enabled = group.alpha > 0f;
@@ -173,6 +166,7 @@ namespace Edith.Pairing
         {
             canvas = gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            Theme.Sharpen(gameObject);
             group = gameObject.AddComponent<CanvasGroup>();
             group.alpha = 0f;
             canvas.enabled = false;
@@ -188,7 +182,7 @@ namespace Edith.Pairing
             var width = Size.x - 40f;
             title = Label("Title", root, semibold, 42, Theme.Ice, new Vector2(width, 56f), new Vector2(0f, 150f));
             line = Label("Line", root, regular, 27, Theme.Muted, new Vector2(width, 40f), new Vector2(0f, 98f));
-            address = Label("Address", root, semibold, 36, Theme.Cyan, new Vector2(width, 48f), new Vector2(0f, 50f));
+            address = Label("Address", root, semibold, 36, Theme.Accent, new Vector2(width, 48f), new Vector2(0f, 50f));
             andType = Label("AndType", root, regular, 27, Theme.Muted, new Vector2(width, 40f), new Vector2(0f, 8f));
             for (var i = 0; i < 4; i++)
             {
@@ -218,8 +212,8 @@ namespace Edith.Pairing
             {
                 var digit = code != null && i < code.Length;
                 digits[i].text = digit ? code[i].ToString() : "";
-                boxes[i].SetLook(digit ? Theme.ChipFill : new Color(0.04f, 0.2f, 0.22f, 0.2f), new Color(1f, 1f, 1f, 0.1f),
-                    digit ? Theme.Cyan : new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f), Color.clear);
+                boxes[i].SetLook(digit ? Theme.ChipFill : Theme.Tint(0.2f), new Color(1f, 1f, 1f, 0.1f),
+                    digit ? Theme.Accent : new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f), Color.clear);
             }
         }
 

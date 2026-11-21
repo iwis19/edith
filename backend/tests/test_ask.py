@@ -56,7 +56,7 @@ async def test_the_setup_asks_for_spoken_english_with_transcripts(settings, stor
     assert config["speechConfig"]["voiceConfig"] == {"prebuiltVoiceConfig": {"voiceName": "Kore"}}
     assert setup["inputAudioTranscription"] == {}
     assert setup["outputAudioTranscription"] == {}
-    assert setup["systemInstruction"]["parts"][0]["text"] == f"{ASK_PROMPT}\n\n{NAV_NOTE}"
+    assert setup["systemInstruction"]["parts"][0]["text"] == ASK_PROMPT
     assert "always answer in English" in ASK_PROMPT
 
 
@@ -81,17 +81,20 @@ def test_the_configured_voice_must_be_a_known_one():
 
 
 async def test_search_is_offered_only_when_turned_on(settings, store):
-    tools = setup_of(await ask_session(settings, store, live()))["tools"]
+    tools = setup_of(await ask_session(settings, store, live())).get("tools", [])
     assert {"googleSearch": {}} not in tools
     searching = setup_of(await ask_session(settings, store, live(search=True)))
     assert {"googleSearch": {}} in searching["tools"]
 
 
-async def test_the_navigation_tools_are_always_offered_and_explained(settings, store):
-    setup = setup_of(await ask_session(settings, store, live()))
-    declared = [f["name"] for t in setup["tools"] for f in t.get("functionDeclarations", [])]
+async def test_the_navigation_tools_are_offered_only_to_the_directions_gesture(settings, store):
+    plain = setup_of(await ask_session(settings, store, live()))
+    assert "tools" not in plain
+    assert NAV_NOTE not in plain["systemInstruction"]["parts"][0]["text"]
+    gesture = setup_of(await ask_session(settings, store, live(), {"navigate": True}))
+    declared = [f["name"] for t in gesture["tools"] for f in t.get("functionDeclarations", [])]
     assert declared == ["find_place", "stop_navigation"]
-    assert NAV_NOTE in setup["systemInstruction"]["parts"][0]["text"]
+    assert NAV_NOTE in gesture["systemInstruction"]["parts"][0]["text"]
 
 
 async def test_the_persona_limits_search_to_questions_that_need_the_web(settings, store):
@@ -148,7 +151,7 @@ async def test_the_persona_names_the_phones_place_and_nearest_sights_when_a_fix_
 
 async def test_with_no_fix_the_persona_has_no_place(settings, store):
     setup = setup_of(await ask_session(settings, store, live()))
-    assert setup["systemInstruction"]["parts"][0]["text"] == f"{ASK_PROMPT}\n\n{NAV_NOTE}"
+    assert setup["systemInstruction"]["parts"][0]["text"] == ASK_PROMPT
 
 
 async def test_a_scan_pin_hint_names_what_this_means(settings, store):

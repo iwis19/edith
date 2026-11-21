@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 namespace Edith.Pinch
 {
-    /// Draws the box while it is dragged and freezes it on release: a glowing cyan rounded frame with a white sight
+    /// Draws the box while it is dragged and freezes it on release: a glowing ice-blue rounded frame with a white sight
     /// corner just inside each corner of the box. Once the release is confirmed the snapshot's card takes its place.
     public sealed class PinchOutline : MonoBehaviour
     {
@@ -14,7 +14,7 @@ namespace Edith.Pinch
         const float UnitsPerMetre = 1000f;
         const float RadiusMm = 12f;
         const float ArmMm = 9f, ThickMm = 1.4f, InsetMm = 8f;
-        static readonly Color Edge = new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.95f);
+        static readonly Color Edge = new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.95f);
 
         [SerializeField] PinchInput input;
         /// While another panel holds it, a dragged pinch draws no box. Optional.
@@ -90,10 +90,10 @@ namespace Edith.Pinch
             rect.SetPositionAndRotation(box.Center, box.Eye.rotation);
             rect.sizeDelta = size;
             frame.Resize(size);
-            frame.SetLook(new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.04f * strength),
-                new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.3f * strength),
+            frame.SetLook(new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.04f * strength),
+                new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.3f * strength),
                 new Color(Edge.r, Edge.g, Edge.b, Edge.a * strength),
-                new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f * strength));
+                new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f * strength));
 
             // Corners shrink with a small box so they never cross.
             var shortSide = Mathf.Min(size.x, size.y);

@@ -57,7 +57,6 @@ namespace Edith.Editor
                 AssetDatabase.LoadAssetAtPath<Material>(DepthSetup.OccludedUIMaterialPath)
                 ?? throw new InvalidOperationException($"Missing {DepthSetup.OccludedUIMaterialPath}; run DepthSetup first"));
             PinchSetup.SetObject(welcome, "pairing", pairing);
-            PinchSetup.SetObject(welcome, "pinch", pinch.GetComponent<PinchInput>());
             PinchSetup.SetObject(welcome, "right", pinch.GetComponent<RightHandSource>()
                 ?? throw new InvalidOperationException($"{PinchObjectName} has no RightHandSource; run PinchSetup first"));
             PinchSetup.SetObject(welcome, "left", pinch.GetComponent<LeftHandSource>()

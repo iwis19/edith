@@ -111,16 +111,15 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void TheConfirmedPairingUnlocksAtOnceAndShowsConnectedForTwoSeconds()
+        public void TheConfirmedPairingUnlocksAndHidesThePanelAtOnce()
         {
             var flow = ShowingCode(out _);
             flow.Next(4f);
             flow.OnStatus(true, false, 4f);
             Assert.AreEqual(PairPhase.Connected, flow.Phase);
             Assert.IsFalse(flow.Locked);
-            Assert.IsTrue(flow.Visible);
+            Assert.IsFalse(flow.Visible, "the panel goes as soon as the phone connects");
             Assert.AreEqual(PairCall.None, flow.Next(5.9f));
-            Assert.IsTrue(flow.Visible);
             Assert.AreEqual(PairCall.None, flow.Next(6f));
             Assert.AreEqual(PairPhase.Paired, flow.Phase);
             Assert.IsFalse(flow.Visible);

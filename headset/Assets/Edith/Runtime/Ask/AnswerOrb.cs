@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Edith.Snapshots;
 using Edith.UI;
 using UnityEngine;
@@ -22,8 +21,6 @@ namespace Edith.Ask
         const int FontSize = 56;
         const float CaptionHeight = 160f;
         public const int MaxLines = 2;
-        const int SourcesFontSize = 36;
-        public const int MaxSources = 3;
         public const float HomeCaptionMetres = 0.26f, MinCaptionMetres = 0.1f;
         static readonly Color Quiet = Theme.Muted;
         static readonly Color Bright = Theme.Ice;
@@ -48,7 +45,7 @@ namespace Edith.Ask
         bool atPerch;
         Vector2 spot = OrbPlacement.Home;
         float homeClearSince = -1f;
-        Text caption, sources, listeningLabel;
+        Text caption, listeningLabel;
         RectTransform disc, halo;
         Glass haloGlass;
         bool listening;
@@ -78,6 +75,7 @@ namespace Edith.Ask
             rect.localScale = Vector3.one / UnitsPerMetre;
             var canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            Theme.Sharpen(root);
             // Drawn after the snapshots whatever the distances, since transparent UI sorts by distance otherwise.
             canvas.sortingOrder = 1;
 
@@ -93,12 +91,12 @@ namespace Edith.Ask
             var regular = Theme.Regular(font);
             // The ring behind the disc: it breathes while EDITH listens and swells with the voice while it speaks.
             orb.haloGlass = Glass.Build(rect, "Halo", Vector2.one * diameter, diameter * 0.5f, material);
-            orb.haloGlass.SetLook(Color.clear, Color.clear, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f), Color.clear);
+            orb.haloGlass.SetLook(Color.clear, Color.clear, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f), Color.clear);
             orb.halo = orb.haloGlass.Rect;
 
             var body = Glass.Build(rect, "Disc", Vector2.one * diameter, diameter * 0.5f, material);
-            body.SetLook(Theme.DiscFill, new Color(1f, 1f, 1f, 0.1f), Theme.Cyan,
-                new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.38f));
+            body.SetLook(Theme.DiscFill, new Color(1f, 1f, 1f, 0.1f), Theme.Accent,
+                new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.38f));
             orb.disc = body.Rect;
             var head = Theme.Pixels(orb.disc, "Head", Theme.Head, material);
             var headWidth = diameter * HeadShare;
@@ -120,22 +118,6 @@ namespace Edith.Ask
             labelRect.anchoredPosition = new Vector2(0f, -diameter * 0.08f);
             orb.listeningLabel.text = "Listening";
             orb.listeningLabel.enabled = false;
-
-            var names = new GameObject("Sources", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
-            names.font = regular;
-            names.fontSize = SourcesFontSize;
-            names.color = Quiet;
-            names.alignment = TextAnchor.UpperLeft;
-            names.horizontalOverflow = HorizontalWrapMode.Wrap;
-            names.verticalOverflow = VerticalWrapMode.Truncate;
-            names.raycastTarget = false;
-            names.material = material;
-            var namesRect = names.rectTransform;
-            namesRect.SetParent(rect, false);
-            namesRect.anchorMin = namesRect.anchorMax = new Vector2(1f, 0.5f);
-            namesRect.pivot = new Vector2(0f, 1f);
-            namesRect.anchoredPosition = new Vector2(GapMetres * UnitsPerMetre, -CaptionHeight * 0.5f);
-            orb.sources = names;
 
             orb.Choose(Time.time, true);
             orb.FitCaption(orb.CaptionMetres);
@@ -211,7 +193,7 @@ namespace Edith.Ask
         }
 
         /// True from the start of a question until the answer or a problem takes over: the orb breathes and says so
-        /// under itself, and the caption holds only what was heard.
+        /// under itself, and the caption stays empty.
         public bool Listening => listening;
 
         public void ShowListening()
@@ -232,13 +214,6 @@ namespace Edith.Ask
             listeningLabel.enabled = value;
         }
 
-        /// Shows `words`, what was heard so far, in quotes. Nothing heard yet leaves the caption as it is.
-        public void ShowHeard(string words)
-        {
-            var quoted = Quoted(words);
-            if (quoted.Length > 0) Show(quoted, Quiet);
-        }
-
         /// Shows `text`, the answer so far, typed out to the `spoken` fraction of it. The typed part only grows until
         /// a different answer starts.
         public void ShowAnswer(string text, float spoken)
@@ -251,27 +226,6 @@ namespace Edith.Ask
             revealed = typed;
             SetListening(false);
             Show(text.Substring(0, revealed), Bright);
-        }
-
-        /// Shows up to three of `names` as one quiet line under the caption; nothing when there are none.
-        public void ShowSources(IReadOnlyList<string> names)
-        {
-            sources.text = SourcesLine(names);
-            sources.rectTransform.sizeDelta = new Vector2(captionMetres * UnitsPerMetre, CaptionHeight * 0.5f);
-        }
-
-        /// The first three of `names` joined by a middle dot, led by "Sources:". Empty when there are none.
-        public static string SourcesLine(IReadOnlyList<string> names)
-        {
-            if (names == null || names.Count == 0) return "";
-            return "Sources: " + string.Join(" · ", names.Take(MaxSources));
-        }
-
-        /// `words` with its spacing tidied, in curly quotes, or empty when nothing was heard.
-        public static string Quoted(string words)
-        {
-            var tidy = string.Join(" ", (words ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
-            return tidy.Length == 0 ? "" : "“" + tidy + "”";
         }
 
         /// The end of `value` that fills at most `count` lines of `text`, starting at the first line kept. Rows leave
@@ -304,7 +258,6 @@ namespace Edith.Ask
             if (Mathf.Approximately(metres, captionMetres)) return;
             captionMetres = metres;
             caption.rectTransform.sizeDelta = new Vector2(metres * UnitsPerMetre, CaptionHeight);
-            sources.rectTransform.sizeDelta = new Vector2(metres * UnitsPerMetre, CaptionHeight * 0.5f);
             if (shown.Length > 0) caption.text = LastLines(caption, lines, shown, MaxLines);
         }
 
@@ -350,16 +303,16 @@ namespace Edith.Ask
         /// voice's loudness while speaking.
         void Breathe()
         {
-            var cyan = Theme.Cyan;
+            var accent = Theme.Accent;
             if (listening)
             {
                 var swell = 0.5f + 0.5f * Mathf.Sin(Time.time * PulseRate);
                 halo.localScale = Vector3.one * (1f + 0.22f * swell);
-                haloGlass.SetOutline(new Color(cyan.r, cyan.g, cyan.b, Mathf.Lerp(0.55f, 0.08f, swell)));
+                haloGlass.SetOutline(new Color(accent.r, accent.g, accent.b, Mathf.Lerp(0.55f, 0.08f, swell)));
                 return;
             }
             halo.localScale = Vector3.one * (1f + 0.3f * level);
-            haloGlass.SetOutline(new Color(cyan.r, cyan.g, cyan.b, 0.12f + 0.4f * level));
+            haloGlass.SetOutline(new Color(accent.r, accent.g, accent.b, 0.12f + 0.4f * level));
         }
     }
 }
