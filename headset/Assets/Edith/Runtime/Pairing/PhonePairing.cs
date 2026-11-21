@@ -17,11 +17,11 @@ namespace Edith.Pairing
         [SerializeField] Font font;
         [SerializeField] Material material;
 
-        // Ten canvas units per millimetre, which makes the panel 6 cm wide. Held 0.18 m out it looks as large as a
+        // Four canvas units per millimetre, which makes the panel 15 cm wide. Held 0.45 m out it looks as large as a
         // 30 cm panel at 0.9 m did, and sits well in front of real surfaces so they cannot hide it.
-        const float UnitsPerMetre = 10000f;
+        const float UnitsPerMetre = 4000f;
         static readonly Vector2 Size = new Vector2(600f, 380f);
-        const float Ahead = 0.18f, Below = 0.024f, FollowRate = 8f;
+        const float Ahead = 0.45f, Below = 0.06f, FollowRate = 8f;
         const float FadeSeconds = 0.3f;
         const float CallSeconds = 8f;
         const int CornerRadius = 36;
