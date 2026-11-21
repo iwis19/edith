@@ -84,7 +84,7 @@ namespace Edith.Snapshots
         }
 
         /// How far the card has opened, 0 to 1. At 0 the glass hugs the photo's frame with no room for text; opening
-        /// grows it down to its full height, and the divider and text fade in over the second half.
+        /// grows it down to its full height, and the divider and text fade in from 40% open.
         public float Opened
         {
             set
@@ -156,15 +156,15 @@ namespace Edith.Snapshots
             Unfold();
         }
 
-        /// Places the glass between its closed and full size by `opened`, eased out so it moves at once and settles.
-        /// The top and sides never move, so the glass only grows downward.
+        /// Places the glass between its closed and full size by `opened`, eased in and out (smootherstep) so it
+        /// glides rather than snaps. The top and sides never move, so the glass only grows downward.
         void Unfold()
         {
-            var grow = 1f - (1f - opened) * (1f - opened) * (1f - opened);
+            var grow = opened * opened * opened * (opened * (opened * 6f - 15f) + 10f);
             var closed = new Vector2(fullSize.x, photoMm.y + 2f * PadMm * scale);
             glass.Resize(Vector2.Lerp(closed, fullSize, grow));
             glass.Rect.anchoredPosition = Vector2.Lerp(Vector2.zero, fullCentre, grow);
-            var reveal = Mathf.Clamp01(opened * 2f - 1f);
+            var reveal = Mathf.SmoothStep(0f, 1f, (opened - 0.4f) / 0.6f);
             dividerGroup.alpha = reveal;
             textGroup.alpha = textAlpha * reveal;
         }
