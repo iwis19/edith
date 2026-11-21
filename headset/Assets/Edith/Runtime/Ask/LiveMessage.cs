@@ -5,6 +5,20 @@ using UnityEngine;
 
 namespace Edith.Ask
 {
+    /// A function call Gemini asks the headset to make: find_place or stop_navigation, with their arguments.
+    public readonly struct ToolCall
+    {
+        public readonly string Id, Name, Category, PlaceName;
+
+        public ToolCall(string id, string name, string category, string placeName)
+        {
+            Id = id ?? "";
+            Name = name ?? "";
+            Category = category ?? "";
+            PlaceName = placeName ?? "";
+        }
+    }
+
     /// One server message of a Gemini Live session, reduced to what Ask uses. Safe to parse off the main thread.
     public sealed class LiveMessage
     {
@@ -18,8 +32,13 @@ namespace Edith.Ask
         public bool TurnComplete, Interrupted;
         /// Short names of the web pages Google Search grounded the answer in, as SourceName gives them.
         public readonly List<string> Sources = new List<string>();
+        /// Function calls to answer with a tool response before Gemini goes on.
+        public readonly List<ToolCall> ToolCalls = new List<ToolCall>();
 
-        [Serializable] sealed class Wire { public ServerContent serverContent; }
+        [Serializable] sealed class Wire { public ServerContent serverContent; public ToolCallWire toolCall; }
+        [Serializable] sealed class ToolCallWire { public FunctionCall[] functionCalls; }
+        [Serializable] sealed class FunctionCall { public string id, name; public ToolArgs args; }
+        [Serializable] sealed class ToolArgs { public string category, name; }
 
         [Serializable] sealed class ServerContent
         {
@@ -56,6 +75,11 @@ namespace Edith.Ask
             {
                 return message;
             }
+            var calls = wire?.toolCall?.functionCalls;
+            if (calls != null)
+                foreach (var call in calls)
+                    if (!string.IsNullOrEmpty(call?.name))
+                        message.ToolCalls.Add(new ToolCall(call.id, call.name, call.args?.category, call.args?.name));
             var content = wire?.serverContent;
             if (content == null) return message;
 
@@ -125,6 +149,33 @@ namespace Edith.Ask
         public static string Audio(byte[] pcm, int byteCount, int sampleRate) =>
             "{\"realtimeInput\":{\"audio\":{\"data\":\"" + Convert.ToBase64String(pcm, 0, byteCount) +
             "\",\"mimeType\":\"audio/pcm;rate=" + sampleRate.ToString(CultureInfo.InvariantCulture) + "\"}}}";
+
+        /// The answer to a function call. `responseJson` must be a JSON object.
+        public static string ToolResponse(string id, string name, string responseJson) =>
+            "{\"toolResponse\":{\"functionResponses\":[{\"id\":" + Quote(id) + ",\"name\":" + Quote(name) +
+            ",\"response\":" + responseJson + "}]}}";
+
+        /// `text` as a JSON string, quotes included.
+        public static string Quote(string text)
+        {
+            var b = new System.Text.StringBuilder("\"");
+            foreach (var ch in text ?? "")
+            {
+                switch (ch)
+                {
+                    case '"': b.Append("\\\""); break;
+                    case '\\': b.Append("\\\\"); break;
+                    case '\n': b.Append("\\n"); break;
+                    case '\r': b.Append("\\r"); break;
+                    case '\t': b.Append("\\t"); break;
+                    default:
+                        if (ch < ' ') b.Append("\\u").Append(((int)ch).ToString("x4", CultureInfo.InvariantCulture));
+                        else b.Append(ch);
+                        break;
+                }
+            }
+            return b.Append('"').ToString();
+        }
 
         /// A still photo for the question, sent as a realtime video frame.
         public static string Image(byte[] jpeg) =>

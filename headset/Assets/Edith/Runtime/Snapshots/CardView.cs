@@ -1,46 +1,60 @@
 using Edith.Look;
+using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace Edith.Snapshots
 {
-    /// A card drawn around a photo: a thin border just outside it that takes the rarity's colour, and the text under
-    /// it, "Looking…" until a snapshot's fact types out, in the rarity's colour. The photo's rect is in millimetres.
-    /// The Scrapbook draws its memories with the same card.
+    /// A snapshot's card: the photo sits in a liquid-glass panel whose outline and halo take the rarity's colour, four
+    /// cyan sight corners mark the photo, and one centred line of text under it, "Looking…" until the fact types out.
+    /// The photo's rect is in millimetres. The text wraps within the photo's width. The Scrapbook draws its memories
+    /// with the same card.
     sealed class CardView
     {
         // Text is laid out in quarter millimetres and scaled down, so the font is rasterised sharply at this size.
         public const float TextUnitsPerMm = 4f;
-        const float BorderMm = 3f;
-        const float GapMm = 6f;
-        const float FactHeight = 360f;
+        // The glass around the photo and its corner radius, and the gap from the photo to the text.
+        const float PadMm = 7f;
+        const float RadiusMm = 11f;
+        const float GapMm = 5f;
         const int FactSize = 36;
-        static readonly Color Bright = new Color(0.97f, 0.97f, 0.99f, 1f);
-        static readonly Color Quiet = new Color(0.78f, 0.8f, 0.85f, 0.7f);
-        static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
-        static readonly Color BorderWaiting = new Color(0.95f, 0.95f, 0.97f, 0.35f);
-
-        readonly Image[] border = new Image[4];
-        RectTransform photo, column;
-        CanvasGroup textGroup;
-        float scale;
-        Text fact;
+        const float LineHeight = 1.25f;
+        const int MinLines = 2;
+        const float ArmMm = 6f, ThickMm = 1.3f, InsetMm = 2f;
+        static readonly Color Quiet = Theme.Muted;
+        static readonly Color Waiting = new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f);
 
         // Sizes above are for a card at arm's length. A card hung farther away, such as one on the object a scan pin
-        // marked, grows its border, gap and text with its distance so they look the same size from the eye.
+        // marked, grows its glass, gap and text with its distance so they look the same size from the eye.
         const float ArmsLengthMeters = 0.45f;
+
+        Glass glass;
+        Text fact;
+        RectTransform column;
+        CanvasGroup textGroup;
+        readonly RectTransform[] corners = new RectTransform[8];
+        float scale;
+        Vector2 photoMm;
+        float textWidthMm;
+        int fittedLength = -1;
 
         /// `depth` is how far the card hangs from the eye that made it, in metres.
         public static CardView Build(RectTransform photo, Vector2 photoSizeMm, float depth, Font font, Material material)
         {
-            var view = new CardView { photo = photo, scale = ScaleAt(depth) };
-            view.BuildBorder(material);
-            view.BuildText(font, material);
-            view.Fit(photoSizeMm);
+            var view = new CardView
+            {
+                scale = ScaleAt(depth),
+                photoMm = photoSizeMm,
+                textWidthMm = photoSizeMm.x,
+            };
+            view.BuildGlass(photo, material);
+            view.BuildCorners(photo, material);
+            view.BuildText(photo, Theme.Regular(font), material);
+            view.Fit();
             return view;
         }
 
-        /// How much a card hung `depth` metres from the eye grows its border, gap and text, so they look the same size.
+        /// How much a card hung `depth` metres from the eye grows its glass, gap and text, so they look the same size.
         public static float ScaleAt(float depth) => Mathf.Max(1f, depth / ArmsLengthMeters);
 
         /// Opacity of the text under the photo.
@@ -49,37 +63,43 @@ namespace Edith.Snapshots
             set => textGroup.alpha = value;
         }
 
-        /// Lays the border and the text out around a photo of `photoSizeMm`, for when the photo's shape changes.
+        /// Lays the glass, the sight corners and the text out again around a photo of `photoSizeMm`.
         public void Fit(Vector2 photoSizeMm)
         {
-            float w = BorderMm * scale, x = (photoSizeMm.x + w) * 0.5f, y = (photoSizeMm.y + w) * 0.5f;
-            Place(border[0].rectTransform, new Vector2(photoSizeMm.x + 2f * w, w), new Vector2(0f, y));
-            Place(border[1].rectTransform, new Vector2(photoSizeMm.x + 2f * w, w), new Vector2(0f, -y));
-            Place(border[2].rectTransform, new Vector2(w, photoSizeMm.y), new Vector2(-x, 0f));
-            Place(border[3].rectTransform, new Vector2(w, photoSizeMm.y), new Vector2(x, 0f));
-            column.anchoredPosition = new Vector2(0f, -(photoSizeMm.y * 0.5f + GapMm * scale));
-            var lineWidth = photoSizeMm.x * TextUnitsPerMm / scale;
-            fact.rectTransform.sizeDelta = new Vector2(lineWidth, FactHeight);
+            photoMm = photoSizeMm;
+            textWidthMm = photoSizeMm.x;
+            PlaceCorners();
+            column.anchoredPosition = new Vector2(0f, -(photoMm.y * 0.5f + GapMm * scale));
+            fact.rectTransform.sizeDelta = new Vector2(textWidthMm * TextUnitsPerMm / scale, fact.rectTransform.sizeDelta.y);
+            Fit();
         }
 
-        /// A saved card: `text` in the rarity's colour, or in white when it has none.
+        /// A saved card: `text` under the photo, with the glass in the rarity's colour.
         public void Show(Rarity? tier, string text)
         {
-            var rated = tier is Rarity rarity ? RarityColors.For(rarity) : (Color?)null;
-            foreach (var edge in border) edge.color = rated ?? BorderWaiting;
+            Tint(tier);
             fact.text = text;
-            fact.color = rated ?? Bright;
+            fact.color = Theme.Ice;
+            Fit();
+        }
+
+        void Tint(Rarity? tier)
+        {
+            var rated = tier is Rarity rarity ? RarityColors.For(rarity) : (Color?)null;
+            if (rated is Color tint)
+                glass.SetLook(Theme.PanelFill, new Color(tint.r, tint.g, tint.b, 0.16f), tint, new Color(tint.r, tint.g, tint.b, 0.4f));
+            else
+                glass.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.12f), Waiting, Color.clear);
         }
 
         /// `caption`, when given, is said in place of the card's fact.
         public void Show(LookCard card, string caption)
         {
-            var rated = card.Tier is Rarity tier ? RarityColors.For(tier) : (Color?)null;
-            foreach (var edge in border) edge.color = rated ?? BorderWaiting;
+            Tint(card.Tier);
             if (caption != null)
             {
                 fact.text = caption;
-                fact.color = rated ?? Bright;
+                fact.color = Theme.Ice;
             }
             else if (card.Phase == LookPhase.Failed)
             {
@@ -94,35 +114,48 @@ namespace Edith.Snapshots
             else
             {
                 fact.text = card.Fact.Render();
-                fact.color = rated ?? Bright;
+                fact.color = Theme.Ice;
             }
+            if (fact.text.Length != fittedLength) Fit();
         }
 
-        /// Four strips just outside the photo, so the border never covers any of it.
-        void BuildBorder(Material material)
+        /// Sizes the glass to the photo and the text under it, and keeps the photo's top and sides where they were.
+        void Fit()
         {
-            for (var i = 0; i < border.Length; i++)
+            fittedLength = fact.text.Length;
+            var textMm = Mathf.Max(fact.preferredHeight, FactSize * LineHeight * MinLines) * scale / TextUnitsPerMm;
+            var pad = PadMm * scale;
+            var width = textWidthMm + 2f * pad;
+            var height = photoMm.y + GapMm * scale + textMm + 2f * pad;
+            glass.Resize(new Vector2(width, height));
+            glass.Rect.anchoredPosition = new Vector2(0f, photoMm.y * 0.5f + pad - height * 0.5f);
+        }
+
+        void BuildGlass(RectTransform photo, Material material)
+        {
+            glass = Glass.Build(photo, "Glass", photoMm, RadiusMm * scale, material);
+            // Behind the photo, which was made first.
+            glass.Rect.SetAsFirstSibling();
+        }
+
+        /// Four sight corners just inside the photo's edges.
+        void BuildCorners(RectTransform photo, Material material)
+        {
+            for (var i = 0; i < corners.Length; i++) corners[i] = Bar(photo, material);
+            PlaceCorners();
+        }
+
+        void PlaceCorners()
+        {
+            float arm = ArmMm * scale, thick = ThickMm * scale, inset = InsetMm * scale;
+            float x = photoMm.x * 0.5f - inset, y = photoMm.y * 0.5f - inset;
+            for (var i = 0; i < 4; i++)
             {
-                var image = new GameObject("Border", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-                image.raycastTarget = false;
-                image.material = material;
-                Anchor(image.rectTransform, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-                border[i] = image;
+                float sx = i % 2 == 0 ? -1f : 1f, sy = i < 2 ? 1f : -1f;
+                // The bar along the top or bottom edge and the bar down the side, each starting at the corner.
+                Place(corners[2 * i], new Vector2(arm, thick), new Vector2(sx * (x - arm * 0.5f), sy * (y - thick * 0.5f)));
+                Place(corners[2 * i + 1], new Vector2(thick, arm), new Vector2(sx * (x - thick * 0.5f), sy * (y - arm * 0.5f)));
             }
-        }
-
-        void BuildText(Font font, Material material)
-        {
-            var go = new GameObject("Text", typeof(RectTransform), typeof(CanvasGroup));
-            column = go.GetComponent<RectTransform>();
-            Anchor(column, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), Vector2.zero, Vector2.zero);
-            column.localScale = Vector3.one * (scale / TextUnitsPerMm);
-            textGroup = go.GetComponent<CanvasGroup>();
-            textGroup.interactable = false;
-            textGroup.blocksRaycasts = false;
-            fact = Label("Fact", column, font, material, FactSize, FontStyle.Normal, new Vector2(0f, FactHeight), 0f);
-            // TypedText hides the part not yet typed with a transparent colour tag.
-            fact.supportRichText = true;
         }
 
         static void Place(RectTransform rect, Vector2 size, Vector2 position)
@@ -131,22 +164,35 @@ namespace Edith.Snapshots
             rect.anchoredPosition = position;
         }
 
-        static Text Label(string name, RectTransform column, Font font, Material material, int fontSize, FontStyle style,
-            Vector2 size, float top)
+        static RectTransform Bar(RectTransform photo, Material material)
         {
-            var text = new GameObject(name, typeof(RectTransform), typeof(Text), typeof(UnityEngine.UI.Shadow)).GetComponent<Text>();
-            text.font = font;
-            text.fontSize = fontSize;
-            text.fontStyle = style;
-            text.alignment = TextAnchor.UpperCenter;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-            text.material = material;
-            var shadow = text.GetComponent<UnityEngine.UI.Shadow>();
-            shadow.effectColor = ShadowColor;
-            shadow.effectDistance = new Vector2(1.5f, -1.5f);
-            Anchor(text.rectTransform, column, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), size, new Vector2(0f, top));
+            var image = new GameObject("Corner", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+            image.color = Theme.Cyan;
+            image.raycastTarget = false;
+            image.material = material;
+            Anchor(image.rectTransform, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            return image.rectTransform;
+        }
+
+        void BuildText(RectTransform photo, Font font, Material material)
+        {
+            column = new GameObject("Text", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<RectTransform>();
+            textGroup = column.GetComponent<CanvasGroup>();
+            textGroup.interactable = false;
+            textGroup.blocksRaycasts = false;
+            Anchor(column, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, -(photoMm.y * 0.5f + GapMm * scale)));
+            column.localScale = Vector3.one * (scale / TextUnitsPerMm);
+
+            var lineWidth = textWidthMm * TextUnitsPerMm / scale;
+            fact = Label("Fact", column, font, material, FactSize, new Vector2(lineWidth, FactSize * LineHeight * MinLines));
+            // TypedText hides the part not yet typed with a transparent colour tag.
+            fact.supportRichText = true;
+        }
+
+        static Text Label(string name, RectTransform column, Font font, Material material, int fontSize, Vector2 size)
+        {
+            var text = Theme.Label(column, name, font, fontSize, Theme.Ice, TextAnchor.UpperCenter, material);
+            Anchor(text.rectTransform, column, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), size, Vector2.zero);
             return text;
         }
 

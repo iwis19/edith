@@ -109,7 +109,9 @@ namespace Edith.Editor
             PinchSetup.AddToScene(ScenePath);
             GrabSetup.AddToScene(ScenePath);
             AskSetup.AddToScene(ScenePath);
+            NavigationSetup.AddToScene(ScenePath);
             PairingSetup.AddToScene(ScenePath);
+            WelcomeSetup.AddToScene(ScenePath);
             LookSetup.EnableCameraAccess();
             LookSetup.AddToScene(ScenePath);
             ScanSetup.AddToScene(ScenePath);

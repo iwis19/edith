@@ -79,22 +79,22 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_border_takes_the_colour_of_the_rarity()
+        public void The_outline_takes_the_colour_of_the_rarity()
         {
             view.Show(Memories(1), 0f, NoPhoto);
-            var edges = Middle.GetComponentsInChildren<Image>(true).Where(edge => edge.name == "Border").ToArray();
-            Assert.AreEqual(4, edges.Length);
-            Assert.IsTrue(edges.All(edge => edge.color == RarityColors.For(Rarity.Rare)));
+            Assert.AreEqual(RarityColors.For(Rarity.Rare), Outline(Middle).color);
         }
 
+        static Image Outline(GameObject card) =>
+            card.GetComponentsInChildren<Image>(true).Single(edge => edge.name == "Border");
+
         [Test]
-        public void A_memory_without_a_rarity_has_a_pale_border_and_white_text()
+        public void A_memory_without_a_rarity_has_a_plain_outline_and_ice_white_text()
         {
             var plain = new List<Memory> { new Memory(1, "Fern", "A fern.", null, null, new DateTime(2026, 3, 4)) };
             view.Show(plain, 0f, NoPhoto);
-            var rare = RarityColors.For(Rarity.Rare);
-            Assert.AreNotEqual(rare, Middle.GetComponentsInChildren<Image>(true).First(edge => edge.name == "Border").color);
-            Assert.AreEqual(1f, Part(Middle, "Fact").GetComponent<Text>().color.r, 0.05f);
+            Assert.AreNotEqual(RarityColors.For(Rarity.Rare), Outline(Middle).color);
+            Assert.AreEqual(Edith.UI.Theme.Ice, Part(Middle, "Fact").GetComponent<Text>().color);
         }
 
         [Test]
@@ -106,8 +106,9 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_photo_keeps_its_own_shape_and_the_border_hugs_it()
+        public void A_photo_keeps_its_own_shape_and_the_glass_hugs_it()
         {
+            margin = null;
             var wide = Photo(400, 100);
             view.Show(Memories(1), 0f, _ => wide);
             var photo = Part(Middle, "Photo").sizeDelta;
@@ -121,13 +122,18 @@ namespace Edith.Tests
             AssertBorderHugs(photo);
         }
 
+        // The glass keeps the same margin either side of the photo, whatever the photo's shape, so nothing pads it
+        // out to a fixed width.
+        float? margin;
+
         void AssertBorderHugs(Vector2 photo)
         {
-            var edges = Middle.GetComponentsInChildren<Image>(true).Where(edge => edge.name == "Border").Select(edge => edge.rectTransform).ToArray();
-            var outer = new Vector2(edges.Max(edge => edge.anchoredPosition.x + edge.sizeDelta.x * 0.5f), edges.Max(edge => edge.anchoredPosition.y + edge.sizeDelta.y * 0.5f));
-            var width = edges.Min(edge => Mathf.Min(edge.sizeDelta.x, edge.sizeDelta.y));
-            Assert.AreEqual(photo.x * 0.5f + width, outer.x, 1e-3f);
-            Assert.AreEqual(photo.y * 0.5f + width, outer.y, 1e-3f);
+            var glass = Part(Middle, "Glass");
+            Assert.AreEqual(0f, glass.anchoredPosition.x, 1e-3f, "centred on the photo");
+            var side = (glass.sizeDelta.x - photo.x) * 0.5f;
+            Assert.That(side, Is.GreaterThan(0f));
+            if (margin is float first) Assert.AreEqual(first, side, 1e-3f);
+            margin = side;
         }
 
         [Test]

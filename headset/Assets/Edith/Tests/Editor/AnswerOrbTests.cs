@@ -84,9 +84,23 @@ namespace Edith.Tests
             Assert.AreEqual("", AnswerOrb.Quoted("  "));
             Assert.AreEqual("", AnswerOrb.Quoted(null));
             orb.ShowHeard("   ");
-            Assert.AreEqual("listening…", orb.Caption, "nothing heard keeps listening");
+            Assert.AreEqual("", orb.Caption, "nothing heard leaves the caption empty");
+            Assert.IsTrue(orb.Listening, "and the orb keeps listening");
             orb.ShowHeard("what is this");
             Assert.AreEqual("“what is this”", orb.Caption);
+        }
+
+        [Test]
+        public void The_orb_listens_until_the_answer_or_a_problem_arrives()
+        {
+            Assert.IsTrue(orb.Listening);
+            orb.ShowAnswer("It's a fern.", 1f);
+            Assert.IsFalse(orb.Listening);
+            orb.ShowListening();
+            Assert.IsTrue(orb.Listening);
+            orb.ShowProblem("Lost the connection.");
+            Assert.IsFalse(orb.Listening);
+            Assert.AreEqual("Lost the connection.", orb.Caption);
         }
 
         [Test]
