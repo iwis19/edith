@@ -112,6 +112,16 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_rated_snapshot_draws_its_outline_bold()
+        {
+            var snapshot = room.Place(Box(0f));
+            Image Outline() => snapshot.GetComponentsInChildren<Image>().Single(image => image.name == "Border" && image.transform.parent.name == "Glass");
+            Assert.AreEqual(Edith.UI.Theme.Edge, Outline().sprite, "thin while waiting for its rarity");
+            snapshot.Apply(LookEvent.Rated(Rarity.Rare));
+            Assert.AreEqual(Edith.UI.Theme.BoldEdge, Outline().sprite);
+        }
+
+        [Test]
         public void Every_snapshot_claims_a_fist_but_only_a_finished_look_moves()
         {
             var host = new GameObject("Grab");
