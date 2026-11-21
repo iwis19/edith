@@ -1,13 +1,15 @@
 using System.Collections.Generic;
 using System.Text;
 using Edith.Backend;
+using Edith.Scan;
 using Edith.Snapshots;
 using UnityEngine;
 
 namespace Edith.Ask
 {
-    /// Ask on the headset. A thumb tap chimes and starts a spoken question, with the photo of the snapshot nearest the
-    /// line of sight when there is one; Gemini's activity detection ends the question. The answer is spoken and written
+    /// Ask on the headset. A thumb tap chimes and starts a spoken question about what is nearest the line of sight: a
+    /// Scan pin's name and hook, or a snapshot's photo, whichever is nearer; Gemini's activity detection ends the
+    /// question. The answer is spoken and written
     /// on a card that follows the gaze and fades once the answer is over. A thumb swipe flicks the card away.
     public sealed class AskController : MonoBehaviour
     {
@@ -16,6 +18,8 @@ namespace Edith.Ask
         [SerializeField] Transform eye;
         [SerializeField] Font font;
         [SerializeField] Material material;
+        /// Optional: without it no pin is offered as a hint.
+        [SerializeField] ScanController scan;
 
         const int PhotoLongSide = 512;
 
@@ -35,6 +39,8 @@ namespace Edith.Ask
 
         /// The room whose snapshot photos can go with a question. Without one, every question goes without a photo.
         public void Bind(SnapshotRoom room) => this.room = room;
+
+        public AskPhase Phase => session.Phase;
 
         // Update runs only while a question is under way or fading, and Start would wait for that, so the
         // subscriptions are made here and outlast the disabled stretches.
@@ -92,14 +98,29 @@ namespace Edith.Ask
                 session.Fail(AskProblem.NotConfigured, Time.time);
                 return;
             }
-            link = LiveLink.Open(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, voice.Speech, AskVoice.ChunkSamples);
-            photo = NearestPhoto() is { } texture ? PhotoJpeg.Start(texture, PhotoLongSide) : null;
-            Debug.Log($"[EDITH ask] listening, {(photo != null ? "with" : "without")} a photo");
+            var texture = NearestPhoto(out var photoDegrees);
+            var pin = default(ScanPin);
+            var pinDegrees = 0f;
+            var hasPin = scan != null && scan.TryNearest(new Pose(eye.position, eye.rotation), AskGeometry.MaxGazeDegrees,
+                out pin, out pinDegrees);
+            AskHint? hint = null;
+            if (AskGeometry.PinWins(hasPin, pinDegrees, texture != null, photoDegrees))
+            {
+                hint = new AskHint(pin.Name, pin.Hook);
+                texture = null;
+            }
+            link = LiveLink.Open(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, hint, voice.Speech,
+                AskVoice.ChunkSamples);
+            photo = texture != null ? PhotoJpeg.Start(texture, PhotoLongSide) : null;
+            var about = hint is { } h ? $"about the pin on {h.Name}" : photo != null ? "with a photo" : "without a hint";
+            Debug.Log($"[EDITH ask] listening, {about}");
         }
 
-        /// The photo of the snapshot nearest the line of sight, or null when no snapshot with a photo is near it.
-        Texture NearestPhoto()
+        /// The photo of the snapshot nearest the line of sight and its angle from it, or null when no snapshot with a
+        /// photo is near it.
+        Texture NearestPhoto(out float degrees)
         {
+            degrees = float.PositiveInfinity;
             if (room == null) return null;
             photoCentres.Clear();
             photos.Clear();
@@ -111,7 +132,7 @@ namespace Edith.Ask
                 photoCentres.Add(box.Center);
                 photos.Add(snapshot.Photo);
             }
-            var nearest = AskGeometry.NearestToGaze(eye.position, eye.forward, photoCentres);
+            var nearest = AskGeometry.NearestToGaze(eye.position, eye.forward, photoCentres, out degrees);
             return nearest < 0 ? null : photos[nearest];
         }
 

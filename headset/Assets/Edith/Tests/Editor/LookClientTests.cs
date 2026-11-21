@@ -103,7 +103,7 @@ namespace Edith.Tests
         }
 
         static LookClient Send(FakeBackend backend, LookTimeouts? timeouts = null) =>
-            LookClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", 42, Jpeg, Captured, timeouts ?? Quick);
+            LookClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", 42, LookSource.Pinch, Jpeg, Captured, timeouts ?? Quick);
 
         static List<LookEvent> Collect(LookClient client, float seconds = 10f)
         {
@@ -219,7 +219,12 @@ namespace Edith.Tests
             var events = Collect(Send(backend));
             Assert.AreEqual(1, events.Count);
             Assert.AreEqual("timeout", events[0].Code);
-            Assert.AreEqual(2, backend.Requests.Count);
+            // The fake records a request only once its listener thread has read the body, which can land after the
+            // client has already given up on it.
+            var deadline = DateTime.UtcNow.AddSeconds(2);
+            while (backend.Requests.Count < 2 && DateTime.UtcNow < deadline) Thread.Sleep(10);
+            Thread.Sleep(300);
+            Assert.AreEqual(2, backend.Requests.Count, "one try and exactly one retry");
         }
 
         [Test]
@@ -280,7 +285,7 @@ namespace Edith.Tests
             probe.Start();
             var port = ((IPEndPoint)probe.LocalEndpoint).Port;
             probe.Stop();
-            var client = LookClient.Send($"http://127.0.0.1:{port}", "", "p", 1, Jpeg, Captured, new LookTimeouts(5f, 5f, 20f));
+            var client = LookClient.Send($"http://127.0.0.1:{port}", "", "p", 1, LookSource.Pinch, Jpeg, Captured, new LookTimeouts(5f, 5f, 20f));
             var events = Collect(client, 20f);
             Assert.AreEqual(1, events.Count);
             Assert.AreEqual("network", events[0].Code);

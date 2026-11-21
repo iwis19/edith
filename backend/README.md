@@ -159,7 +159,7 @@ The model is also told three things when they exist: the phone's place and up to
 
 Mints a Gemini Live session for one spoken question. The headset opens the websocket and talks to Gemini directly, so no audio passes through the backend and the API key never leaves it.
 
-The body is optional JSON. `{"voice": "Kore"}` picks the voice for this session; omit it, or send no body, for `LIVE_VOICE`. Any voice Gemini Live does not list is refused with 422 `invalid_request`.
+The body is optional JSON. `{"voice": "Kore"}` picks the voice for this session; omit it, or send no body, for `LIVE_VOICE`. Any voice Gemini Live does not list is refused with 422 `invalid_request`. `{"hint": {"name": "...", "hook": "..."}}` names the Scan pin nearest the person's line of sight, and the persona then takes "this" and "it" to mean that pin (name at most 200 characters, hook at most 300).
 
 The response is `{"url", "setup", "model"}`:
 

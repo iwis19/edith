@@ -1,6 +1,8 @@
 using System;
+using Edith.Ask;
 using Edith.Capture;
 using Edith.Hands;
+using Edith.Look;
 using Edith.Scan;
 using Meta.XR;
 using UnityEditor;
@@ -18,6 +20,8 @@ namespace Edith.Editor
         const string CameraObjectName = "HeadsetCamera";
         const string RaycastObjectName = "EnvironmentRaycast";
         const string ScanObjectName = "Scan";
+        const string AskObjectName = "Ask";
+        const string LookObjectName = "Look";
         const string LeftHandName = "HandLeft";
 
         /// Batch entry for adding Scan to an already configured scene.
@@ -71,6 +75,9 @@ namespace Edith.Editor
             PinchSetup.SetObject(controller, "material",
                 AssetDatabase.LoadAssetAtPath<Material>(DepthSetup.OccludedUIMaterialPath)
                 ?? throw new InvalidOperationException($"Missing {DepthSetup.OccludedUIMaterialPath}; run DepthSetup first"));
+            PinchSetup.SetObject(Root(AskObjectName, nameof(AskSetup)).GetComponent<AskController>(), "scan", controller);
+            // A quick pinch on a pin opens it as a Look.
+            PinchSetup.SetObject(Root(LookObjectName, nameof(LookSetup)).GetComponent<LookController>(), "scan", controller);
 
             EditorSceneManager.MarkSceneDirty(scene);
             if (!EditorSceneManager.SaveScene(scene))

@@ -7,6 +7,7 @@ using Edith.Backend;
 using Edith.Capture;
 using Edith.Grab;
 using Edith.Pinch;
+using Edith.Scan;
 using Edith.Snapshots;
 using Meta.XR;
 using UnityEngine;
@@ -33,6 +34,8 @@ namespace Edith.Look
         /// Draws the photos so real objects in front of them hide them.
         [SerializeField] Material occludedMaterial;
         [SerializeField] Font font;
+        /// Opens a scan pin as a Look when a quick pinch lands on it rather than on a snapshot. Optional.
+        [SerializeField] ScanController scan;
 
         const string CameraNotReady = "The camera is not ready.";
         // Often enough that the shared HTTPS connection is still open when the next Look goes out.
@@ -56,6 +59,7 @@ namespace Edith.Look
         sealed class Release
         {
             public int LookId;
+            public LookSource Source;
             public SightBox Box;
             public Task<CameraFrame> Frame;
             /// Null until the photo is ready, and for good when the camera failed.
@@ -105,7 +109,9 @@ namespace Edith.Look
             switch (reading.Event)
             {
                 case PinchEvent.Tap:
-                    Clear(reading.Start);
+                    // Photos hang at hand depth, in front of any pin, so a pin opens only when the tap met no photo.
+                    if (!Clear(reading.Start) && !Open(reading.Start))
+                        Debug.Log("[EDITH look] tap ignored, it landed on no snapshot or pin");
                     break;
                 case PinchEvent.Cancelled:
                     room.CancelPreview();
@@ -130,7 +136,7 @@ namespace Edith.Look
         {
             foreach (var release in releases)
                 if (release.Request == null && release.Frame.IsCompletedSuccessfully)
-                    release.Request = LookClient.Send(release.LookId, release.Frame.Result.Jpeg, release.Frame.Result.CapturedAt);
+                    release.Request = LookClient.Send(release.LookId, release.Source, release.Frame.Result.Jpeg, release.Frame.Result.CapturedAt);
             while (releases.Count > 0 && releases[0].Confirmed && releases[0].Frame.IsCompleted)
             {
                 Hang(releases[0]);
@@ -167,16 +173,21 @@ namespace Edith.Look
             else CollectClient.Send(snapshot.Card.LookRef, entry.Jpeg);
         }
 
-        void Clear(Vector3 pinchPoint)
+        bool Clear(Vector3 pinchPoint)
         {
             var hit = room.Hit(eye.position, pinchPoint);
-            if (hit == null)
-            {
-                Debug.Log("[EDITH look] tap ignored, it did not land on a snapshot");
-                return;
-            }
+            if (hit == null) return false;
             room.Dismiss(hit);
             Debug.Log($"[EDITH look] snapshot {hit.Id} cleared by a tap on it");
+            return true;
+        }
+
+        /// Takes a Look of the scan pin the pinch is in line with, as if its box had been drawn and let go.
+        bool Open(Vector3 pinchPoint)
+        {
+            if (scan == null || !scan.TryOpen(pinchPoint, new Pose(eye.position, eye.rotation), out var box)) return false;
+            releases.Add(new Release { LookId = nextLookId++, Source = LookSource.Scan, Box = box, Frame = Capture(box), Confirmed = true });
+            return true;
         }
 
         void Hang(Release release)
