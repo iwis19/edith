@@ -69,9 +69,9 @@ The stream always starts with `accepted` and ends with `done` or `error`. In bet
 Saves a finished Look as a memory. A multipart form with two fields:
 
 - `image`: the JPEG to keep, under the same limits as `/look`'s image. A Look keeps no image, so the headset sends the snapshot it is pocketing.
-- `meta`: JSON `{"look_ref": "<look_ref from the accepted event>", "collected_at": ISO 8601 with a timezone}`. `collected_at` is optional and becomes the memory's `created_at`; it defaults to the server time, and a time ahead of the server is capped at the server time.
+- `meta`: JSON `{"look_ref": "<look_ref from the accepted event>", "collected_at": ISO 8601 with a timezone}`. `collected_at` is optional and is the headset's local time with its UTC offset. The memory keeps only the calendar date in that offset, so an evening at UTC-5 is that evening's date and not the next UTC day. A time ahead of the server is capped at the server time, and with no `collected_at` the date is the server's UTC date. No time of day is stored.
 
-The name, kind, fact, rarity tier and place are copied from the Look the backend recorded, never from the request. If the Look is still streaming, the request waits for it to be recorded (at most `LOOK_TIMEOUT_S` plus 5 s). Collecting a Look again returns the first memory and keeps its first image.
+The name, fact, rarity tier and place are copied from the Look the backend recorded, never from the request. If the Look is still streaming, the request waits for it to be recorded (at most `LOOK_TIMEOUT_S` plus 5 s). Collecting a Look again returns the first memory and keeps its first image.
 
 The response is `{"memory_id": int}`.
 
@@ -82,9 +82,9 @@ The response is `{"memory_id": int}`.
 
 ### `GET /memories`
 
-Lists the profile's memories, newest first, without image bytes. The optional `limit` query parameter is 1 to 500 and defaults to 100.
+Lists the profile's memories, newest date first and newest first within a date, without image bytes. The optional `limit` query parameter is 1 to 500 and defaults to 100.
 
-The response is `{"memories": [{"id", "look_ref", "name", "kind", "fact", "rarity", "place", "created_at"}]}`. `kind` and `place` are `null` when the Card agent gave none. Answers 503 `db_unavailable` like `/collect`.
+The response is `{"memories": [{"id", "name", "fact", "rarity", "place", "date"}]}`. `date` is `YYYY-MM-DD`. `place` is `null` when the Card agent gave none. Answers 503 `db_unavailable` like `/collect`.
 
 ### `GET /memories/{id}/image`
 
@@ -108,7 +108,7 @@ The response is `{"scan_ref", "ms", "picks"}`. `picks` holds 0 to 3 items, most 
 
 Coordinates are fractions of the upright image from 0 to 1, with the origin at the top left and y running down.
 
-The model is also told three things when they exist: the phone's place and up to 12 named sights nearby (see [Phone location](#phone-location)), the hooks this profile was already given in this `session`, and the profile's newest 50 memories, which it is asked to pass over for things not yet collected. A pick that repeats a hook for the same name within the session is dropped, and so is one whose hook opens with a generic word such as "Check" or "Look". The hooks are kept in process memory for one session per profile; a new `session` forgets the old one's. The memory lookup gets 0.6 s, after which the scan goes without it.
+The model is also told three things when they exist: the phone's place and up to 12 named sights nearby (see [Phone location](#phone-location)), the hooks this profile was already given in this `session`, and the names of the profile's newest 50 memories, which it is asked to pass over for things not yet collected. A pick that repeats a hook for the same name within the session is dropped, and so is one whose hook opens with a generic word such as "Check" or "Look". The hooks are kept in process memory for one session per profile; a new `session` forgets the old one's. The memory lookup gets 0.6 s, after which the scan goes without it.
 
 | Status | `error.code` | Meaning |
 | --- | --- | --- |
