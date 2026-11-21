@@ -467,7 +467,7 @@ namespace Edith.Welcome
             const float digitWidth = 120f;
             var digitsLeft = PairPane.center.x - digitWidth * 2f;
             for (var i = 0; i < 4; i++)
-                digits[i] = Label(stepTwo, "Digit", semibold, 120, Theme.Ice, TextAnchor.MiddleCenter, digitsLeft + i * digitWidth, PairPane.y + 230f, digitWidth, 170f);
+                digits[i] = Label(stepTwo, "Digit", semibold, 120, Theme.Ice, TextAnchor.MiddleCenter, digitsLeft + i * digitWidth, PairPane.y + 230f, digitWidth, 170f, shadow: false);
         }
 
         // ---- helpers
@@ -512,9 +512,9 @@ namespace Edith.Welcome
         /// shape (`centred`) it fills the shape from the centre, or when `within` gives the shape's size it sits at
         /// (x, y) from that shape's top left.
         Text Label(Transform parent, string name, Font face, int size, Color color, TextAnchor anchor,
-            float x, float y, float w, float h, bool centred = false, Vector2? within = null)
+            float x, float y, float w, float h, bool centred = false, Vector2? within = null, bool shadow = true)
         {
-            var text = Theme.Label(parent, name, face, size, color, anchor, material);
+            var text = Theme.Label(parent, name, face, size, color, anchor, material, shadow);
             var rect = text.rectTransform;
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);

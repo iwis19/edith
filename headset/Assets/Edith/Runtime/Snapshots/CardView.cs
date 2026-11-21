@@ -26,7 +26,6 @@ namespace Edith.Snapshots
         // The thin frame round the photo: how far out from it and its corner radius. The photo's own corners are cut
         // to sit concentric inside it.
         const float FrameEdgeMm = 3f, FrameRadiusMm = 7f;
-        static readonly Color Quiet = Theme.Muted;
         static readonly Color Waiting = new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f);
 
         // Sizes above are for a card at arm's length. A card hung farther away, such as one on the object a scan pin
@@ -75,26 +74,10 @@ namespace Edith.Snapshots
             var rimLook = rated ?? Theme.Accent;
             frame.SetLook(Color.clear, Color.clear, new Color(rimLook.r, rimLook.g, rimLook.b, 0.75f), Color.clear);
 
-            if (caption != null)
-            {
-                fact.text = caption;
-                fact.color = Theme.Ice;
-            }
-            else if (card.Phase == LookPhase.Failed)
-            {
-                fact.text = card.Error;
-                fact.color = Quiet;
-            }
-            else if (card.Fact.Empty)
-            {
-                fact.text = card.Finished ? "" : "Looking…";
-                fact.color = Quiet;
-            }
-            else
-            {
-                fact.text = card.Fact.Render();
-                fact.color = Theme.Ice;
-            }
+            fact.text = caption
+                ?? (card.Phase == LookPhase.Failed ? card.Error
+                    : card.Fact.Empty ? (card.Finished ? "" : "Looking…")
+                    : card.Fact.Render());
             if (fact.text.Length != fittedLength) Fit();
         }
 
@@ -181,7 +164,8 @@ namespace Edith.Snapshots
 
         static Text Label(string name, RectTransform column, Font font, Material material, int fontSize, Vector2 size)
         {
-            var text = Theme.Label(column, name, font, fontSize, Theme.Ice, TextAnchor.UpperLeft, material);
+            // Plain white, with no outline or shadow around the letters.
+            var text = Theme.Label(column, name, font, fontSize, Color.white, TextAnchor.UpperLeft, material, shadow: false);
             Anchor(text.rectTransform, column, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), size, Vector2.zero);
             return text;
         }

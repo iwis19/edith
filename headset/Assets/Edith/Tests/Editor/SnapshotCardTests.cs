@@ -89,12 +89,15 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_fact_stays_ice_white_whatever_the_rarity()
+        public void The_fact_is_plain_white_with_no_outline_whatever_the_rarity()
         {
             var snapshot = room.Place(Box(0f));
+            var fact = snapshot.GetComponentsInChildren<Text>().Single(text => text.name == "Fact");
+            Assert.AreEqual(Color.white, fact.color, "white while looking");
             snapshot.Apply(LookEvent.Fact("Mugs are old."));
             snapshot.Apply(LookEvent.Rated(Rarity.Epic));
-            Assert.AreEqual(Edith.UI.Theme.Ice, snapshot.GetComponentsInChildren<Text>().Single(text => text.name == "Fact").color);
+            Assert.AreEqual(Color.white, fact.color);
+            Assert.IsEmpty(fact.GetComponents<Shadow>(), "no outline or shadow around the letters");
         }
 
         [Test]

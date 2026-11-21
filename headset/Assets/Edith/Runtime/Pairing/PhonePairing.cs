@@ -189,7 +189,7 @@ namespace Edith.Pairing
                 var x = (i - 1.5f) * (DigitSize.x + DigitGap);
                 boxes[i] = Glass.Build(root, "Digit", DigitSize, 22f, material);
                 boxes[i].Rect.anchoredPosition = new Vector2(x, -85f);
-                digits[i] = Label("DigitText", boxes[i].Rect, semibold, 76, Theme.Ice, DigitSize, Vector2.zero);
+                digits[i] = Label("DigitText", boxes[i].Rect, semibold, 76, Theme.Ice, DigitSize, Vector2.zero, shadow: false);
             }
             ShowCode(null);
 
@@ -197,9 +197,9 @@ namespace Edith.Pairing
             transform.SetPositionAndRotation(rest, Facing(rest));
         }
 
-        Text Label(string name, RectTransform parent, Font face, int size, Color color, Vector2 box, Vector2 position)
+        Text Label(string name, RectTransform parent, Font face, int size, Color color, Vector2 box, Vector2 position, bool shadow = true)
         {
-            var text = Theme.Label(parent, name, face, size, color, TextAnchor.MiddleCenter, material);
+            var text = Theme.Label(parent, name, face, size, color, TextAnchor.MiddleCenter, material, shadow);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
             Place(text.rectTransform, parent, box, position);
             return text;
