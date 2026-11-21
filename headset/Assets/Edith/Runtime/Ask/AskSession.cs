@@ -8,7 +8,7 @@ namespace Edith.Ask
     public enum AskProblem { None, NotConfigured, MicDenied, Unreachable, Refused, Dropped, TimedOut, NotHeard }
 
     /// One question at a time, as a state machine over time in seconds. A tap starts a question from Idle or Fading and
-    /// cuts one short while it is under way; Gemini's automatic activity detection ends the spoken turn.
+    /// does nothing while one is under way; Gemini's automatic activity detection ends the spoken turn.
     public sealed class AskSession
     {
         public const float ChimeSeconds = 0.25f;
@@ -34,14 +34,11 @@ namespace Edith.Ask
         public bool MicWanted(float now) =>
             (Phase == AskPhase.Connecting || Phase == AskPhase.Listening) && now >= tappedAt + ChimeSeconds;
 
-        /// True when the tap starts a new question; false when it cuts the one under way short.
+        /// True when the tap starts a new question. While one is under way the tap is ignored, so tapping again and
+        /// again can't open one session after another.
         public bool Tap(float now)
         {
-            if (Busy)
-            {
-                Fade(now, AnswerLingerSeconds);
-                return false;
-            }
+            if (Busy) return false;
             tappedAt = now;
             turnComplete = false;
             Problem = AskProblem.None;
