@@ -35,6 +35,8 @@ namespace Edith.Snapshots
         Vector3 fullScale;
         CardView view;
         string caption;
+        // The photo as drawn, with its corners cut round. The photo itself stays whole, since Ask sends it on.
+        Texture2D shownPhoto;
 
         public SightBox Box { get; private set; }
 
@@ -70,13 +72,15 @@ namespace Edith.Snapshots
             var raw = image.GetComponent<RawImage>();
             raw.raycastTarget = false;
             raw.material = material;
-            raw.texture = photo;
+            var shown = Rounded(photo, CardView.PhotoRadiusMm(box.Depth) / (box.Size.x * UnitsPerMetre));
+            raw.texture = shown != null ? shown : photo;
             if (photo == null) raw.color = EmptyPhoto;
 
             var snapshot = root.AddComponent<Snapshot>();
             snapshot.Id = nextId++;
             snapshot.Box = box;
             snapshot.Photo = photo;
+            snapshot.shownPhoto = shown;
             snapshot.group = root.GetComponent<CanvasGroup>();
             snapshot.group.alpha = 0f;
             snapshot.group.interactable = false;
@@ -164,6 +168,30 @@ namespace Edith.Snapshots
         void OnDestroy()
         {
             if (Photo != null) Destroy(Photo);
+            if (shownPhoto != null) Destroy(shownPhoto);
+        }
+
+        /// A copy of `photo` whose corners are transparent outside a radius of `radiusShare` of its width, or null
+        /// when the photo can't be read.
+        static Texture2D Rounded(Texture photo, float radiusShare)
+        {
+            if (!(photo is Texture2D source) || !source.isReadable) return null;
+            int w = source.width, h = source.height;
+            var pixels = source.GetPixels32();
+            var radius = Mathf.Clamp(radiusShare * w, 0f, Mathf.Min(w, h) * 0.5f);
+            float hx = w * 0.5f, hy = h * 0.5f;
+            for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                float qx = Mathf.Abs(x + 0.5f - hx) - (hx - radius), qy = Mathf.Abs(y + 0.5f - hy) - (hy - radius);
+                if (qx <= 0f || qy <= 0f) continue;
+                var alpha = Mathf.Clamp01(radius + 0.5f - Mathf.Sqrt(qx * qx + qy * qy));
+                pixels[y * w + x].a = (byte)(alpha * 255f);
+            }
+            var rounded = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            rounded.SetPixels32(pixels);
+            rounded.Apply(false, true);
+            return rounded;
         }
 
         void Update()

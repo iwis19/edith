@@ -11,7 +11,7 @@ namespace Edith.Tests
             var flow = new WelcomeFlow();
             Assert.AreEqual(WelcomeStep.Interests, flow.Step);
             Assert.AreEqual(VoiceStyle.Light, flow.Voice);
-            Assert.AreEqual("1 OF 3", flow.Counter);
+            Assert.AreEqual("1 OF 2", flow.Counter);
             Assert.IsEmpty(flow.Interests);
         }
 
@@ -28,31 +28,29 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void Next_goes_to_pairing_and_a_connected_phone_goes_on_to_the_practice()
+        public void Next_goes_to_pairing_and_a_connected_phone_finishes_the_welcome()
         {
             var flow = new WelcomeFlow();
             flow.Next();
             Assert.AreEqual(WelcomeStep.Pair, flow.Step);
-            Assert.AreEqual("2 OF 3", flow.Counter);
-            flow.PhoneConnected(null);
-            Assert.AreEqual(WelcomeStep.Practice, flow.Step);
-            flow.PhoneConnected("Western University, London");
-            Assert.AreEqual("Western University, London", flow.Place);
-            Assert.AreEqual("3 OF 3", flow.Counter);
+            Assert.AreEqual("2 OF 2", flow.Counter);
+            flow.PhoneConnected();
+            Assert.IsTrue(flow.Finished);
+            Assert.IsFalse(flow.Skipped);
         }
 
         [Test]
         public void A_phone_paired_early_skips_the_pairing_step()
         {
             var flow = new WelcomeFlow();
-            flow.PhoneConnected("Home");
+            flow.PhoneConnected();
             Assert.AreEqual(WelcomeStep.Interests, flow.Step, "the person has not pressed Next yet");
             flow.Next();
-            Assert.AreEqual(WelcomeStep.Practice, flow.Step);
+            Assert.IsTrue(flow.Finished);
         }
 
         [Test]
-        public void Skipping_the_pairing_ends_the_welcome_without_a_practice()
+        public void Skipping_the_pairing_ends_the_welcome()
         {
             var flow = new WelcomeFlow();
             flow.Next();
@@ -68,33 +66,6 @@ namespace Edith.Tests
             var flow = new WelcomeFlow();
             flow.Skip();
             Assert.AreEqual(WelcomeStep.Interests, flow.Step);
-        }
-
-        [Test]
-        public void Back_returns_from_the_practice_and_the_picks_survive()
-        {
-            var flow = new WelcomeFlow();
-            flow.Toggle("Cars");
-            flow.ChooseVoice(VoiceStyle.Calm);
-            flow.PhoneConnected("Here");
-            flow.Next();
-            flow.Back();
-            Assert.AreEqual(WelcomeStep.Interests, flow.Step);
-            CollectionAssert.AreEqual(new[] { "Cars" }, flow.Interests);
-            Assert.AreEqual(VoiceStyle.Calm, flow.Voice);
-            flow.Next();
-            Assert.AreEqual(WelcomeStep.Practice, flow.Step, "the phone is still paired");
-        }
-
-        [Test]
-        public void The_first_box_finishes_the_practice()
-        {
-            var flow = new WelcomeFlow();
-            flow.PhoneConnected("Here");
-            flow.Next();
-            flow.PracticeDone();
-            Assert.IsTrue(flow.Finished);
-            Assert.IsFalse(flow.Skipped);
         }
 
         [Test]

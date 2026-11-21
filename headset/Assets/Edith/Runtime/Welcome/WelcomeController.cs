@@ -10,25 +10,24 @@ using UnityEngine.UI;
 
 namespace Edith.Welcome
 {
-    /// The first-launch welcome: EDITH on her horse at the left, and at the right three steps in glass. One picks
-    /// interests and a voice, two shows the pairing code, three asks for a practice box. The steps and what has been
-    /// picked live in WelcomeFlow; the pairing itself keeps running in PhonePairing, which stays hidden while this is
-    /// up. The first two steps are tapped with a quick pinch, read straight from the hands because every gesture
-    /// but this one stays off until a phone is paired. The practice step watches the real pinch input.
+    /// The first-launch welcome in two steps. One is EDITH on her horse at the left and, at the right in glass, the
+    /// interests and voice to pick. Two is the pairing code alone in glass, held where PhonePairing holds its panel
+    /// and as large. The steps and what has been picked live in WelcomeFlow; the pairing itself keeps running in
+    /// PhonePairing, which stays hidden while this is up. Both steps are tapped with a quick pinch, read straight from
+    /// the hands because every gesture but this one stays off until a phone is paired.
     public sealed class WelcomeController : MonoBehaviour
     {
         [SerializeField] Transform eye;
         [SerializeField] Font font;
         [SerializeField] Material material;
         [SerializeField] PhonePairing pairing;
-        [SerializeField] PinchInput pinch;
         [SerializeField] RightHandSource right;
         [SerializeField] LeftHandSource left;
 
         /// The person tapped a voice's play button. Playing a sample is up to whoever listens.
         public event Action<VoiceStyle> PreviewRequested;
 
-        /// The welcome ran to its end or was left at the pairing step.
+        /// The phone paired or the person skipped pairing.
         public event Action Finished;
 
         // The screen is laid out in 1280 by 820 design units. 2800 units to the metre makes it 46 cm wide, held 0.55 m
@@ -36,9 +35,12 @@ namespace Edith.Welcome
         const float UnitsPerMetre = 2800f;
         const float Ahead = 0.55f, FollowRate = 6f, FadeSeconds = 0.35f;
         const float ScreenWidth = 1280f, ScreenHeight = 820f;
+        // The pairing pane, in design units, and where it is held: 15 cm wide, 0.45 m out and 6 cm below the line of
+        // sight, as PhonePairing holds its panel.
+        static readonly Rect PairPane = new Rect(500f, 93f, 720f, 455f);
+        const float PairWidthMetres = 0.15f, PairAhead = 0.45f, PairBelow = 0.06f;
         const float TapMargin = 10f;
         const float TypeCharsPerSecond = 55f;
-        const string PracticeLine = "Pinch the air and drag a box around something that catches your eye.";
 
         sealed class Target
         {
@@ -71,14 +73,12 @@ namespace Edith.Welcome
 
         Canvas canvas;
         CanvasGroup group;
-        RectTransform screen, stepOne, stepTwo, stepThree, ghost;
-        Text speechText, link, status, toast, counterOne, counterTwo, counterThree;
-        Glass dot, spinner;
-        CanvasGroup ghostGroup;
+        RectTransform screen, character, stepOne, stepTwo;
+        Text speechText, link, status, counterOne, counterTwo;
+        Glass spinner;
         Font regular, semibold;
         WelcomeStep shownStep = WelcomeStep.Done;
-        bool phoneKnown, lookingUpPlace, dragging, leaving;
-        float ghostAlpha = 1f;
+        bool phoneKnown, leaving;
 
         void Start()
         {
@@ -89,20 +89,14 @@ namespace Edith.Welcome
             }
             Build();
             if (pairing != null) pairing.Suppressed = true;
-            if (pinch != null) pinch.Stepped += OnPinch;
             Refresh();
-        }
-
-        void OnDestroy()
-        {
-            if (pinch != null) pinch.Stepped -= OnPinch;
         }
 
         void Update()
         {
             if (screen == null) return;
             WatchPhone();
-            if (flow.Step == WelcomeStep.Interests || flow.Step == WelcomeStep.Pair) ReadTaps();
+            ReadTaps();
             if (flow.Step != shownStep) Enter(flow.Step);
             Draw();
         }
@@ -111,40 +105,21 @@ namespace Edith.Welcome
         {
             if (screen == null || group.alpha <= 0f) return;
             var follow = 1f - Mathf.Exp(-FollowRate * Time.deltaTime);
-            var rest = eye.position + eye.forward * Ahead;
+            var rest = Rest();
             var position = Vector3.Lerp(transform.position, rest, follow);
             transform.SetPositionAndRotation(position, Quaternion.Slerp(transform.rotation, Facing(position), follow));
         }
 
         // ---- flow
 
-        /// Moves to the practice step once the backend keeps a phone position, however the person got there.
+        /// Ends the pairing step once the backend keeps a phone position, however the person got there.
         void WatchPhone()
         {
             var state = pairing != null ? pairing.Flow : null;
             if (state == null || phoneKnown) return;
             if (state.Phase != PairPhase.Connected && state.Phase != PairPhase.Paired) return;
             phoneKnown = true;
-            flow.PhoneConnected(null);
-            LookUpPlace();
-        }
-
-        /// The backend resolves the place a moment after the first position arrives, so ask a few times.
-        async void LookUpPlace()
-        {
-            if (lookingUpPlace) return;
-            lookingUpPlace = true;
-            for (var attempt = 0; attempt < 6 && this != null; attempt++)
-            {
-                var place = await pairing.PlaceAsync();
-                if (this == null) return;
-                if (!string.IsNullOrEmpty(place))
-                {
-                    flow.PhoneConnected(place);
-                    return;
-                }
-                await System.Threading.Tasks.Task.Delay(2000);
-            }
+            flow.PhoneConnected();
         }
 
         void ReadTaps()
@@ -152,14 +127,6 @@ namespace Edith.Welcome
             if (right == null || left == null) return;
             var reading = taps.Step(right.ReadUngated(), left.ReadUngated());
             if (reading.Event == PinchEvent.Tap) Tap(reading.Start);
-        }
-
-        /// The practice step finishes with the first box drawn.
-        void OnPinch(PinchReading reading)
-        {
-            if (flow.Step != WelcomeStep.Practice) return;
-            dragging = reading.Phase == PinchPhase.Dragging || reading.Phase == PinchPhase.Released;
-            if (reading.Event == PinchEvent.Completed) flow.PracticeDone();
         }
 
         void Tap(Vector3 pinchPoint)
@@ -204,18 +171,36 @@ namespace Edith.Welcome
             shownStep = step;
             stepOne.gameObject.SetActive(step == WelcomeStep.Interests);
             stepTwo.gameObject.SetActive(step == WelcomeStep.Pair);
-            stepThree.gameObject.SetActive(step == WelcomeStep.Practice);
-            dragging = false;
+            // Done fades out in the layout it was shown in.
+            if (step != WelcomeStep.Done) Arrange(step == WelcomeStep.Pair);
             Refresh();
             if (step == WelcomeStep.Done) Leave();
         }
+
+        /// Step one fills the screen with EDITH beside it. Step two shows only its pane, scaled and held like
+        /// PhonePairing's panel, with the screen shifted so the pane is centred on the canvas.
+        void Arrange(bool pairOnly)
+        {
+            character.gameObject.SetActive(!pairOnly);
+            var root = (RectTransform)transform;
+            root.localScale = Vector3.one / (pairOnly ? PairPane.width / PairWidthMetres : UnitsPerMetre);
+            screen.anchoredPosition = pairOnly
+                ? new Vector2(ScreenWidth * 0.5f - PairPane.center.x, PairPane.center.y - ScreenHeight * 0.5f)
+                : Vector2.zero;
+            var rest = Rest();
+            transform.SetPositionAndRotation(rest, Facing(rest));
+        }
+
+        Vector3 Rest() => shownStep == WelcomeStep.Pair
+            ? eye.position + eye.forward * PairAhead - eye.up * PairBelow
+            : eye.position + eye.forward * Ahead;
 
         void Leave()
         {
             if (leaving) return;
             leaving = true;
-            // Practice done means the welcome is complete. Leaving at the pairing step also ends it, and brings the
-            // pairing panel back, since the gate stays closed until a phone is paired.
+            // A paired phone completes the welcome. Skipping pairing also ends it, and brings the pairing panel back,
+            // since the gate stays closed until a phone is paired.
             WelcomeStore.Done = true;
             if (pairing != null) pairing.Suppressed = false;
             Finished?.Invoke();
@@ -236,16 +221,8 @@ namespace Edith.Welcome
             speech.Advance(Time.deltaTime);
             speechText.text = speech.Render();
 
-            switch (flow.Step)
-            {
-                case WelcomeStep.Pair:
-                    DrawPairing();
-                    break;
-                case WelcomeStep.Practice:
-                    DrawPractice();
-                    break;
-            }
-            counterOne.text = counterTwo.text = counterThree.text = flow.Counter;
+            if (flow.Step == WelcomeStep.Pair) DrawPairing();
+            counterOne.text = counterTwo.text = flow.Counter;
         }
 
         string SpeechLine()
@@ -254,11 +231,6 @@ namespace Edith.Welcome
             {
                 case WelcomeStep.Interests:
                     return "Hi, I'm EDITH! Tell me what you love and I'll find the fun in whatever you look at.";
-                case WelcomeStep.Pair:
-                    return "One more thing: grab your phone so I know where we are. Then I can tell you about the place too.";
-                case WelcomeStep.Practice:
-                    var where = string.IsNullOrEmpty(flow.Place) ? "I can tell where we are" : "we're at " + flow.Place;
-                    return "Got it, " + where + "! Now let's try one. " + PracticeLine;
                 default:
                     return "";
             }
@@ -285,14 +257,6 @@ namespace Edith.Welcome
             }
             var beat = 0.5f + 0.5f * Mathf.Sin(Time.time * 4f);
             spinner.SetLook(new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, Mathf.Lerp(0.25f, 0.9f, beat)), Color.clear, Theme.Ice, Color.clear);
-        }
-
-        void DrawPractice()
-        {
-            toast.text = string.IsNullOrEmpty(flow.Place) ? "Phone paired" : "Phone paired · " + flow.Place;
-            // The ghost box shows where to drag and fades once the pinch starts.
-            ghostAlpha = Mathf.MoveTowards(ghostAlpha, dragging ? 0f : 1f, Time.deltaTime / 0.25f);
-            ghostGroup.alpha = ghostAlpha;
         }
 
         /// Redraws the picks: which chips and voice are chosen.
@@ -334,28 +298,24 @@ namespace Edith.Welcome
 
             screen = Child("Screen", root);
             screen.sizeDelta = root.sizeDelta;
+            character = Child("Character", screen);
             BuildCharacter();
             stepOne = Child("Step 1", screen);
             stepTwo = Child("Step 2", screen);
-            stepThree = Child("Step 3", screen);
             BuildInterests();
             BuildPairing();
-            BuildPractice();
             stepOne.gameObject.SetActive(false);
             stepTwo.gameObject.SetActive(false);
-            stepThree.gameObject.SetActive(false);
-
-            var rest = eye.position + eye.forward * Ahead;
-            transform.SetPositionAndRotation(rest, Facing(rest));
+            Arrange(false);
         }
 
         void BuildCharacter()
         {
-            var name = Label(screen, "Name", semibold, 15, Theme.Cyan, TextAnchor.MiddleLeft, 70f, 122f, 200f, 20f);
+            var name = Label(character, "Name", semibold, 15, Theme.Cyan, TextAnchor.MiddleLeft, 70f, 122f, 200f, 20f);
             name.text = "EDITH";
-            speechText = Label(screen, "Speech", regular, 29, Theme.Ice, TextAnchor.UpperLeft, 70f, 148f, 390f, 130f);
+            speechText = Label(character, "Speech", regular, 29, Theme.Ice, TextAnchor.UpperLeft, 70f, 148f, 390f, 130f);
             speechText.supportRichText = true;
-            var rider = Theme.Pixels(screen, "Rider", Theme.Rider, material);
+            var rider = Theme.Pixels(character, "Rider", Theme.Rider, material);
             Place(rider.rectTransform, 50f, 300f, 400f, 325f);
         }
 
@@ -414,8 +374,11 @@ namespace Edith.Welcome
             var play = Glass.Build(glass.Rect, "Play", new Vector2(34f, 34f), 17f, material);
             play.SetLook(new Color(0.04f, 0.2f, 0.22f, 0.4f), Color.clear, Theme.Ice, Color.clear);
             play.Rect.anchoredPosition = new Vector2(w * 0.5f - 34f, h * 0.5f - 29f);
-            var triangle = Label(play.Rect, "Triangle", semibold, 15, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, 34f, 34f, centred: true);
-            triangle.text = "▶";
+            // Jost has no play glyph, so the triangle is drawn. Nudged right so it looks centred in the circle.
+            var triangle = Theme.Pixels(play.Rect, "Triangle", PlayTriangle, material);
+            triangle.color = Theme.Ice;
+            triangle.rectTransform.sizeDelta = new Vector2(11f, 13f);
+            triangle.rectTransform.anchoredPosition = new Vector2(1.5f, 0f);
             var body = Label(glass.Rect, "Description", regular, 16, Theme.Muted, TextAnchor.UpperLeft, 16f, 50f, w - 32f, 50f, centred: false, within: new Vector2(w, h));
             body.text = description;
             voices.Add(new VoiceCard { Style = style, Glass = glass, Play = play });
@@ -451,45 +414,6 @@ namespace Edith.Welcome
             skip.SetLook(new Color(0.04f, 0.2f, 0.22f, 0.3f), Color.clear, Theme.Cyan, Color.clear);
             Label(skip.Rect, "Label", semibold, 17, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, 134f, 50f, centred: true).text = "Skip for now";
             AddTarget(skip.Rect, WelcomeStep.Pair, SkipTapped);
-        }
-
-        void BuildPractice()
-        {
-            var pill = Panel(stepThree, "Paired", 520f, 62f, 455f, 50f, 25f);
-            pill.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Cyan, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.3f));
-            var check = Panel(stepThree, "Check", 526f, 66f, 42f, 42f, 21f);
-            check.SetLook(Theme.Cyan, Color.clear, Theme.Cyan, Color.clear);
-            Label(check.Rect, "Tick", semibold, 21, Theme.OnCyan, TextAnchor.MiddleCenter, 0f, 0f, 42f, 42f, centred: true).text = "✓";
-            toast = Label(stepThree, "Toast", semibold, 19, Theme.Ice, TextAnchor.MiddleLeft, 578f, 70f, 320f, 34f);
-            counterThree = Label(stepThree, "Counter", semibold, 14, Theme.Cyan, TextAnchor.MiddleRight, 880f, 74f, 80f, 24f);
-
-            ghost = Child("Ghost", stepThree);
-            ghostGroup = ghost.gameObject.AddComponent<CanvasGroup>();
-            ghostGroup.interactable = false;
-            ghostGroup.blocksRaycasts = false;
-            const float gx = 880f, gy = 262f, gw = 322f, gh = 288f;
-            var outline = Theme.Pixels(ghost, "Outline", DashedBox((int)gw, (int)gh, 38, 3, 12, 8), material);
-            Place(outline.rectTransform, gx, gy, gw, gh);
-            outline.color = new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.85f);
-            var length = Mathf.Sqrt(gw * gw + gh * gh) - 40f;
-            var dots = Theme.Pixels(ghost, "Diagonal", DotRow(), material);
-            Place(dots.rectTransform, gx + gw * 0.5f, gy + gh * 0.5f, length, 8f, centred: true);
-            dots.uvRect = new Rect(0f, 0f, length / 16f, 1f);
-            dots.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -Mathf.Atan2(gh, gw) * Mathf.Rad2Deg);
-            dots.color = Theme.Ice;
-            dot = Panel(ghost, "Start", gx - 11f, gy - 11f, 22f, 22f, 11f);
-            dot.SetLook(new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.9f), Color.clear, Theme.Ice, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f));
-            Label(ghost, "Hint", regular, 16, Theme.Ice, TextAnchor.MiddleCenter, gx - 40f, gy + gh + 26f, gw + 80f, 26f).text = "Ghost box shows where to drag. It fades once you start.";
-
-            var back = Label(stepThree, "Back", regular, 18, Theme.Ice, TextAnchor.MiddleCenter, 500f, 749f, 280f, 28f);
-            back.text = "Back to step 1";
-            var underline = new GameObject("Underline", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-            underline.transform.SetParent(stepThree, false);
-            underline.color = Theme.Ice;
-            underline.raycastTarget = false;
-            underline.material = material;
-            Place(underline.rectTransform, 560f, 772f, 160f, 1.5f);
-            AddTarget(back.rectTransform, WelcomeStep.Practice, flow.Back);
         }
 
         // ---- helpers
@@ -543,46 +467,32 @@ namespace Edith.Welcome
         void AddTarget(RectTransform rect, WelcomeStep step, Action tap) =>
             targets.Add(new Target { Rect = rect, Step = step, Tap = tap });
 
+        static Texture2D playTriangle;
+
+        /// A white play triangle pointing right, its edges smoothed, 22 by 26 pixels.
+        static Texture2D PlayTriangle
+        {
+            get
+            {
+                if (playTriangle != null) return playTriangle;
+                const int w = 22, h = 26;
+                playTriangle = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+                var pixels = new Color32[w * h];
+                for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++)
+                {
+                    // Inside the left edge and under both slanted edges, each softened over a pixel.
+                    float px = x + 0.5f, py = y + 0.5f - h * 0.5f;
+                    var slant = (w - px) * (h * 0.5f) / w - Mathf.Abs(py);
+                    var edge = Mathf.Min(px, slant * w / Mathf.Sqrt(w * w + h * h * 0.25f));
+                    pixels[y * w + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(edge + 0.5f));
+                }
+                playTriangle.SetPixels32(pixels);
+                playTriangle.Apply(false, true);
+                return playTriangle;
+            }
+        }
+
         Quaternion Facing(Vector3 position) => Quaternion.LookRotation(position - eye.position, Vector3.up);
-
-        /// A rounded rectangle drawn as a dashed line `thickness` pixels wide. Corners are solid.
-        static Texture2D DashedBox(int w, int h, int radius, int thickness, int dash, int gap)
-        {
-            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
-            var pixels = new Color32[w * h];
-            float hx = w * 0.5f, hy = h * 0.5f;
-            for (var y = 0; y < h; y++)
-            for (var x = 0; x < w; x++)
-            {
-                float px = x + 0.5f - hx, py = y + 0.5f - hy;
-                float qx = Mathf.Abs(px) - (hx - radius), qy = Mathf.Abs(py) - (hy - radius);
-                var d = Mathf.Sqrt(Mathf.Max(qx, 0f) * Mathf.Max(qx, 0f) + Mathf.Max(qy, 0f) * Mathf.Max(qy, 0f))
-                    + Mathf.Min(Mathf.Max(qx, qy), 0f) - radius;
-                var band = Mathf.Clamp01(thickness * 0.5f + 0.5f - Mathf.Abs(d + thickness * 0.5f));
-                var corner = qx > 0f && qy > 0f;
-                var along = qx > qy ? y : x;
-                var on = corner || along % (dash + gap) < dash;
-                pixels[y * w + x] = new Color(1f, 1f, 1f, on ? band : 0f);
-            }
-            texture.SetPixels32(pixels);
-            texture.Apply(false, true);
-            return texture;
-        }
-
-        /// One cell of the dotted diagonal: a dot in a 16 by 8 pixel tile, repeated along the line.
-        static Texture2D DotRow()
-        {
-            var texture = new Texture2D(16, 8, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Repeat };
-            var pixels = new Color32[16 * 8];
-            for (var y = 0; y < 8; y++)
-            for (var x = 0; x < 16; x++)
-            {
-                var d = Mathf.Sqrt((x - 7.5f) * (x - 7.5f) + (y - 3.5f) * (y - 3.5f));
-                pixels[y * 16 + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(2.6f - d));
-            }
-            texture.SetPixels32(pixels);
-            texture.Apply(false, true);
-            return texture;
-        }
     }
 }

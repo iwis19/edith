@@ -2,8 +2,8 @@ using System.Collections.Generic;
 
 namespace Edith.Welcome
 {
-    /// The three steps of the first-launch welcome. Done is not a step the person sees.
-    public enum WelcomeStep { Interests = 1, Pair = 2, Practice = 3, Done = 4 }
+    /// The two steps of the first-launch welcome. Done is not a step the person sees.
+    public enum WelcomeStep { Interests = 1, Pair = 2, Done = 3 }
 
     /// How EDITH sounds. Each maps to one of Gemini Live's voices through WelcomeStore.VoiceName.
     public enum VoiceStyle { Enthusiastic, Calm, Light }
@@ -13,7 +13,7 @@ namespace Edith.Welcome
     /// A phone that is already paired skips the pairing step, however the person got there.
     public sealed class WelcomeFlow
     {
-        public const int StepCount = 3;
+        public const int StepCount = 2;
 
         /// The twelve interests offered, in the order they are drawn.
         public static readonly string[] AllInterests =
@@ -30,11 +30,8 @@ namespace Edith.Welcome
         /// The voice picked, Light until the person picks another.
         public VoiceStyle Voice { get; private set; } = VoiceStyle.Light;
 
-        /// The person left the pairing step without pairing, so the welcome ended before the practice Look.
+        /// The person left the pairing step without pairing.
         public bool Skipped { get; private set; }
-
-        /// Where the phone is, once it has said; null while the place is unknown.
-        public string Place { get; private set; }
 
         public bool Finished => Step == WelcomeStep.Done;
 
@@ -58,40 +55,26 @@ namespace Edith.Welcome
             if (Step == WelcomeStep.Interests) Voice = voice;
         }
 
-        /// Next on the first step: on to pairing, or straight to the practice when the phone is already paired.
+        /// Next on the first step: on to pairing, or done when the phone is already paired.
         public void Next()
         {
             if (Step != WelcomeStep.Interests) return;
-            Step = phoneReady ? WelcomeStep.Practice : WelcomeStep.Pair;
+            Step = phoneReady ? WelcomeStep.Done : WelcomeStep.Pair;
         }
 
-        /// The backend has a phone position. `place` may be null while the place is still being found.
-        public void PhoneConnected(string place)
+        /// The backend has a phone position, which ends the pairing step.
+        public void PhoneConnected()
         {
             phoneReady = true;
-            if (!string.IsNullOrEmpty(place)) Place = place;
-            if (Step == WelcomeStep.Pair) Step = WelcomeStep.Practice;
+            if (Step == WelcomeStep.Pair) Step = WelcomeStep.Done;
         }
 
-        /// "Skip for now" on the pairing step. The welcome ends there: the practice Look needs a paired phone, since
-        /// every gesture stays off until one is.
+        /// "Skip for now" on the pairing step ends the welcome unpaired.
         public void Skip()
         {
             if (Step != WelcomeStep.Pair) return;
             Skipped = true;
             Step = WelcomeStep.Done;
-        }
-
-        /// "Back to step 1" on the practice.
-        public void Back()
-        {
-            if (Step == WelcomeStep.Practice) Step = WelcomeStep.Interests;
-        }
-
-        /// The person drew their first box.
-        public void PracticeDone()
-        {
-            if (Step == WelcomeStep.Practice) Step = WelcomeStep.Done;
         }
     }
 }

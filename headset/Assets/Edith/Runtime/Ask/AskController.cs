@@ -294,11 +294,9 @@ namespace Edith.Ask
                         if (name.Length > 0 && !sources.Contains(name)) sources.Add(name);
                     var sinceHeard = lastHeardAt >= 0f ? $"{Ms(Time.realtimeSinceStartup - lastHeardAt)} ms after the last heard words" : "before any words were heard";
                     Debug.Log($"[EDITH ask] {sources.Count} sources, {sinceHeard}: {string.Join(", ", sources)}");
-                    if (current != null) current.ShowSources(sources);
                     return;
                 case LiveEventKind.InputText:
                     heard.Append(e.Text);
-                    if (current != null) current.ShowHeard(heard.ToString());
                     if (session.Phase != AskPhase.Answering) lastHeardAt = Time.realtimeSinceStartup;
                     return;
                 case LiveEventKind.TurnComplete:

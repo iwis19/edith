@@ -25,6 +25,9 @@ namespace Edith.Snapshots
         const float ArmMm = 6f, ThickMm = 1.3f, InsetMm = 3.5f;
         // The divider's distance under the photo, the gap from it to the name, and from the name to the fact.
         const float DividerMm = 5f, TitleGapMm = 6f, FactGapMm = 1.5f, DotMm = 2.6f;
+        // The thin frame round the photo: how far out from it and its corner radius. The photo's own corners are cut
+        // to sit concentric inside it.
+        const float FrameEdgeMm = 3f, FrameRadiusMm = 7f;
         static readonly Color Quiet = Theme.Muted;
         static readonly Color Waiting = new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f);
 
@@ -40,12 +43,17 @@ namespace Edith.Snapshots
         float textWidthMm;
         int fittedLength = -1;
 
+        /// The corner radius of the photo on a card hung `depth` metres from the eye, in millimetres.
+        public static float PhotoRadiusMm(float depth) => (FrameRadiusMm - FrameEdgeMm) * Scale(depth);
+
+        static float Scale(float depth) => Mathf.Max(1f, depth / ArmsLengthMeters);
+
         /// `depth` is how far the card hangs from the eye that made it, in metres.
         public static CardView Build(RectTransform photo, Vector2 photoSizeMm, float depth, Font font, Material material)
         {
             var view = new CardView
             {
-                scale = Mathf.Max(1f, depth / ArmsLengthMeters),
+                scale = Scale(depth),
                 photoMm = photoSizeMm,
             };
             view.textWidthMm = Mathf.Max(photoSizeMm.x, MinTextWidthMm * view.scale);
@@ -114,8 +122,8 @@ namespace Edith.Snapshots
         /// The thin frame around the photo, and the line with a dot in it that separates photo from text.
         void BuildDivider(RectTransform photo, Material material)
         {
-            var edge = 3f * scale;
-            frame = Glass.Build(photo, "Frame", photoMm + Vector2.one * (2f * edge), 7f * scale, material);
+            var edge = FrameEdgeMm * scale;
+            frame = Glass.Build(photo, "Frame", photoMm + Vector2.one * (2f * edge), FrameRadiusMm * scale, material);
             frame.Rect.SetSiblingIndex(1);
             divider = new GameObject("Divider", typeof(RectTransform)).GetComponent<RectTransform>();
             Anchor(divider, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0f, -(photoMm.y * 0.5f + DividerMm * scale)));

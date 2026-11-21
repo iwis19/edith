@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Edith.Snapshots;
 using Edith.UI;
 using UnityEngine;
@@ -22,8 +21,6 @@ namespace Edith.Ask
         const int FontSize = 56;
         const float CaptionHeight = 160f;
         public const int MaxLines = 2;
-        const int SourcesFontSize = 36;
-        public const int MaxSources = 3;
         public const float HomeCaptionMetres = 0.26f, MinCaptionMetres = 0.1f;
         static readonly Color Quiet = Theme.Muted;
         static readonly Color Bright = Theme.Ice;
@@ -48,7 +45,7 @@ namespace Edith.Ask
         bool atPerch;
         Vector2 spot = OrbPlacement.Home;
         float homeClearSince = -1f;
-        Text caption, sources, listeningLabel;
+        Text caption, listeningLabel;
         RectTransform disc, halo;
         Glass haloGlass;
         bool listening;
@@ -120,22 +117,6 @@ namespace Edith.Ask
             labelRect.anchoredPosition = new Vector2(0f, -diameter * 0.08f);
             orb.listeningLabel.text = "Listening";
             orb.listeningLabel.enabled = false;
-
-            var names = new GameObject("Sources", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
-            names.font = regular;
-            names.fontSize = SourcesFontSize;
-            names.color = Quiet;
-            names.alignment = TextAnchor.UpperLeft;
-            names.horizontalOverflow = HorizontalWrapMode.Wrap;
-            names.verticalOverflow = VerticalWrapMode.Truncate;
-            names.raycastTarget = false;
-            names.material = material;
-            var namesRect = names.rectTransform;
-            namesRect.SetParent(rect, false);
-            namesRect.anchorMin = namesRect.anchorMax = new Vector2(1f, 0.5f);
-            namesRect.pivot = new Vector2(0f, 1f);
-            namesRect.anchoredPosition = new Vector2(GapMetres * UnitsPerMetre, -CaptionHeight * 0.5f);
-            orb.sources = names;
 
             orb.Choose(Time.time, true);
             orb.FitCaption(orb.CaptionMetres);
@@ -211,7 +192,7 @@ namespace Edith.Ask
         }
 
         /// True from the start of a question until the answer or a problem takes over: the orb breathes and says so
-        /// under itself, and the caption holds only what was heard.
+        /// under itself, and the caption stays empty.
         public bool Listening => listening;
 
         public void ShowListening()
@@ -232,13 +213,6 @@ namespace Edith.Ask
             listeningLabel.enabled = value;
         }
 
-        /// Shows `words`, what was heard so far, in quotes. Nothing heard yet leaves the caption as it is.
-        public void ShowHeard(string words)
-        {
-            var quoted = Quoted(words);
-            if (quoted.Length > 0) Show(quoted, Quiet);
-        }
-
         /// Shows `text`, the answer so far, typed out to the `spoken` fraction of it. The typed part only grows until
         /// a different answer starts.
         public void ShowAnswer(string text, float spoken)
@@ -251,27 +225,6 @@ namespace Edith.Ask
             revealed = typed;
             SetListening(false);
             Show(text.Substring(0, revealed), Bright);
-        }
-
-        /// Shows up to three of `names` as one quiet line under the caption; nothing when there are none.
-        public void ShowSources(IReadOnlyList<string> names)
-        {
-            sources.text = SourcesLine(names);
-            sources.rectTransform.sizeDelta = new Vector2(captionMetres * UnitsPerMetre, CaptionHeight * 0.5f);
-        }
-
-        /// The first three of `names` joined by a middle dot, led by "Sources:". Empty when there are none.
-        public static string SourcesLine(IReadOnlyList<string> names)
-        {
-            if (names == null || names.Count == 0) return "";
-            return "Sources: " + string.Join(" · ", names.Take(MaxSources));
-        }
-
-        /// `words` with its spacing tidied, in curly quotes, or empty when nothing was heard.
-        public static string Quoted(string words)
-        {
-            var tidy = string.Join(" ", (words ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
-            return tidy.Length == 0 ? "" : "“" + tidy + "”";
         }
 
         /// The end of `value` that fills at most `count` lines of `text`, starting at the first line kept. Rows leave
@@ -304,7 +257,6 @@ namespace Edith.Ask
             if (Mathf.Approximately(metres, captionMetres)) return;
             captionMetres = metres;
             caption.rectTransform.sizeDelta = new Vector2(metres * UnitsPerMetre, CaptionHeight);
-            sources.rectTransform.sizeDelta = new Vector2(metres * UnitsPerMetre, CaptionHeight * 0.5f);
             if (shown.Length > 0) caption.text = LastLines(caption, lines, shown, MaxLines);
         }
 
