@@ -116,6 +116,9 @@ namespace Edith.Ask
         /// Closes the session. Events still queued are dropped.
         public void Dispose() => cancel.Cancel();
 
+        /// Cancelled once this session ends, so work done for it can stop.
+        public CancellationToken Closing => cancel.Token;
+
         void EnqueueText(string json)
         {
             if (cancel.IsCancellationRequested) return;

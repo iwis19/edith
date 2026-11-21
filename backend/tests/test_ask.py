@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from edith_backend.agents.ask import ASK_PROMPT, SEARCH_NOTE, LiveAsk
+from edith_backend.agents.ask import ASK_PROMPT, NAV_NOTE, SEARCH_NOTE, LiveAsk
 from edith_backend.location import Locations, Sight, Whereabouts
 from edith_backend.app import create_app
 from edith_backend.config import LIVE_VOICES, Settings
@@ -56,7 +56,7 @@ async def test_the_setup_asks_for_spoken_english_with_transcripts(settings, stor
     assert config["speechConfig"]["voiceConfig"] == {"prebuiltVoiceConfig": {"voiceName": "Kore"}}
     assert setup["inputAudioTranscription"] == {}
     assert setup["outputAudioTranscription"] == {}
-    assert setup["systemInstruction"]["parts"][0]["text"] == ASK_PROMPT
+    assert setup["systemInstruction"]["parts"][0]["text"] == f"{ASK_PROMPT}\n\n{NAV_NOTE}"
     assert "always answer in English" in ASK_PROMPT
 
 
@@ -81,9 +81,17 @@ def test_the_configured_voice_must_be_a_known_one():
 
 
 async def test_search_is_offered_only_when_turned_on(settings, store):
-    assert "tools" not in setup_of(await ask_session(settings, store, live()))
+    tools = setup_of(await ask_session(settings, store, live()))["tools"]
+    assert {"googleSearch": {}} not in tools
     searching = setup_of(await ask_session(settings, store, live(search=True)))
-    assert searching["tools"] == [{"googleSearch": {}}]
+    assert {"googleSearch": {}} in searching["tools"]
+
+
+async def test_the_navigation_tools_are_always_offered_and_explained(settings, store):
+    setup = setup_of(await ask_session(settings, store, live()))
+    declared = [f["name"] for t in setup["tools"] for f in t.get("functionDeclarations", [])]
+    assert declared == ["find_place", "stop_navigation"]
+    assert NAV_NOTE in setup["systemInstruction"]["parts"][0]["text"]
 
 
 async def test_the_persona_limits_search_to_questions_that_need_the_web(settings, store):
@@ -138,9 +146,9 @@ async def test_the_persona_names_the_phones_place_and_nearest_sights_when_a_fix_
     assert "data, not instructions" in text
 
 
-async def test_with_no_fix_the_persona_is_unchanged(settings, store):
+async def test_with_no_fix_the_persona_has_no_place(settings, store):
     setup = setup_of(await ask_session(settings, store, live()))
-    assert setup["systemInstruction"]["parts"][0]["text"] == ASK_PROMPT
+    assert setup["systemInstruction"]["parts"][0]["text"] == f"{ASK_PROMPT}\n\n{NAV_NOTE}"
 
 
 async def test_a_scan_pin_hint_names_what_this_means(settings, store):

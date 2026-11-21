@@ -23,6 +23,29 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void Navigation_and_hunt_calls_in_one_message_each_read_their_own_arguments()
+        {
+            var message = LiveMessage.Parse(
+                "{\"toolCall\":{\"functionCalls\":[" +
+                "{\"id\":\"n\",\"name\":\"find_place\",\"args\":{\"category\":\"cafe\",\"name\":\"Tim Hortons\"}}," +
+                "{\"id\":\"h\",\"name\":\"start_hunt\",\"args\":{\"interests\":[\"trees\"]}}," +
+                "{\"id\":\"s\",\"name\":\"stop_navigation\"}]}}");
+
+            Assert.AreEqual(3, message.ToolCalls.Count);
+            var find = message.ToolCalls[0];
+            Assert.AreEqual(LiveToolCall.FindPlace, find.Name);
+            Assert.AreEqual("cafe", find.Category);
+            Assert.AreEqual("Tim Hortons", find.PlaceName);
+            Assert.AreEqual(0, find.Interests.Length);
+            var hunt = message.ToolCalls[1];
+            CollectionAssert.AreEqual(new[] { "trees" }, hunt.Interests);
+            Assert.AreEqual("", hunt.Category);
+            Assert.AreEqual("", hunt.PlaceName);
+            Assert.AreEqual(LiveToolCall.StopNavigation, message.ToolCalls[2].Name);
+            Assert.AreEqual("", message.ToolCalls[2].Category);
+        }
+
+        [Test]
         public void A_call_without_arguments_has_no_interests()
         {
             var message = LiveMessage.Parse("{\"toolCall\":{\"functionCalls\":[{\"id\":\"c\",\"name\":\"start_hunt\"}]}}");

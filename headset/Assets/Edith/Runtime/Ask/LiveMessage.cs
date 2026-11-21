@@ -10,16 +10,22 @@ namespace Edith.Ask
     public sealed class LiveToolCall
     {
         public const string StartHunt = "start_hunt", StopHunt = "stop_hunt";
+        public const string FindPlace = "find_place", StopNavigation = "stop_navigation";
 
         public readonly string Id, Name;
         /// `start_hunt`'s optional `interests`; empty for any other call.
         public readonly string[] Interests;
+        /// `find_place`'s `category` and optional `name`; empty for any other call.
+        public readonly string Category, PlaceName;
 
-        public LiveToolCall(string id, string name, string[] interests)
+        public LiveToolCall(string id, string name, string[] interests = null, string category = null,
+            string placeName = null)
         {
-            Id = id;
-            Name = name;
+            Id = id ?? "";
+            Name = name ?? "";
             Interests = interests ?? new string[0];
+            Category = category ?? "";
+            PlaceName = placeName ?? "";
         }
     }
 
@@ -45,7 +51,8 @@ namespace Edith.Ask
 
         [Serializable] sealed class ToolCallWire { public FunctionCall[] functionCalls; }
         [Serializable] sealed class FunctionCall { public string id, name; public CallArgs args; }
-        [Serializable] sealed class CallArgs { public string[] interests; }
+        /// Every argument of every function, since JsonUtility reads only declared fields. Each call reads its own.
+        [Serializable] sealed class CallArgs { public string[] interests; public string category, name; }
         [Serializable] sealed class Cancellation { public string[] ids; }
 
         [Serializable] sealed class ServerContent
@@ -86,7 +93,8 @@ namespace Edith.Ask
             if (wire?.toolCall?.functionCalls != null)
                 foreach (var call in wire.toolCall.functionCalls)
                     if (call != null && !string.IsNullOrEmpty(call.name))
-                        message.ToolCalls.Add(new LiveToolCall(call.id ?? "", call.name, call.args?.interests));
+                        message.ToolCalls.Add(new LiveToolCall(call.id, call.name, call.args?.interests,
+                            call.args?.category, call.args?.name));
             if (wire?.toolCallCancellation?.ids != null)
                 foreach (var id in wire.toolCallCancellation.ids)
                     if (!string.IsNullOrEmpty(id)) message.CancelledCalls.Add(id);

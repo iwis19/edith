@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Edith.Backend;
 using Edith.Bounty;
 using Edith.Capture;
+using Edith.Navigation;
 using Edith.Scan;
 using Edith.Snapshots;
 using UnityEngine;
@@ -16,8 +18,8 @@ namespace Edith.Ask
     /// neither is near; Gemini's activity detection ends the question. The answer is spoken and typed out beside an orb
     /// that perches on that snapshot, or rests low in the view clear of every snapshot, and fades once the answer is
     /// over. A thumb swipe flicks the orb away, and drawing a new box makes it vanish until the next tap. When EDITH
-    /// calls a function to start or stop a hunt, the question stays open while it runs, the call's result goes back
-    /// to EDITH, and she speaks it.
+    /// calls a function to find a place, stop the directions, or start or stop a hunt, the question stays open while
+    /// it runs, the call's result goes back to EDITH, and she speaks it.
     public sealed class AskController : MonoBehaviour
     {
         [SerializeField] ThumbGestures gestures;
@@ -46,17 +48,20 @@ namespace Edith.Ask
         SnapshotRoom room;
         AnswerOrb current;
         LiveLink link;
+        BackendSettings backend;
         PhotoJpeg photo;
         Task<CameraFrame> view;
         HeadsetCamera headsetCamera;
         bool photoSent;
 
-        /// A function EDITH called, waiting on its result. `Reply` is null when there is nothing to wait for.
+        /// A function EDITH called, waiting on its result: a JSON object for the tool response. A faulted `Reply` sends
+        /// nothing, as when the session closed under it.
         sealed class PendingCall
         {
             public LiveToolCall Call;
-            public Task<HuntReply> Reply;
-            public string Immediate;
+            public Task<string> Reply;
+            /// EDITH no longer wants the result, but the call still finishes.
+            public bool Withdrawn;
         }
 
         /// What the hunt card needs to draw itself like the rest of Ask.
@@ -151,6 +156,7 @@ namespace Edith.Ask
                 session.Fail(AskProblem.NotConfigured, Time.time);
                 return;
             }
+            backend = settings;
             link = LiveLink.Open(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, hint, voice.Speech,
                 AskVoice.ChunkSamples);
             photo = asked != null ? PhotoJpeg.Start(asked.Photo, PhotoLongSide) : null;
@@ -320,43 +326,78 @@ namespace Edith.Ask
             }
         }
 
-        /// Starts the function EDITH called. Its result goes back once the backend has answered.
+        /// Starts the function EDITH called, chosen by its name. Its result goes back once it has finished.
         void RunCall(LiveToolCall call)
         {
-            var pending = new PendingCall { Call = call };
-            if (bounty == null)
-                pending.Immediate = HuntReply.ErrorBody("unavailable", "Hunts are not available on this headset.");
-            else if (call.Name == LiveToolCall.StartHunt) pending.Reply = bounty.StartHunt(call.Interests);
-            else if (call.Name == LiveToolCall.StopHunt) pending.Reply = bounty.StopHunt();
-            else pending.Immediate = HuntReply.ErrorBody("unknown_function", "There is no function named " + call.Name + ".");
-            if (pending.Reply == null && pending.Immediate == null)
-                pending.Immediate = HuntReply.ErrorBody("not_configured", "The hunt service is not set up.");
+            Task<string> reply;
+            if (IsNavigation(call))
+            {
+                string url = backend.Url, deviceToken = backend.DeviceToken, profileId = BackendSettings.ProfileId;
+                var closing = link.Closing;
+                reply = Task.Run(() => Navigate(call, url, deviceToken, profileId, closing));
+            }
+            else if (call.Name == LiveToolCall.StartHunt || call.Name == LiveToolCall.StopHunt) reply = Hunt(call);
+            else reply = Task.FromResult(HuntReply.ErrorBody("unknown_function", "There is no function named " + call.Name + "."));
             session.CallStarted();
-            calls.Add(pending);
-            Debug.Log($"[EDITH ask] running {call.Name}");
+            calls.Add(new PendingCall { Call = call, Reply = reply });
+            Debug.Log($"[EDITH ask] running {call.Name} {call.Category} {call.PlaceName}".TrimEnd());
         }
 
-        /// Sends back the result of each finished call. The question stays open until it has.
+        static bool IsNavigation(LiveToolCall call) =>
+            call.Name == LiveToolCall.FindPlace || call.Name == LiveToolCall.StopNavigation;
+
+        Task<string> Hunt(LiveToolCall call)
+        {
+            if (bounty == null)
+                return Task.FromResult(HuntReply.ErrorBody("unavailable", "Hunts are not available on this headset."));
+            var hunt = call.Name == LiveToolCall.StartHunt ? bounty.StartHunt(call.Interests) : bounty.StopHunt();
+            if (hunt == null) return Task.FromResult(HuntReply.ErrorBody("not_configured", "The hunt service is not set up."));
+            return hunt.ContinueWith(done => done.Result.ToolResult, TaskContinuationOptions.ExecuteSynchronously);
+        }
+
+        /// Runs off the main thread. Ends faulted once the session closes, so no answer goes back on it.
+        static async Task<string> Navigate(LiveToolCall call, string url, string deviceToken, string profileId,
+            CancellationToken closing)
+        {
+            try
+            {
+                return call.Name == LiveToolCall.FindPlace
+                    ? await NavClient.FindAsync(url, deviceToken, profileId, call.Category, call.PlaceName, closing)
+                        .ConfigureAwait(false)
+                    : await NavClient.StopAsync(url, deviceToken, profileId, closing).ConfigureAwait(false);
+            }
+            catch (Exception e) when (!closing.IsCancellationRequested)
+            {
+                Debug.Log($"[EDITH ask] {call.Name} failed: {e.GetBaseException().Message}");
+                return NavClient.Problem("The map search did not answer.");
+            }
+        }
+
+        /// Sends back the result of each finished call. The question stays open until it has. A finished navigation
+        /// call also has the arrow ask for the new target at once instead of at its next poll.
         void AnswerCalls(float now)
         {
             for (var i = calls.Count - 1; i >= 0; i--)
             {
                 var pending = calls[i];
-                if (pending.Reply != null && !pending.Reply.IsCompleted) continue;
+                if (!pending.Reply.IsCompleted) continue;
                 calls.RemoveAt(i);
-                var result = pending.Immediate ?? pending.Reply.Result.ToolResult;
-                link?.SendToolResponse(pending.Call.Id, pending.Call.Name, result);
+                var answered = pending.Reply.Status == TaskStatus.RanToCompletion;
+                if (answered && IsNavigation(pending.Call)) NavArrow.Poke();
+                if (pending.Withdrawn) continue;
+                if (answered) link?.SendToolResponse(pending.Call.Id, pending.Call.Name, pending.Reply.Result);
                 session.CallFinished(now);
-                Debug.Log($"[EDITH ask] {pending.Call.Name} answered");
+                Debug.Log($"[EDITH ask] {pending.Call.Name} {(answered ? "answered" : "failed")}");
             }
         }
 
-        /// EDITH withdrew a call, so nothing is sent for it. The request itself still finishes and updates the hunt.
+        /// EDITH withdrew a call, so nothing is sent for it. The call itself still finishes and changes the hunt or the
+        /// directions.
         void DropCall(string id, float now)
         {
-            var index = calls.FindIndex(pending => pending.Call.Id == id);
-            if (index < 0) return;
-            calls.RemoveAt(index);
+            var pending = calls.Find(p => p.Call.Id == id && !p.Withdrawn);
+            if (pending == null) return;
+            pending.Withdrawn = true;
             session.CallFinished(now);
         }
 
