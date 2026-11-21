@@ -130,6 +130,24 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void Palms_held_out_while_looking_down_fire()
+        {
+            var down = Quaternion.AngleAxis(60f, Vector3.right);
+            eye = new Pose(Vector3.zero, down);
+            Assert.AreEqual(1, Hold((Hand(down * LeftWrist, false, down), Hand(down * RightWrist, true, down)), 0.6f));
+            Assert.Greater(last.Left.Down, 0.7f, "the palms face the floor");
+        }
+
+        [Test]
+        public void Hands_on_a_keyboard_the_user_glances_at_never_fire()
+        {
+            eye = new Pose(Vector3.zero, Quaternion.AngleAxis(35f, Vector3.right));
+            var typing = (Hand(new Vector3(-0.15f, -0.4f, 0.35f), false, TowardFloor), Hand(new Vector3(0.15f, -0.4f, 0.35f), true, TowardFloor));
+            Assert.AreEqual(0, Hold(typing, 2f));
+            Assert.Greater(last.Left.Away, 0.5f, "only the floor-facing check keeps these out");
+        }
+
+        [Test]
         public void A_fist_never_fires()
         {
             Assert.AreEqual(0, Hold((Hand(LeftWrist, false, Away), Hand(RightWrist, true, Away, curl: 1f)), 2f));
