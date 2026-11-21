@@ -15,7 +15,7 @@ namespace Edith.Tests
         {
             eye = new GameObject("Eye");
             eye.transform.SetPositionAndRotation(new Vector3(0f, 1.6f, 0f), Quaternion.Euler(0f, 40f, 0f));
-            card = AnswerCard.Create(-1, eye.transform, Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"), null);
+            card = AnswerCard.Create(eye.transform, Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"), null);
         }
 
         [TearDown]
@@ -33,18 +33,6 @@ namespace Edith.Tests
             Assert.That(local.y, Is.EqualTo(-0.12f).Within(1e-3f));
             Assert.That(Vector3.Dot(card.transform.forward, (card.transform.position - eye.transform.position).normalized),
                 Is.GreaterThan(0.999f));
-        }
-
-        [Test]
-        public void Its_box_is_the_card_itself_for_grabs_and_taps()
-        {
-            var box = card.Box;
-            Assert.That(Vector3.Distance(box.Center, card.transform.position), Is.LessThan(1e-4f));
-            var corners = new Vector3[4];
-            ((RectTransform)card.transform).GetWorldCorners(corners);
-            Assert.AreEqual(Vector3.Distance(corners[0], corners[3]), box.Size.x, 1e-4f, "width");
-            Assert.AreEqual(Vector3.Distance(corners[0], corners[1]), box.Size.y, 1e-4f, "height");
-            Assert.IsTrue(box.InLine(eye.transform.position, Vector3.Lerp(eye.transform.position, card.transform.position, 0.6f), 0f));
         }
 
         [Test]

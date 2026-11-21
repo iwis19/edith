@@ -1,11 +1,10 @@
-using Edith.Snapshots;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace Edith.Ask
 {
     /// The card an answer is written on. It rests a little below the line of sight and follows it closely, with only
-    /// enough smoothing to hide head tremor. A fist carries it; let go, it is pinned there and stops following.
+    /// enough smoothing to hide head tremor.
     public sealed class AnswerCard : MonoBehaviour
     {
         // Four canvas units per millimetre, so the font is rasterised sharply enough at this size.
@@ -19,42 +18,20 @@ namespace Edith.Ask
 
         // Where it rests: this far along the line of sight, this far below it.
         const float Ahead = 0.55f, Below = 0.12f;
-        // Rates of the exponential approach, per second: 20 closes 63% of the gap in 50 ms.
-        const float FollowRate = 20f, HoldRate = 25f;
+        // The rate of the exponential approach, per second: 20 closes 63% of the gap in 50 ms.
+        const float FollowRate = 20f;
         const float FadeSeconds = 0.3f, FlickMetres = 0.45f;
-        // The grab and tap tests treat the card as a box seen face-on from this far in front of it.
-        const float BoxDepth = 0.4f;
 
         Transform eye;
         Text text;
         CanvasGroup group;
-        bool held;
-        Vector3 holdOffset;
-        Quaternion holdRotation;
-        Vector3 holdPosition;
-        Quaternion holdTarget;
         bool leaving;
         float leaveProgress;
         Vector3 leaveFrom, leaveDirection;
 
-        public int Id { get; private set; }
-        public bool Pinned { get; private set; }
-        public bool Leaving => leaving;
-
-        /// As a snapshot's box reads to the grab and tap tests.
-        public SightBox Box
+        public static AnswerCard Create(Transform eye, Font font, Material material)
         {
-            get
-            {
-                var half = Size * (0.5f / UnitsPerMetre / BoxDepth);
-                var from = new Pose(transform.position - transform.forward * BoxDepth, transform.rotation);
-                return new SightBox(from, Rect.MinMaxRect(-half.x, -half.y, half.x, half.y), BoxDepth);
-            }
-        }
-
-        public static AnswerCard Create(int id, Transform eye, Font font, Material material)
-        {
-            var root = new GameObject($"AnswerCard {id}", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
+            var root = new GameObject("AnswerCard", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
             var rect = (RectTransform)root.transform;
             rect.sizeDelta = Size;
             rect.localScale = Vector3.one / UnitsPerMetre;
@@ -77,7 +54,6 @@ namespace Edith.Ask
             Fill(label.rectTransform, rect, Pad);
 
             var card = root.AddComponent<AnswerCard>();
-            card.Id = id;
             card.eye = eye;
             card.text = label;
             card.group = root.GetComponent<CanvasGroup>();
@@ -99,42 +75,13 @@ namespace Edith.Ask
             text.color = color;
         }
 
-        public void BeginHold(Vector3 grip, Quaternion hand)
-        {
-            if (leaving) return;
-            var toHand = Quaternion.Inverse(hand);
-            holdOffset = toHand * (transform.position - grip);
-            holdRotation = toHand * transform.rotation;
-            holdPosition = transform.position;
-            holdTarget = transform.rotation;
-            held = true;
-            enabled = true;
-        }
-
-        public void HoldAt(Vector3 grip, Quaternion hand)
-        {
-            if (!held) return;
-            holdPosition = grip + hand * holdOffset;
-            holdTarget = hand * holdRotation;
-        }
-
-        /// Stops following and stays where it is now.
-        public void Pin()
-        {
-            held = false;
-            Pinned = true;
-            enabled = false;
-        }
-
         /// Slides out sideways while it fades, then destroys itself. -1 is left, 1 right and 0 fades in place.
         public void Leave(float direction)
         {
             if (leaving) return;
             leaving = true;
-            held = false;
             leaveFrom = transform.position;
             leaveDirection = transform.right * direction;
-            enabled = true;
         }
 
         void LateUpdate()
@@ -146,13 +93,6 @@ namespace Edith.Ask
                 transform.position = leaveFrom + leaveDirection * (FlickMetres * leaveProgress * leaveProgress);
                 group.alpha = 1f - leaveProgress;
                 if (leaveProgress >= 1f) Destroy(gameObject);
-                return;
-            }
-            if (held)
-            {
-                var toHand = 1f - Mathf.Exp(-HoldRate * dt);
-                transform.SetPositionAndRotation(Vector3.Lerp(transform.position, holdPosition, toHand),
-                    Quaternion.Slerp(transform.rotation, holdTarget, toHand));
                 return;
             }
             var follow = 1f - Mathf.Exp(-FollowRate * dt);

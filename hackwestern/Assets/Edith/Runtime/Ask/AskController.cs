@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
 using Edith.Backend;
-using Edith.Grab;
-using Edith.Pinch;
 using Edith.Snapshots;
 using UnityEngine;
 
@@ -10,25 +8,18 @@ namespace Edith.Ask
 {
     /// Ask on the headset. A thumb tap chimes and starts a spoken question, with the photo of the snapshot nearest the
     /// line of sight when there is one; Gemini's activity detection ends the question. The answer is spoken and written
-    /// on a card that follows the gaze and fades once the answer is over. A thumb swipe flicks the card away, a fist
-    /// carries it and pins it where it is let go, and a quick pinch in line with a pinned card clears it.
-    public sealed class AskController : MonoBehaviour, IGrabTargets
+    /// on a card that follows the gaze and fades once the answer is over. A thumb swipe flicks the card away.
+    public sealed class AskController : MonoBehaviour
     {
         [SerializeField] ThumbGestures gestures;
         [SerializeField] AskVoice voice;
-        [SerializeField] GrabInput grab;
-        [SerializeField] PinchInput pinch;
         [SerializeField] Transform eye;
         [SerializeField] Font font;
         [SerializeField] Material material;
 
         const int PhotoLongSide = 512;
-        const int MaxPinned = 3;
-        // About one degree of slack around a pinned card for a quick pinch.
-        const float TapMargin = 0.02f;
 
         readonly AskSession session = new AskSession();
-        readonly List<AnswerCard> pinned = new List<AnswerCard>();
         readonly List<Vector3> photoCentres = new List<Vector3>();
         readonly List<Texture> photos = new List<Texture>();
         readonly StringBuilder said = new StringBuilder();
@@ -41,7 +32,6 @@ namespace Edith.Ask
         LiveLink link;
         PhotoJpeg photo;
         bool photoSent;
-        int nextCardId = -1;
 
         /// The room whose snapshot photos can go with a question. Without one, every question goes without a photo.
         public void Bind(SnapshotRoom room) => this.room = room;
@@ -53,18 +43,12 @@ namespace Edith.Ask
             enabled = false;
             gestures.Recognized += OnGesture;
             voice.Reopened += OnSoundReopened;
-            grab.Register(this);
-            grab.Stepped += OnGrab;
-            pinch.Stepped += OnPinch;
         }
 
         void OnDestroy()
         {
             gestures.Recognized -= OnGesture;
             voice.Reopened -= OnSoundReopened;
-            grab.Unregister(this);
-            grab.Stepped -= OnGrab;
-            pinch.Stepped -= OnPinch;
             link?.Dispose();
         }
 
@@ -79,7 +63,7 @@ namespace Edith.Ask
                     return;
                 case ThumbGesture.SwipeLeft:
                 case ThumbGesture.SwipeRight:
-                    if (current == null || current.Pinned) return;
+                    if (current == null) return;
                     current.Leave(gesture == ThumbGesture.SwipeLeft ? -1f : 1f);
                     current = null;
                     session.Dismiss(now);
@@ -90,8 +74,8 @@ namespace Edith.Ask
 
         void Begin()
         {
-            if (current != null && !current.Pinned) current.Leave(-1f);
-            current = AnswerCard.Create(nextCardId--, eye, font, material);
+            if (current != null) current.Leave(-1f);
+            current = AnswerCard.Create(eye, font, material);
             said.Clear();
             heard.Clear();
             lastHeardAt = -1f;
@@ -245,7 +229,7 @@ namespace Edith.Ask
                 case AskPhase.Idle:
                     Close();
                     voice.StopSpeaker();
-                    if (current != null && !current.Pinned) current.Leave(0f);
+                    if (current != null) current.Leave(0f);
                     current = null;
                     enabled = false;
                     return;
@@ -277,68 +261,6 @@ namespace Edith.Ask
         {
             session.Fail(AskProblem.Dropped, Time.time);
             Sync(Time.time);
-        }
-
-        public void AddGrabTargets(List<(int id, SightBox box)> targets)
-        {
-            if (current != null && !current.Leaving) targets.Add((current.Id, current.Box));
-            for (var i = 0; i < pinned.Count; i++)
-                if (pinned[i] != current && !pinned[i].Leaving) targets.Add((pinned[i].Id, pinned[i].Box));
-        }
-
-        AnswerCard Find(int id)
-        {
-            if (current != null && current.Id == id) return current;
-            for (var i = 0; i < pinned.Count; i++)
-                if (pinned[i].Id == id) return pinned[i];
-            return null;
-        }
-
-        void OnGrab(GrabReading reading)
-        {
-            if (reading.CardId >= 0) return;
-            var card = Find(reading.CardId);
-            if (card == null) return;
-            switch (reading.Event)
-            {
-                case GrabEvent.Grabbed:
-                    card.BeginHold(reading.Grip, reading.Rotation);
-                    return;
-                case GrabEvent.Dropped:
-                case GrabEvent.Pocketed:
-                    Pin(card);
-                    return;
-            }
-            if (reading.Phase == GrabPhase.Holding && reading.HasGrip) card.HoldAt(reading.Grip, reading.Rotation);
-        }
-
-        void Pin(AnswerCard card)
-        {
-            card.Pin();
-            if (!pinned.Contains(card)) pinned.Add(card);
-            while (pinned.Count > MaxPinned)
-            {
-                var oldest = pinned[0];
-                pinned.RemoveAt(0);
-                oldest.Leave(-1f);
-                if (oldest == current) current = null;
-            }
-            Debug.Log($"[EDITH ask] answer card {card.Id} pinned, {pinned.Count} pinned");
-        }
-
-        void OnPinch(PinchReading reading)
-        {
-            if (reading.Event != PinchEvent.Tap || pinned.Count == 0) return;
-            for (var i = pinned.Count - 1; i >= 0; i--)
-            {
-                var card = pinned[i];
-                if (!card.Box.InLine(eye.position, reading.Start, TapMargin)) continue;
-                pinned.RemoveAt(i);
-                if (card == current) current = null;
-                card.Leave(1f);
-                Debug.Log($"[EDITH ask] pinned answer card {card.Id} cleared");
-                return;
-            }
         }
     }
 }
