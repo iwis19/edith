@@ -33,6 +33,9 @@ namespace Edith.Snapshots
         Vector3 fullScale;
 
         public SightBox Box { get; private set; }
+
+        /// The photo it shows, or null for a plain panel.
+        public Texture Photo { get; private set; }
         public bool Leaving { get; private set; }
 
         /// Unique among snapshots, and stable for as long as this one lives.
@@ -63,6 +66,7 @@ namespace Edith.Snapshots
             var snapshot = root.AddComponent<Snapshot>();
             snapshot.Id = nextId++;
             snapshot.Box = box;
+            snapshot.Photo = photo;
             snapshot.group = root.GetComponent<CanvasGroup>();
             snapshot.group.alpha = 0f;
             snapshot.group.interactable = false;

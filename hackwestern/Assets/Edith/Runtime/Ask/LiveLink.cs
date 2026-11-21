@@ -83,6 +83,9 @@ namespace Edith.Ask
         /// An array of the chunk size to fill and hand to SendAudio, which takes it back.
         public float[] RentChunk() => chunks.TryTake(out var chunk) ? chunk : new float[chunkSamples];
 
+        /// Hands back a rented array that was not sent.
+        public void ReturnChunk(float[] chunk) => chunks.Add(chunk);
+
         public void SendAudio(float[] chunk)
         {
             if (Interlocked.Increment(ref queuedAudio) > MaxQueuedAudio)
