@@ -35,7 +35,7 @@ async def test_a_look_streams_the_card_then_done_and_records_it(client, store):
     assert (record.width, record.height) == (640, 480)
     assert (record.status, record.name, record.fact, record.rarity) == (
         "done", events[1]["name"], events[2]["text"], events[3]["tier"])
-    assert record.fact_sources == events[2]["sources"]
+    assert "sources" not in events[2]
 
 
 async def test_with_a_device_token_only_requests_carrying_it_are_served(settings, store):
@@ -133,7 +133,7 @@ class DetailedAgent:
     async def run(self, image, meta, profile_id):
         yield Name(name="a red mug", confidence=0.8)
         yield LookDetails(kind="mug", place="Waterloo, Ontario, Canada")
-        yield Fact(text="Mugs are old.", sources=[])
+        yield Fact(text="Mugs are old.")
 
 
 async def test_the_kind_and_place_are_recorded_but_never_streamed(settings, store):

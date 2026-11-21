@@ -1,5 +1,6 @@
-"""Turns a fix into a place name and the named sights near it, from OpenStreetMap Nominatim and Overpass. Coordinates
-leave the backend rounded to 4 decimals (about 11 m), and the User-Agent names the app and its version only."""
+"""Turns a fix into a place name and the named sights near it, and a place name into its centre, from OpenStreetMap
+Nominatim and Overpass. Coordinates leave the backend rounded to 4 decimals (about 11 m), and the User-Agent names the
+app and its version only."""
 import asyncio
 import logging
 import re
@@ -7,6 +8,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Protocol
 
 import httpx
 
@@ -17,6 +19,7 @@ log = logging.getLogger("edith.location")
 
 USER_AGENT = f"EDITH/{VERSION}"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
+NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 # The public Overpass servers are often at capacity, so the next answers when one fails.
 OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
@@ -35,6 +38,8 @@ NOMINATIM_GAP_S = 1.0
 # the services a single lookup.
 CACHE_TTL_S = 30 * 60
 CACHE_MAX = 256
+# Places are few and their centres do not move, so a searched place is kept until the process ends, up to this many.
+PLACE_CACHE_MAX = 1024
 # Names come from OpenStreetMap, which anyone can edit, and go into prompts.
 MAX_NAME_CHARS = 80
 
@@ -146,6 +151,10 @@ def overpass_sights(reply: dict, lat: float, lon: float) -> list[Sight]:
     return sights
 
 
+class PlaceLocator(Protocol):
+    async def locate(self, place: str) -> tuple[float, float] | None: ...
+
+
 def normalise(name: str) -> str:
     words = re.sub(r"[^\w\s]", " ", re.sub(r"['’]", "", name.casefold())).split()
     return " ".join(words[1:] if words[:1] == ["the"] else words)
@@ -163,6 +172,18 @@ def merge_sights(sights: list[Sight]) -> list[Sight]:
     return sorted(kept, key=lambda s: s.distance_m)
 
 
+def search_point(reply: object) -> tuple[float, float] | None:
+    """The first result's position from a Nominatim search reply, None when it found nothing."""
+    if not isinstance(reply, list):
+        raise ValueError("A Nominatim search reply must be a list.")
+    if not reply:
+        return None
+    lat, lon = float(reply[0]["lat"]), float(reply[0]["lon"])
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise ValueError("A Nominatim search result is off the globe.")
+    return lat, lon
+
+
 @dataclass
 class _Osm:
     sights: list[Sight] = field(default_factory=list)
@@ -177,12 +198,13 @@ class HttpResolver:
         self._nominatim_lock = asyncio.Lock()
         self._nominatim_last: float | None = None
         self._cache: OrderedDict[tuple[float, float], tuple[float, Resolution]] = OrderedDict()
+        self._points: OrderedDict[str, tuple[float, float] | None] = OrderedDict()
 
     async def resolve(self, fix: LocationFix) -> Resolution | None:
         lat, lon = round(fix.lat, 4), round(fix.lon, 4)
         if (cached := self._cached(lat, lon)) is not None:
             return cached
-        address, osm = await asyncio.gather(self._nominatim(lat, lon), self._overpass(lat, lon), return_exceptions=True)
+        address, osm = await asyncio.gather(self._reverse(lat, lon), self._overpass(lat, lon), return_exceptions=True)
         failed = [type(r).__name__ for r in (address, osm) if isinstance(r, BaseException)]
         if len(failed) == 2:
             log.warning("every location service failed: %s", failed)
@@ -213,7 +235,27 @@ class HttpResolver:
         while len(self._cache) > CACHE_MAX:
             self._cache.popitem(last=False)
 
-    async def _nominatim(self, lat: float, lon: float) -> dict:
+    async def _reverse(self, lat: float, lon: float) -> dict:
+        return await self._nominatim(NOMINATIM_URL, {
+            "format": "jsonv2", "lat": lat, "lon": lon, "zoom": 17, "addressdetails": 1, "accept-language": "en"})
+
+    async def locate(self, place: str) -> tuple[float, float] | None:
+        """The centre of a place by its name, as (lat, lon), or None when Nominatim does not know it. A failed lookup
+        raises and is not remembered. Only the place text is sent."""
+        key = normalise(place)
+        if not key:
+            return None
+        if key in self._points:
+            self._points.move_to_end(key)
+            return self._points[key]
+        point = search_point(await self._nominatim(
+            NOMINATIM_SEARCH_URL, {"format": "jsonv2", "limit": 1, "q": place, "accept-language": "en"}))
+        self._points[key] = point
+        while len(self._points) > PLACE_CACHE_MAX:
+            self._points.popitem(last=False)
+        return point
+
+    async def _nominatim(self, url: str, params: dict):
         async with self._nominatim_lock:
             if self._nominatim_last is not None:
                 wait = self._nominatim_last + self._gap - self._clock()
@@ -221,9 +263,7 @@ class HttpResolver:
                     await self._sleep(wait)
             try:
                 response = await self._http.get(
-                    NOMINATIM_URL, timeout=SERVICE_TIMEOUT_S, headers={"User-Agent": USER_AGENT},
-                    params={"format": "jsonv2", "lat": lat, "lon": lon, "zoom": 17, "addressdetails": 1,
-                            "accept-language": "en"})
+                    url, timeout=SERVICE_TIMEOUT_S, headers={"User-Agent": USER_AGENT}, params=params)
                 response.raise_for_status()
                 return response.json()
             finally:

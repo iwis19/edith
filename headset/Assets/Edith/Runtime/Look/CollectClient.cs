@@ -30,12 +30,12 @@ namespace Edith.Look
                 Debug.Log("[EDITH collect] skipped, the backend is not set up");
                 return Task.CompletedTask;
             }
-            return Send(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, lookRef, jpeg, DateTime.UtcNow);
+            return Send(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, lookRef, jpeg, DateTimeOffset.Now);
         }
 
-        public static Task Send(string url, string deviceToken, string profileId, string lookRef, byte[] jpeg, DateTime collectedAtUtc)
+        public static Task Send(string url, string deviceToken, string profileId, string lookRef, byte[] jpeg, DateTimeOffset collectedAt)
         {
-            var meta = LookMeta.CollectJson(lookRef, collectedAtUtc);
+            var meta = LookMeta.CollectJson(lookRef, collectedAt);
             return Task.Run(() => Run(url, deviceToken, profileId, lookRef, jpeg, meta));
         }
 

@@ -1,7 +1,7 @@
 import asyncio
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import date
 
 import httpx
 import pytest
@@ -60,9 +60,8 @@ class FakeStore:
         return self.memories[:limit]
 
 
-def memory(name: str, kind: str | None = None) -> Memory:
-    return Memory(id=1, look_ref=uuid.uuid4(), name=name, kind=kind, fact=None, sources=[], rarity=None, place=None,
-                  created_at=datetime.now(UTC))
+def memory(name: str) -> Memory:
+    return Memory(id=1, name=name, fact=None, rarity=None, place=None, collected_on=date(2026, 11, 21))
 
 
 def agent_app(settings, store, *batches: list[ScanPick]):
@@ -265,10 +264,10 @@ async def test_a_new_session_forgets_the_hooks_of_the_last():
 
 async def test_the_model_is_told_what_was_said_and_what_is_collected():
     model = FakeModel([pick()], [])
-    agent = ScanAgent(model, FakeStore([memory("a globe", "globe"), memory("a mug")]))
+    agent = ScanAgent(model, FakeStore([memory("a globe"), memory("a mug")]))
     await agent.scan(b"", ME, SESSION)
     await agent.scan(b"", ME, SESSION)
-    assert "- a globe (globe)" in model.contexts[0] and "- a mug" in model.contexts[0]
+    assert "- a globe" in model.contexts[0] and "- a mug" in model.contexts[0]
     assert "Prefer other things" in model.contexts[0]
     assert "a brass compass" not in model.contexts[0]
     assert "- a brass compass: Spot which way it points." in model.contexts[1]

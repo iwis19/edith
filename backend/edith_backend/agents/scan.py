@@ -368,7 +368,7 @@ class ScanAgent:
         except Exception as exc:
             log.info("scan went without the collected names: %s", type(exc).__name__)
             return []
-        return [f"{m.name} ({m.kind})" if m.kind else m.name for m in memories]
+        return [m.name for m in memories]
 
     async def scan(self, image: bytes, profile_id: UUID, session: UUID) -> list[ScanPick]:
         """Up to MAX_PICKS picks, most interesting first. Raises when the model call fails."""

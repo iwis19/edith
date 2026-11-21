@@ -5,11 +5,10 @@ import sys
 import time
 from array import array
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, date, datetime
 from typing import Protocol
 from uuid import UUID
 
-from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 log = logging.getLogger("edith.db")
@@ -30,7 +29,6 @@ class LookRecord:
     name: str | None
     confidence: float | None
     fact: str | None
-    fact_sources: list[dict]
     rarity: str | None
     duration_ms: int
     kind: str | None = None
@@ -41,14 +39,20 @@ class LookRecord:
 @dataclass(frozen=True)
 class Memory:
     id: int
-    look_ref: UUID
     name: str
-    kind: str | None
     fact: str | None
-    sources: list[dict]
     rarity: str | None
     place: str | None
-    created_at: datetime
+    collected_on: date
+    point: tuple[float, float] | None = None
+
+
+def collection_date(collected_at: datetime | None, now: datetime) -> date:
+    """The calendar date of a collection in the headset's own offset. A time ahead of `now` counts as `now`, and with
+    no time the date is the UTC date of `now`."""
+    if collected_at is None:
+        return now.astimezone(UTC).date()
+    return min(collected_at, now).astimezone(collected_at.tzinfo).date()
 
 
 @dataclass(frozen=True)
@@ -77,12 +81,18 @@ class Store(Protocol):
     async def status(self) -> str: ...
     async def record_look(self, record: LookRecord) -> None: ...
     async def collect(
-        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_on: date
     ) -> int | None:
         """Saves the finished Look as a memory, once per Look, and returns the memory's id. None when the profile has
         no finished Look with that ref. Raises StoreUnavailable."""
         ...
     async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]: ...
+    async def place_to_locate(self, profile_id: UUID, memory_id: int) -> str | None:
+        """The memory's place when it has one and no point yet, else None."""
+        ...
+    async def set_place_point(self, memory_id: int, point: tuple[float, float]) -> None:
+        """Saves the point of the memory's place unless one is already saved."""
+        ...
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None: ...
     async def load_told_facts(self, profile_id: UUID) -> list[ToldFact]:
         """The profile's newest told facts, oldest first. Empty when there are none or the query failed."""
@@ -110,11 +120,17 @@ class DisabledStore:
         pass
 
     async def collect(
-        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_on: date
     ) -> int | None:
         raise StoreUnavailable("There is no database.")
 
     async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]:
+        raise StoreUnavailable("There is no database.")
+
+    async def place_to_locate(self, profile_id: UUID, memory_id: int) -> str | None:
+        raise StoreUnavailable("There is no database.")
+
+    async def set_place_point(self, memory_id: int, point: tuple[float, float]) -> None:
         raise StoreUnavailable("There is no database.")
 
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None:
@@ -178,12 +194,12 @@ class PostgresStore:
                 )
                 await conn.execute(
                     """insert into looks (id, profile_id, client_look_id, source, captured_at, width, height, status,
-                           name, confidence, fact, fact_sources, rarity, duration_ms, kind, place, photo_place)
-                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                           name, confidence, fact, rarity, duration_ms, kind, place, photo_place)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         record.look_ref, record.profile_id, record.client_look_id, record.source, record.captured_at,
                         record.width, record.height, record.status, record.name, record.confidence, record.fact,
-                        Jsonb(record.fact_sources), record.rarity, record.duration_ms, record.kind, record.place,
+                        record.rarity, record.duration_ms, record.kind, record.place,
                         record.photo_place,
                     ),
                 )
@@ -191,21 +207,19 @@ class PostgresStore:
             log.exception("failed to record look %s", record.look_ref)
 
     async def collect(
-        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_on: date
     ) -> int | None:
         try:
             async with self._pool.connection(timeout=10) as conn:
                 # The fields are copied from the stored Look, so the client cannot supply card text. A repeat inserts
-                # nothing and the existing row is read back. A headset clock ahead of the server is capped at now().
+                # nothing and the existing row is read back.
                 cursor = await conn.execute(
-                    """insert into memories (profile_id, look_ref, name, kind, fact, sources, rarity, place, image,
-                                             created_at)
-                       select profile_id, id, name, kind, fact, fact_sources, rarity, place, %s,
-                              least(coalesce(%s::timestamptz, now()), now()) from looks
+                    """insert into memories (profile_id, look_ref, name, fact, rarity, place, image, collected_on)
+                       select profile_id, id, name, fact, rarity, place, %s, %s from looks
                        where id = %s and profile_id = %s and status = 'done' and name is not null
                        on conflict (look_ref) do nothing
                        returning id""",
-                    (image, collected_at, look_ref, profile_id),
+                    (image, collected_on, look_ref, profile_id),
                 )
                 row = await cursor.fetchone()
                 if row is None:
@@ -222,14 +236,42 @@ class PostgresStore:
         try:
             async with self._pool.connection(timeout=10) as conn:
                 cursor = await conn.execute(
-                    """select id, look_ref, name, kind, fact, sources, rarity, place, created_at from memories
-                       where profile_id = %s order by created_at desc, id desc limit %s""",
+                    """select id, name, fact, rarity, place, collected_on, place_lat, place_lon from memories
+                       where profile_id = %s order by collected_on desc, id desc limit %s""",
                     (profile_id, limit),
                 )
-                return [Memory(*row) for row in await cursor.fetchall()]
+                return [
+                    Memory(*row[:6], point=None if row[6] is None or row[7] is None else (row[6], row[7]))
+                    for row in await cursor.fetchall()
+                ]
         except Exception as exc:
             log.exception("failed to list memories")
             raise StoreUnavailable("The memories could not be read.") from exc
+
+    async def place_to_locate(self, profile_id: UUID, memory_id: int) -> str | None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                cursor = await conn.execute(
+                    """select place from memories
+                       where id = %s and profile_id = %s and place is not null and place_lat is null""",
+                    (memory_id, profile_id),
+                )
+                row = await cursor.fetchone()
+        except Exception as exc:
+            log.exception("failed to read the place of memory %s", memory_id)
+            raise StoreUnavailable("The memory could not be read.") from exc
+        return row[0] if row else None
+
+    async def set_place_point(self, memory_id: int, point: tuple[float, float]) -> None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                await conn.execute(
+                    "update memories set place_lat = %s, place_lon = %s where id = %s and place_lat is null",
+                    (*point, memory_id),
+                )
+        except Exception as exc:
+            log.exception("failed to save the place point of memory %s", memory_id)
+            raise StoreUnavailable("The memory could not be saved.") from exc
 
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None:
         try:

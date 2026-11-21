@@ -6,6 +6,7 @@ using Edith.Ask;
 using Edith.Backend;
 using Edith.Capture;
 using Edith.Grab;
+using Edith.Hands;
 using Edith.Pinch;
 using Edith.Scan;
 using Edith.Snapshots;
@@ -36,6 +37,8 @@ namespace Edith.Look
         [SerializeField] Font font;
         /// Opens a scan pin as a Look when a quick pinch lands on it rather than on a snapshot. Optional.
         [SerializeField] ScanController scan;
+        /// While another panel holds it, pinches make no boxes and clear or open nothing. Optional.
+        [SerializeField] HandGate gate;
 
         const string CameraNotReady = "The camera is not ready.";
         // Often enough that the shared HTTPS connection is still open when the next Look goes out.
@@ -61,7 +64,13 @@ namespace Edith.Look
             public int LookId;
             public LookSource Source;
             public SightBox Box;
+            /// The box the snapshot hangs in: Box widened to the narrowest a card's photo may be.
+            public SightBox Shown;
+            /// The photo of Box, which the backend reads.
             public Task<CameraFrame> Frame;
+            /// The photo of Shown, which the snapshot shows and a collect keeps. The same task as Frame when Box
+            /// was already wide enough.
+            public Task<CameraFrame> ShownFrame;
             /// Null until the photo is ready, and for good when the camera failed.
             public LookClient Request;
             public bool Confirmed;
@@ -114,6 +123,12 @@ namespace Edith.Look
 
         void OnPinch(PinchReading reading)
         {
+            if (gate != null && gate.Held)
+            {
+                room.CancelPreview();
+                DropUnconfirmed();
+                return;
+            }
             switch (reading.Event)
             {
                 case PinchEvent.Tap:
@@ -125,13 +140,11 @@ namespace Edith.Look
                     room.CancelPreview();
                     break;
                 case PinchEvent.Completed:
-                    releases.Add(new Release { LookId = nextLookId++, Box = reading.Box, Frame = Capture(reading.Box) });
+                    releases.Add(Framed(new Release { LookId = nextLookId++, Box = reading.Box }, null));
                     break;
                 case PinchEvent.Resumed:
                     // The release was a tracking dropout: the drag goes on and the photo is not wanted.
-                    foreach (var release in releases)
-                        if (!release.Confirmed) release.Request?.Cancel();
-                    releases.RemoveAll(release => !release.Confirmed);
+                    DropUnconfirmed();
                     break;
                 case PinchEvent.Confirmed:
                     foreach (var release in releases) release.Confirmed = true;
@@ -140,12 +153,19 @@ namespace Edith.Look
             if (reading.Phase == PinchPhase.Dragging && reading.HasBox) room.Preview(reading.Box);
         }
 
+        void DropUnconfirmed()
+        {
+            foreach (var release in releases)
+                if (!release.Confirmed) release.Request?.Cancel();
+            releases.RemoveAll(release => !release.Confirmed);
+        }
+
         void Update()
         {
             foreach (var release in releases)
                 if (release.Request == null && release.Frame.IsCompletedSuccessfully)
                     release.Request = LookClient.Send(release.LookId, release.Source, release.Frame.Result.Jpeg, release.Frame.Result.CapturedAt);
-            while (releases.Count > 0 && releases[0].Confirmed && releases[0].Frame.IsCompleted)
+            while (releases.Count > 0 && releases[0].Confirmed && releases[0].Frame.IsCompleted && releases[0].ShownFrame.IsCompleted)
             {
                 Hang(releases[0]);
                 releases.RemoveAt(0);
@@ -201,37 +221,47 @@ namespace Edith.Look
         // The pin knows how far its object is, so the photo is cropped there rather than at whatever depth meets
         // first through the box, such as the window in front of a view.
         void OpenBox(SightBox box, ScanPin pin) =>
-            releases.Add(new Release
+            releases.Add(Framed(new Release
             {
                 LookId = nextLookId++, Source = LookSource.Scan, Box = box, Confirmed = true, Caption = pin.Hook,
-                Frame = Capture(box, Vector3.Dot(pin.Point - box.Eye.position, box.Eye.rotation * Vector3.forward)),
-            });
+            }, Vector3.Dot(pin.Point - box.Eye.position, box.Eye.rotation * Vector3.forward)));
+
+        /// Takes the release's photos. A box narrower than a card's photo may be is shown widened about its centre,
+        /// cut from the camera at the same depth so it still lines up with the room, while the backend reads only
+        /// what was framed.
+        Release Framed(Release release, float? subjectDepth)
+        {
+            var depth = subjectDepth ?? SubjectDepth(release.Box);
+            release.Shown = release.Box.WidenedTo(CardWidth.MinPhotoTangent);
+            release.Frame = Capture(release.Box, depth);
+            release.ShownFrame = release.Shown.Tangent == release.Box.Tangent ? release.Frame : Capture(release.Shown, depth);
+            return release;
+        }
 
         void Hang(Release release)
         {
             Texture2D photo = null;
-            if (release.Frame.IsFaulted)
+            if (release.ShownFrame.IsFaulted)
             {
-                Debug.Log($"[EDITH look] no photo: {release.Frame.Exception.GetBaseException().Message}");
+                Debug.Log($"[EDITH look] no photo: {release.ShownFrame.Exception.GetBaseException().Message}");
             }
             else
             {
                 photo = new Texture2D(2, 2, TextureFormat.RGB24, false);
-                photo.LoadImage(release.Frame.Result.Jpeg);
+                photo.LoadImage(release.ShownFrame.Result.Jpeg);
             }
-            var snapshot = room.Place(release.Box, photo);
+            var snapshot = room.Place(release.Shown, photo);
             if (release.Caption != null) snapshot.Caption = release.Caption;
-            hung.Add(new Hung { Snapshot = snapshot, Request = release.Request, Jpeg = release.Frame.IsFaulted ? null : release.Frame.Result.Jpeg });
+            hung.Add(new Hung { Snapshot = snapshot, Request = release.Request, Jpeg = release.ShownFrame.IsFaulted ? null : release.ShownFrame.Result.Jpeg });
             if (release.Request == null) snapshot.Apply(LookEvent.Failure("camera", CameraNotReady));
             Debug.Log($"[EDITH look] snapshot {snapshot.Id} hung for look {release.LookId}{(photo != null ? $" with a {photo.width}x{photo.height} photo" : " without a photo")}");
         }
 
-        /// `subjectDepth`, when known, is how far the framed object is along the box's forward axis.
-        Task<CameraFrame> Capture(in SightBox box, float? subjectDepth = null)
+        /// `depth` is how far the framed object is along the box's forward axis.
+        Task<CameraFrame> Capture(in SightBox box, float depth)
         {
             try
             {
-                var depth = subjectDepth ?? SubjectDepth(box);
                 var t = box.Tangent;
                 return headsetCamera.CaptureAsync(new WorldQuad(
                     box.PointAt(t.xMin, t.yMin, depth), box.PointAt(t.xMax, t.yMin, depth),

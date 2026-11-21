@@ -433,6 +433,6 @@ def a_record(**overrides) -> LookRecord:
     fields = dict(
         look_ref=uuid.uuid4(), profile_id=PROFILE, client_look_id=1, source="pinch",
         captured_at=datetime.now(timezone.utc), width=640, height=480, status="done", name="a mug", confidence=0.9,
-        fact=None, fact_sources=[], rarity="common", duration_ms=500,
+        fact=None, rarity="common", duration_ms=500,
     )
     return LookRecord(**{**fields, **overrides})

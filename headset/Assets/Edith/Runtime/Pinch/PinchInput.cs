@@ -22,6 +22,9 @@ namespace Edith.Pinch
         /// Every frame's reading, so listeners see each event exactly once.
         public event Action<PinchReading> Stepped;
 
+        /// The hand whose pinch the readings follow, or null while neither hand pinches.
+        public HandSide? Owner => pair?.Owner;
+
         void Awake() => pair = new PinchPair(tuning);
 
         void LateUpdate()

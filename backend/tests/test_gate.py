@@ -64,7 +64,7 @@ class QuickAgent:
         await asyncio.sleep(0.01)
         yield Name(name="a mug", confidence=0.9)
         await asyncio.sleep(0.01)
-        yield Fact(text="Handles came late to European cups.", sources=[])
+        yield Fact(text="Handles came late to European cups.")
 
 
 async def test_the_look_deadline_does_not_count_time_the_client_spends_reading(settings, store):

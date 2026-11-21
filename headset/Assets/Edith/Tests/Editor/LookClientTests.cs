@@ -129,7 +129,7 @@ namespace Edith.Tests
                 Line(response, "{\"type\":\"accepted\",\"look_id\":42,\"look_ref\":\"r\"}");
                 Line(response, "{\"type\":\"name\",\"name\":\"Red m\",\"confidence\":0,\"pending\":true}");
                 Line(response, "{\"type\":\"name\",\"name\":\"Red mug\",\"confidence\":0.9}");
-                Line(response, "{\"type\":\"fact\",\"text\":\"Old.\",\"sources\":[]}");
+                Line(response, "{\"type\":\"fact\",\"text\":\"Old.\"}");
                 Line(response, "{\"type\":\"rarity\",\"tier\":\"rare\"}");
                 Line(response, "{\"type\":\"done\"}");
             });
@@ -328,7 +328,8 @@ namespace Edith.Tests
         {
             using var backend = new FakeBackend((response, _) => Line(response, "{\"memory_id\":7}"));
             LogAssert.Expect(LogType.Log, new Regex(@"\[EDITH collect\] look abc123 saved: .*memory_id"));
-            CollectClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", "abc123", Jpeg, Captured).Wait(10000);
+            CollectClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", "abc123", Jpeg,
+                new DateTimeOffset(2026, 11, 21, 20, 14, 3, 120, TimeSpan.FromHours(-5))).Wait(10000);
             Assert.IsTrue(backend.Requests.TryPeek(out var request));
             Assert.AreEqual("/collect", request.Path);
             Assert.AreEqual("secret", request.Token);
@@ -336,7 +337,7 @@ namespace Edith.Tests
             StringAssert.Contains("name=image", request.Body.Replace("\"", ""));
             StringAssert.Contains("image/jpeg", request.Body);
             StringAssert.Contains("name=meta", request.Body.Replace("\"", ""));
-            StringAssert.Contains("{\"look_ref\":\"abc123\",\"collected_at\":\"2026-11-21T15:04:05.000Z\"}", request.Body);
+            StringAssert.Contains("{\"look_ref\":\"abc123\",\"collected_at\":\"2026-11-21T20:14:03.120-05:00\"}", request.Body);
         }
 
         [Test]

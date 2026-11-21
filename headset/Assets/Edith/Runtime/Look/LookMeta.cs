@@ -32,10 +32,12 @@ namespace Edith.Look
             captured_at = Utc(capturedAt),
         });
 
-        public static string CollectJson(string lookRef, DateTime collectedAt) => JsonUtility.ToJson(new CollectWire
+        /// `collectedAt` is the headset's local time. Its UTC offset goes with it, because the backend files the
+        /// memory under the calendar day in that offset.
+        public static string CollectJson(string lookRef, DateTimeOffset collectedAt) => JsonUtility.ToJson(new CollectWire
         {
             look_ref = lookRef,
-            collected_at = Utc(collectedAt),
+            collected_at = collectedAt.ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz", CultureInfo.InvariantCulture),
         });
 
         static string Utc(DateTime time) =>

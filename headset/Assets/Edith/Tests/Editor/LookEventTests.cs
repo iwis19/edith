@@ -39,9 +39,9 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_fact_line_gives_its_text_and_ignores_the_sources()
+        public void A_fact_line_gives_its_text()
         {
-            var e = Parse("{\"type\":\"fact\",\"text\":\"Mugs are old.\",\"sources\":[{\"title\":\"T\",\"url\":\"https://x\"}]}");
+            var e = Parse("{\"type\":\"fact\",\"text\":\"Mugs are old.\"}");
             Assert.AreEqual(LookEventKind.Fact, e.Kind);
             Assert.AreEqual("Mugs are old.", e.Text);
         }

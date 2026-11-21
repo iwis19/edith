@@ -245,3 +245,68 @@ def test_duplicate_names_keep_their_best_tier_and_the_best_tiers_fill_the_list()
 def test_the_overpass_query_asks_for_the_containing_areas_and_named_things_near_the_point():
     query = overpass_query(LAT, LON)
     assert f"is_in({LAT},{LON})" in query and f"around:300,{LAT},{LON}" in query
+
+
+SEARCH = [{"lat": "43.4725000", "lon": "-80.5447000", "display_name": "University of Waterloo"}]
+
+
+class FakeSearch(FakeServices):
+    def __init__(self, found=SEARCH):
+        super().__init__()
+        self.found = found
+
+    def __call__(self, request):
+        if request.url.path == "/search":
+            self.requests.append(request)
+            return httpx.Response(200, json=self.found)
+        return super().__call__(request)
+
+
+async def test_a_place_name_is_searched_for_its_centre_with_the_app_user_agent_only():
+    services = FakeSearch()
+    assert await resolver(services).locate("University of Waterloo, Waterloo, Ontario, Canada") == (43.4725, -80.5447)
+    [request] = services.requests
+    assert request.url.params["q"] == "University of Waterloo, Waterloo, Ontario, Canada"
+    assert request.url.params["format"] == "jsonv2" and request.url.params["limit"] == "1"
+    assert request.headers["user-agent"] == USER_AGENT
+    assert "lat" not in request.url.params
+
+
+async def test_a_place_is_looked_up_once_whether_it_was_found_or_not():
+    found, missing = FakeSearch(), FakeSearch(found=[])
+    r1, r2 = resolver(found), resolver(missing)
+    for _ in range(2):
+        assert await r1.locate("Waterloo, Canada") == (43.4725, -80.5447)
+        assert await r1.locate("  waterloo,  CANADA ") == (43.4725, -80.5447)
+        assert await r2.locate("Nowhere") is None
+    assert len(found.requests) == 1 and len(missing.requests) == 1
+
+
+async def test_a_failed_search_raises_and_is_tried_again_later():
+    healthy = FakeSearch()
+    down = {"on": True}
+
+    def answer(request):
+        return httpx.Response(503) if down["on"] else healthy(request)
+
+    r = HttpResolver(httpx.AsyncClient(transport=httpx.MockTransport(answer)), sleep=Sleeper().sleep)
+    with pytest.raises(httpx.HTTPStatusError):
+        await r.locate("Waterloo")
+    down["on"] = False
+    assert await r.locate("Waterloo") == (43.4725, -80.5447)
+
+
+async def test_searches_and_reverse_lookups_share_one_nominatim_gap():
+    sleeper = Sleeper()
+    r = resolver(FakeSearch(), sleeper)
+    await r.locate("Waterloo")
+    await r.resolve(fix())
+    assert sleeper.slept == [pytest.approx(1.0)]
+    await r.locate("Toronto")
+    assert sleeper.slept == [pytest.approx(1.0)] * 2
+
+
+async def test_a_malformed_search_reply_raises():
+    for bad in ({"error": "x"}, [{"lat": "95", "lon": "0"}], [{"lat": "x", "lon": "0"}]):
+        with pytest.raises((ValueError, KeyError)):
+            await resolver(FakeSearch(found=bad)).locate("Waterloo")
