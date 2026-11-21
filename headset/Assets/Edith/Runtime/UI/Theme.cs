@@ -9,7 +9,7 @@ namespace Edith.UI
     public static class Theme
     {
         /// EDITH's blue, as pale as it can go and still read as blue: outlines, picked chips, buttons.
-        public static readonly Color Accent = new Color32(191, 233, 255, 255);
+        public static readonly Color Accent = new Color32(207, 240, 255, 255);
         /// Body text: frost, a white with a trace of EDITH's blue.
         public static readonly Color Ice = new Color32(234, 248, 255, 255);
         public static readonly Color Muted = new Color32(196, 214, 226, 255);
