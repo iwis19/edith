@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Edith.Ask;
 using Edith.Backend;
+using Edith.Bounty;
 using Edith.Capture;
 using Edith.Grab;
 using Edith.Pinch;
@@ -69,6 +70,7 @@ namespace Edith.Look
             public string Caption;
         }
 
+        BountyController bounty;
         readonly List<Release> releases = new List<Release>();
         readonly List<Hung> hung = new List<Hung>();
         readonly List<float> sampledDepths = new List<float>(DepthSamples.Length);
@@ -97,6 +99,9 @@ namespace Edith.Look
                 yield return every;
             }
         }
+
+        /// Where a Look's hunt tick is reported. Optional: without it a tick still shows on the Look's card.
+        public void BindBounty(BountyController bounty) => this.bounty = bounty;
 
         void OnEnable()
         {
@@ -166,7 +171,11 @@ namespace Edith.Look
                     continue;
                 }
                 if (entry.Request == null) continue;
-                while (entry.Request.TryNext(out var e)) entry.Snapshot.Apply(e);
+                while (entry.Request.TryNext(out var e))
+                {
+                    entry.Snapshot.Apply(e);
+                    if (e.Kind == LookEventKind.Hunt) bounty?.OnLookTick(e);
+                }
             }
         }
 

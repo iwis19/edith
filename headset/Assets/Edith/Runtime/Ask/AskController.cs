@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using Edith.Backend;
+using Edith.Bounty;
 using Edith.Capture;
 using Edith.Scan;
 using Edith.Snapshots;
@@ -14,7 +15,9 @@ namespace Edith.Ask
     /// Scan pin's name and hook, or a snapshot's photo, whichever is nearer, and a picture of the view ahead when
     /// neither is near; Gemini's activity detection ends the question. The answer is spoken and typed out beside an orb
     /// that perches on that snapshot, or rests low in the view clear of every snapshot, and fades once the answer is
-    /// over. A thumb swipe flicks the orb away, and drawing a new box makes it vanish until the next tap.
+    /// over. A thumb swipe flicks the orb away, and drawing a new box makes it vanish until the next tap. When EDITH
+    /// calls a function to start or stop a hunt, the question stays open while it runs, the call's result goes back
+    /// to EDITH, and she speaks it.
     public sealed class AskController : MonoBehaviour
     {
         [SerializeField] ThumbGestures gestures;
@@ -35,6 +38,8 @@ namespace Edith.Ask
         readonly StringBuilder said = new StringBuilder();
         readonly StringBuilder heard = new StringBuilder();
         readonly List<string> sources = new List<string>();
+        readonly List<PendingCall> calls = new List<PendingCall>();
+        BountyController bounty;
         AskPhase phase;
         float lastHeardAt, firstChunkAt;
         bool playingLogged;
@@ -45,6 +50,22 @@ namespace Edith.Ask
         Task<CameraFrame> view;
         HeadsetCamera headsetCamera;
         bool photoSent;
+
+        /// A function EDITH called, waiting on its result. `Reply` is null when there is nothing to wait for.
+        sealed class PendingCall
+        {
+            public LiveToolCall Call;
+            public Task<HuntReply> Reply;
+            public string Immediate;
+        }
+
+        /// What the hunt card needs to draw itself like the rest of Ask.
+        public Transform Eye => eye;
+        public Font Font => font;
+        public Material Material => material;
+
+        /// Where EDITH's hunt functions run. Without it she is told hunts are not available.
+        public void BindBounty(BountyController bounty) => this.bounty = bounty;
 
         /// The room whose snapshot photos can go with a question, and the camera that pictures the view when no
         /// snapshot is looked at. Without them, questions go without that photo.
@@ -199,6 +220,7 @@ namespace Edith.Ask
                 Handle(e, now);
                 Sync(now);
             }
+            AnswerCalls(now);
             session.Tick(now, voice.Speech.Count);
             Sync(now);
             if (current != null)
@@ -283,6 +305,12 @@ namespace Edith.Ask
                 case LiveEventKind.Interrupted:
                     Debug.Log("[EDITH ask] Gemini was interrupted");
                     return;
+                case LiveEventKind.ToolCall:
+                    RunCall(e.Call);
+                    return;
+                case LiveEventKind.ToolCancelled:
+                    DropCall(e.Text, now);
+                    return;
                 case LiveEventKind.Closed:
                     session.Closed(now);
                     return;
@@ -290,6 +318,46 @@ namespace Edith.Ask
                     session.Fail(e.Problem, now);
                     return;
             }
+        }
+
+        /// Starts the function EDITH called. Its result goes back once the backend has answered.
+        void RunCall(LiveToolCall call)
+        {
+            var pending = new PendingCall { Call = call };
+            if (bounty == null)
+                pending.Immediate = HuntReply.ErrorBody("unavailable", "Hunts are not available on this headset.");
+            else if (call.Name == LiveToolCall.StartHunt) pending.Reply = bounty.StartHunt(call.Interests);
+            else if (call.Name == LiveToolCall.StopHunt) pending.Reply = bounty.StopHunt();
+            else pending.Immediate = HuntReply.ErrorBody("unknown_function", "There is no function named " + call.Name + ".");
+            if (pending.Reply == null && pending.Immediate == null)
+                pending.Immediate = HuntReply.ErrorBody("not_configured", "The hunt service is not set up.");
+            session.CallStarted();
+            calls.Add(pending);
+            Debug.Log($"[EDITH ask] running {call.Name}");
+        }
+
+        /// Sends back the result of each finished call. The question stays open until it has.
+        void AnswerCalls(float now)
+        {
+            for (var i = calls.Count - 1; i >= 0; i--)
+            {
+                var pending = calls[i];
+                if (pending.Reply != null && !pending.Reply.IsCompleted) continue;
+                calls.RemoveAt(i);
+                var result = pending.Immediate ?? pending.Reply.Result.ToolResult;
+                link?.SendToolResponse(pending.Call.Id, pending.Call.Name, result);
+                session.CallFinished(now);
+                Debug.Log($"[EDITH ask] {pending.Call.Name} answered");
+            }
+        }
+
+        /// EDITH withdrew a call, so nothing is sent for it. The request itself still finishes and updates the hunt.
+        void DropCall(string id, float now)
+        {
+            var index = calls.FindIndex(pending => pending.Call.Id == id);
+            if (index < 0) return;
+            calls.RemoveAt(index);
+            session.CallFinished(now);
         }
 
         /// Acts on a change of phase once, whatever caused it.
@@ -346,6 +414,7 @@ namespace Edith.Ask
             voice.StopMic();
             link?.Dispose();
             link = null;
+            calls.Clear();
             photo = null;
             view = null;
             voice.Speech.Clear();
