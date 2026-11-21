@@ -287,21 +287,34 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void Cancelling_drops_everything_that_follows()
+        public void Cancelling_closes_the_connection_and_drops_everything_that_follows()
         {
             var gate = new ManualResetEventSlim();
+            var writeFailed = new ManualResetEventSlim();
             using var backend = new FakeBackend((response, _) =>
             {
                 Line(response, "{\"type\":\"accepted\",\"look_id\":42,\"look_ref\":\"r\"}");
                 gate.Wait(5000);
-                Line(response, "{\"type\":\"done\"}");
+                try
+                {
+                    for (var i = 0; i < 200; i++)
+                    {
+                        Line(response, "{\"type\":\"rarity\",\"tier\":\"rare\"}");
+                        Thread.Sleep(20);
+                    }
+                }
+                catch (Exception)
+                {
+                    writeFailed.Set();
+                }
             });
             var client = Send(backend, new LookTimeouts(2f, 2f, 10f));
             var deadline = DateTime.UtcNow.AddSeconds(5);
             while (backend.Requests.IsEmpty && DateTime.UtcNow < deadline) Thread.Sleep(5);
+            Thread.Sleep(200);
             client.Cancel();
             gate.Set();
-            Thread.Sleep(300);
+            Assert.IsTrue(writeFailed.Wait(5000), "the server's writes fail once the client has hung up");
             Assert.IsFalse(client.TryNext(out _));
         }
 
@@ -310,7 +323,7 @@ namespace Edith.Tests
         {
             using var backend = new FakeBackend((response, _) => Line(response, "{\"memory_id\":7}"));
             LogAssert.Expect(LogType.Log, new Regex(@"\[EDITH collect\] look abc123 saved: .*memory_id"));
-            CollectClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", "abc123", Jpeg).Wait(10000);
+            CollectClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", "abc123", Jpeg, Captured).Wait(10000);
             Assert.IsTrue(backend.Requests.TryPeek(out var request));
             Assert.AreEqual("/collect", request.Path);
             Assert.AreEqual("secret", request.Token);
@@ -318,7 +331,7 @@ namespace Edith.Tests
             StringAssert.Contains("name=image", request.Body.Replace("\"", ""));
             StringAssert.Contains("image/jpeg", request.Body);
             StringAssert.Contains("name=meta", request.Body.Replace("\"", ""));
-            StringAssert.Contains("{\"look_ref\":\"abc123\"}", request.Body);
+            StringAssert.Contains("{\"look_ref\":\"abc123\",\"collected_at\":\"2026-11-21T15:04:05.000Z\"}", request.Body);
         }
 
         [Test]
@@ -326,7 +339,7 @@ namespace Edith.Tests
         {
             using var backend = new FakeBackend((response, _) => response.StatusCode = 404);
             LogAssert.Expect(LogType.Log, new Regex(@"\[EDITH collect\] look abc123 failed with http_404"));
-            CollectClient.Send(backend.Url, "", "p", "abc123", Jpeg).Wait(10000);
+            CollectClient.Send(backend.Url, "", "p", "abc123", Jpeg, Captured).Wait(10000);
             Thread.Sleep(200);
             Assert.AreEqual(1, backend.Requests.Count);
         }

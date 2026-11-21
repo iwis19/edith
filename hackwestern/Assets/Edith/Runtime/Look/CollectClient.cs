@@ -11,7 +11,8 @@ namespace Edith.Look
     /// outcome is logged, and a failure is not retried.
     public static class CollectClient
     {
-        const float TimeoutSeconds = 10f;
+        // The backend holds a collect open until the Look's record is written, which can take its whole look timeout.
+        const float TimeoutSeconds = 30f;
 
         /// Why `card` should not be collected, or null when it should.
         public static string SkipReason(LookCard card)
@@ -29,18 +30,21 @@ namespace Edith.Look
                 Debug.Log("[EDITH collect] skipped, the backend is not set up");
                 return Task.CompletedTask;
             }
-            return Send(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, lookRef, jpeg);
+            return Send(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, lookRef, jpeg, DateTime.UtcNow);
         }
 
-        public static Task Send(string url, string deviceToken, string profileId, string lookRef, byte[] jpeg) =>
-            Task.Run(() => Run(url, deviceToken, profileId, lookRef, jpeg));
+        public static Task Send(string url, string deviceToken, string profileId, string lookRef, byte[] jpeg, DateTime collectedAtUtc)
+        {
+            var meta = LookMeta.CollectJson(lookRef, collectedAtUtc);
+            return Task.Run(() => Run(url, deviceToken, profileId, lookRef, jpeg, meta));
+        }
 
-        static async Task Run(string url, string token, string profile, string lookRef, byte[] jpeg)
+        static async Task Run(string url, string token, string profile, string lookRef, byte[] jpeg, string meta)
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(TimeoutSeconds));
             try
             {
-                using var request = LookClient.Build(url + "/collect", token, profile, jpeg, $"{{\"look_ref\":\"{lookRef}\"}}");
+                using var request = LookClient.Build(url + "/collect", token, profile, jpeg, meta);
                 using var response = await LookClient.Http.SendAsync(request, timeout.Token).ConfigureAwait(false);
                 var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 if (response.IsSuccessStatusCode) Debug.Log($"[EDITH collect] look {lookRef} saved: {body}");
