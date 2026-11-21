@@ -261,7 +261,7 @@ namespace Edith.Scrapbook
                 var memories = await client.List(timeout.Token);
                 if (this == null || opened.IsCancellationRequested) return;
                 browse = new Browse(memories);
-                deck = new Deck(memories.Count);
+                deck = new Deck(browse.Visible.Count);
                 content = memories.Count == 0 ? Content.Empty : Content.Browsing;
                 Debug.Log($"[EDITH scrapbook] {memories.Count} memories");
             }
@@ -366,7 +366,7 @@ namespace Edith.Scrapbook
             {
                 Narrow(() =>
                 {
-                    if (pin is City city) browse.Dive(city);
+                    if (pin is City city) browse.ZoomIn(city);
                     else browse.ToggleSpot((Spot)pin);
                 });
                 Play(880f);
@@ -386,8 +386,8 @@ namespace Edith.Scrapbook
                 switch (chosen.Kind)
                 {
                     case ChipKind.Tab: browse.SetLens(chosen.Lens); break;
-                    case ChipKind.City: browse.Dive(chosen.City); break;
-                    case ChipKind.Globe: browse.Surface(); break;
+                    case ChipKind.City: browse.ZoomIn(chosen.City); break;
+                    case ChipKind.World: browse.ZoomOut(); break;
                     case ChipKind.Spot: browse.ToggleSpot(chosen.Spot); break;
                     case ChipKind.Tier: browse.ToggleFilter(chosen.Tier); break;
                 }

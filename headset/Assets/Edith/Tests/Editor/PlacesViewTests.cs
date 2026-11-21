@@ -112,7 +112,7 @@ namespace Edith.Tests
         {
             var browse = Home();
             Draw(browse);
-            browse.Dive(browse.Atlas.Cities.Single());
+            browse.ZoomIn(browse.Atlas.Cities.Single());
             Draw(browse, DivePose.Seconds);
             CollectionAssert.IsSubsetOf(new[] { "Western University 2", "Victoria Park 1" }, Texts);
             Assert.IsFalse(places.GlobeSpins);
@@ -124,7 +124,7 @@ namespace Edith.Tests
         {
             var browse = new Browse(new[] { Made(1, WesternPlace, Western) });
             Draw(browse);
-            browse.Dive(browse.Atlas.Cities.Single());
+            browse.ZoomIn(browse.Atlas.Cities.Single());
             Draw(browse, DivePose.Seconds);
             // The only spot is at the middle of its city's map.
             Assert.AreSame(browse.City.Spots.Single(), Pin(CityMapView.Centre * 0.6f));
@@ -137,7 +137,7 @@ namespace Edith.Tests
             var browse = Home();
             Draw(browse);
             var city = browse.Atlas.Cities.Single();
-            browse.Dive(city);
+            browse.ZoomIn(city);
             Draw(browse, DivePose.Seconds);
             var rotation = Quaternion.Euler(CityMapView.Lean, 0f, 0f);
             Vector3 On(Spot spot)
@@ -159,7 +159,7 @@ namespace Edith.Tests
         {
             var browse = Home();
             Draw(browse);
-            browse.Dive(browse.Atlas.Cities.Single());
+            browse.ZoomIn(browse.Atlas.Cities.Single());
             Draw(browse, DivePose.Seconds * 0.5f);
             Assert.IsNull(Pin(GlobeView.Centre * 0.6f));
             Assert.IsNull(Pin(CityMapView.Centre * 0.6f));
@@ -173,9 +173,9 @@ namespace Edith.Tests
             Draw(browse);
             places.Drag(new Vector2(0.05f, 0.01f));
             var city = browse.Atlas.Cities.Single();
-            browse.Dive(city);
+            browse.ZoomIn(city);
             Draw(browse, DivePose.Seconds);
-            browse.Surface();
+            browse.ZoomOut();
             Draw(browse, DivePose.Seconds);
             Assert.IsTrue(places.GlobeSpins);
             Assert.AreSame(city, Pin(GlobeView.Centre * 0.6f));
