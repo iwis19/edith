@@ -56,6 +56,9 @@ namespace Edith.Scrapbook
         float ringProgress, nearLoggedAt;
         Transform frame;
         FrameFollow follow = new FrameFollow();
+        bool listeningForRecentre;
+        // Frames left before the deck jumps in front of the eye after a recentre, once the eye has its new pose.
+        int recentreIn;
         DeckView deckView, leaving;
         bool leavingShown;
         /// The deck a change replaced, drawn fading out while the new one forms, and the card that stays in the middle.
@@ -113,8 +116,13 @@ namespace Edith.Scrapbook
         {
             pinch.Stepped -= OnPinch;
             gestures.Recognized -= OnGesture;
+            if (listeningForRecentre && OVRManager.display != null) OVRManager.display.RecenteredPose -= OnRecentred;
+            listeningForRecentre = false;
             if (Open) Close();
         }
+
+        // Recentring moves the whole tracking space, so the deck would hang where the old space put it.
+        void OnRecentred() => recentreIn = 2;
 
         void OnDestroy()
         {
@@ -125,6 +133,19 @@ namespace Edith.Scrapbook
 
         void Update()
         {
+            // OVRManager makes its display after the scene's first frames, so the subscription waits for it.
+            if (!listeningForRecentre && OVRManager.display != null)
+            {
+                OVRManager.display.RecenteredPose += OnRecentred;
+                listeningForRecentre = true;
+            }
+            if (recentreIn > 0 && --recentreIn == 0 && Open)
+            {
+                var front = DeckLayout.Frame(new Pose(eye.position, eye.rotation));
+                frame.SetPositionAndRotation(front.position, front.rotation);
+                follow = new FrameFollow();
+                Debug.Log("[EDITH scrapbook] recentred, deck moved in front");
+            }
             ring.SetRing(ringAt, ringProgress, false);
             ring.Tick(eye.position);
             fade = Mathf.MoveTowards(fade, Open ? 1f : 0f, Time.deltaTime / FadeSeconds);
