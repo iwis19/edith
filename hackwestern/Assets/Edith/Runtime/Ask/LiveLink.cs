@@ -66,11 +66,13 @@ namespace Edith.Ask
         }
 
         /// Starts minting and connecting at once and returns without waiting.
-        public static LiveLink Open(string backendUrl, string deviceToken, string profileId, PcmRing speech, int chunkSamples)
+        public static LiveLink Open(string backendUrl, string deviceToken, string profileId, AskHint? hint, PcmRing speech,
+            int chunkSamples)
         {
             var link = new LiveLink(speech, chunkSamples);
             var token = link.cancel.Token;
-            Task.Run(() => link.Run(backendUrl, deviceToken, profileId, token));
+            var requestBody = AskHint.RequestBody(hint);
+            Task.Run(() => link.Run(backendUrl, deviceToken, profileId, requestBody, token));
             return link;
         }
 
@@ -119,13 +121,13 @@ namespace Edith.Ask
             if (!cancel.IsCancellationRequested) events.Enqueue(e);
         }
 
-        async Task Run(string backendUrl, string deviceToken, string profileId, CancellationToken token)
+        async Task Run(string backendUrl, string deviceToken, string profileId, string requestBody, CancellationToken token)
         {
             var socket = new ClientWebSocket();
             var ready = false;
             try
             {
-                var grant = await Mint(backendUrl, deviceToken, profileId, token).ConfigureAwait(false);
+                var grant = await Mint(backendUrl, deviceToken, profileId, requestBody, token).ConfigureAwait(false);
                 Debug.Log($"[EDITH ask] backend minted a {grant.Model} session in {clock.ElapsedMilliseconds} ms");
                 try
                 {
@@ -164,11 +166,12 @@ namespace Edith.Ask
             }
         }
 
-        static async Task<AskGrant> Mint(string backendUrl, string deviceToken, string profileId, CancellationToken token)
+        static async Task<AskGrant> Mint(string backendUrl, string deviceToken, string profileId, string requestBody,
+            CancellationToken token)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, backendUrl + "/ask/session")
             {
-                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+                Content = new StringContent(requestBody, Encoding.UTF8, "application/json"),
             };
             if (!string.IsNullOrEmpty(deviceToken)) request.Headers.Add("X-Edith-Token", deviceToken);
             request.Headers.Add("X-Edith-Profile", profileId);

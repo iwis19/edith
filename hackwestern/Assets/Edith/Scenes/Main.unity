@@ -644,6 +644,7 @@ MonoBehaviour:
   eye: {fileID: 578435152}
   font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   material: {fileID: 2100000, guid: 536874e4d0911184dbf48aecb14b21f0, type: 2}
+  scan: {fileID: 1569223303}
 --- !u!114 &1083127876
 MonoBehaviour:
   m_ObjectHideFlags: 0
