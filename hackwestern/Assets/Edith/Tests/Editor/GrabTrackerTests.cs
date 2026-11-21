@@ -309,5 +309,35 @@ namespace Edith.Tests
 
             Assert.That(Quaternion.Angle(flat, reading.Rotation), Is.EqualTo(60f).Within(0.5f));
         }
+
+        [Test]
+        public void A_closed_hand_remembers_its_deepest_curl_until_it_opens()
+        {
+            Feed(AtCard, Open, 0.3f);
+            Assert.IsFalse(tracker.IsClosed);
+            Feed(AtCard, 1.10f, 0.1f);
+            Feed(AtCard, 0.95f, 0.1f);
+            Feed(AtCard, 1.05f, 0.1f);
+            Assert.IsTrue(tracker.IsClosed);
+            Assert.That(tracker.DeepestCurl, Is.EqualTo(0.95f).Within(1e-3f));
+
+            Feed(AtCard, Open, Dt);
+
+            Assert.IsFalse(tracker.IsClosed);
+            Assert.That(tracker.LastCurl, Is.EqualTo(Open).Within(1e-3f));
+            Assert.That(tracker.DeepestCurl, Is.EqualTo(0.95f).Within(1e-3f));
+        }
+
+        [Test]
+        public void A_second_fist_starts_its_deepest_curl_afresh()
+        {
+            Feed(AtCard, Open, 0.3f);
+            Feed(AtCard, 0.9f, 0.2f);
+            Feed(AtCard, Open, 0.3f);
+
+            Feed(AtCard, 1.1f, 0.2f);
+
+            Assert.That(tracker.DeepestCurl, Is.EqualTo(1.1f).Within(1e-3f));
+        }
     }
 }

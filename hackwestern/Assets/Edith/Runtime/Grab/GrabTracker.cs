@@ -56,6 +56,11 @@ namespace Edith.Grab
 
         public GrabTracker(GrabTuning tuning) => this.tuning = tuning;
 
+        /// Whether the hand is closed, with the curl of the newest frame it was visible and the lowest curl since it closed.
+        public bool IsClosed => closed;
+        public float LastCurl { get; private set; }
+        public float DeepestCurl { get; private set; }
+
         public GrabReading Step(in HandFrame hand, IReadOnlyList<(int id, SightBox box)> cards)
         {
             // Visible, not Tracked: a fist usually fails Tracked's high confidence on the thumb and index.
@@ -67,6 +72,7 @@ namespace Edith.Grab
 
             var wasClosed = closed;
             var curl = Curl(hand);
+            LastCurl = curl;
             if (curl > tuning.openCurl)
             {
                 closed = false;
@@ -76,6 +82,7 @@ namespace Edith.Grab
             {
                 closed = true;
             }
+            if (closed) DeepestCurl = wasClosed ? Mathf.Min(DeepestCurl, curl) : curl;
 
             if (wasClosed && !closed) return Opened();
             if (!wasClosed && closed) return Closed(hand, cards);
