@@ -24,6 +24,7 @@ namespace Edith.Pairing
         const float Ahead = 0.9f, Below = 0.12f, FollowRate = 8f;
         const float FadeSeconds = 0.3f;
         const float CallSeconds = 8f;
+        const int CornerRadius = 36;
         static readonly Color Backing = new Color(0.04f, 0.05f, 0.07f, 0.8f);
         static readonly Color White = new Color(0.97f, 0.97f, 0.99f);
         static readonly Color Muted = new Color(0.82f, 0.84f, 0.88f);
@@ -33,6 +34,7 @@ namespace Edith.Pairing
         Canvas canvas;
         CanvasGroup group;
         Text title, line, address, andType, code;
+        Sprite rounded;
         PairPhase? shown;
         readonly CancellationTokenSource lifetime = new CancellationTokenSource();
 
@@ -156,7 +158,10 @@ namespace Edith.Pairing
             root.sizeDelta = Size;
             root.localScale = Vector3.one / UnitsPerMetre;
 
+            rounded = RoundedRect();
             var backing = new GameObject("Backing", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+            backing.sprite = rounded;
+            backing.type = Image.Type.Sliced;
             backing.color = Backing;
             backing.raycastTarget = false;
             backing.material = material;
@@ -196,6 +201,29 @@ namespace Edith.Pairing
             rect.anchoredPosition = position;
         }
 
+        /// A white rounded square with a soft edge, cut into nine slices so any size keeps its corners.
+        static Sprite RoundedRect()
+        {
+            const int size = CornerRadius * 2 + 4;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear };
+            var pixels = new Color32[size * size];
+            var centre = (size - 1) * 0.5f;
+            var straight = centre - CornerRadius;
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var dx = Mathf.Max(Mathf.Abs(x - centre) - straight, 0f);
+                var dy = Mathf.Max(Mathf.Abs(y - centre) - straight, 0f);
+                var alpha = Mathf.Clamp01(CornerRadius - Mathf.Sqrt(dx * dx + dy * dy) + 0.5f);
+                pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            // 100 pixels per unit matches the canvas's reference, so the sliced border is drawn at its pixel size.
+            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0,
+                SpriteMeshType.FullRect, new Vector4(CornerRadius, CornerRadius, CornerRadius, CornerRadius));
+        }
+
         /// Below the line of sight rather than straight down, so looking up or down carries the panel with it.
         Vector3 Rest() => eye.position + eye.forward * Ahead - eye.up * Below;
 
@@ -206,6 +234,9 @@ namespace Edith.Pairing
         {
             lifetime.Cancel();
             lifetime.Dispose();
+            if (rounded == null) return;
+            Destroy(rounded.texture);
+            Destroy(rounded);
         }
     }
 }
