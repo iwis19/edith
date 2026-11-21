@@ -86,6 +86,12 @@ namespace Edith.Scan
         ScanDepthGrid depth;
         Pose depthPose;
         int depthCursor;
+        Placed gazed;
+        float gazeSeconds;
+        Quaternion lastEyeRotation;
+
+        /// Fires with the box to hang and photograph when a pin has been looked at long enough. The pin has left the room.
+        public event Action<SightBox> Opened;
 
         /// The pins in the room, most interesting first.
         public IReadOnlyList<ScanPin> Pins => pins;
@@ -134,6 +140,7 @@ namespace Edith.Scan
             }
 
             if (depth != null) RememberDepth();
+            Gaze();
             marks.SetRing(ringAt, holdProgress, scanning);
             marks.Tick(eye.position);
         }
@@ -254,6 +261,49 @@ namespace Edith.Scan
             RemovePin(index);
             box = around;
             return true;
+        }
+
+        // Looking at a pin with a still head fills its ring; when full, the pin opens as a Look whose box is the pin's
+        // object as seen from here, hung at the object's own distance so the photo lines up with what is around it.
+        void Gaze()
+        {
+            var turning = Quaternion.Angle(lastEyeRotation, eye.rotation) / Mathf.Max(Time.deltaTime, 1e-4f);
+            lastEyeRotation = eye.rotation;
+
+            Placed looked = null;
+            var index = -1;
+            if (!scanning)
+            {
+                points.Clear();
+                // A far pin only points the way and is never opened by gaze; a point at the eye is skipped.
+                foreach (var pin in pins) points.Add(pin.Far ? eye.position : pin.Point);
+                index = ScanGeometry.NearestToLine(new Ray(eye.position, eye.forward), points, tuning.gazeOpenDegrees);
+                if (index >= 0) looked = placed[index];
+            }
+
+            if (looked != gazed)
+            {
+                if (gazed != null && placed.Contains(gazed)) marks.SetGaze(gazed.Mark, 0f);
+                gazed = looked;
+                gazeSeconds = 0f;
+            }
+            else if (looked != null && turning <= tuning.gazeStillDegreesPerSecond) gazeSeconds += Time.deltaTime;
+            if (gazed == null) return;
+
+            marks.SetGaze(gazed.Mark, Mathf.Clamp01(gazeSeconds / tuning.gazeOpenSeconds));
+            if (gazeSeconds < tuning.gazeOpenSeconds) return;
+
+            var distance = (pins[index].Point - eye.position).magnitude;
+            if (ScanGeometry.BoxAround(eye.position, gazed.Quad, distance) is not { } around)
+            {
+                Debug.Log($"[EDITH scan] pin \"{pins[index].Name}\" not opened by gaze, too close to frame from {distance:F2} m");
+                gazeSeconds = -tuning.gazeOpenSeconds;
+                return;
+            }
+            Debug.Log($"[EDITH scan] open \"{pins[index].Name}\" by gaze {distance:F2} m away, card on the object");
+            gazed = null;
+            RemovePin(index);
+            Opened?.Invoke(around);
         }
 
         /// The pin at the smallest angle from the line of sight of `eye`, within `maxDegrees` of it. `degrees` is

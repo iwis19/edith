@@ -16,6 +16,7 @@ namespace Edith.Scan
             internal CanvasGroup Group;
             internal Vector3 At;
             internal float Fade, Target = 1f;
+            internal Image Gaze;
         }
 
         // 1 canvas unit is half a millimetre at ReferenceMeters.
@@ -26,6 +27,8 @@ namespace Edith.Scan
         // The ring is about 9 cm across at ReferenceMeters. Its line is a share of its radius, and it breathes this
         // fast and this much while the reply is awaited.
         const float RingSize = 180f, RingThickness = 0.14f, PulseHz = 1.4f, PulseScale = 0.08f;
+        const float GazeSize = 84f;
+        static readonly Color GazeColor = new Color(0.35f, 0.9f, 0.5f);
         static readonly Color TextColor = new Color(0.95f, 0.95f, 0.97f);
         static readonly Color HoldColor = new Color(0.95f, 0.95f, 0.97f, 0.55f);
         static readonly Color ShadowColor = new Color(0f, 0f, 0f, 0.85f);
@@ -62,9 +65,25 @@ namespace Edith.Scan
             image.rectTransform.SetParent(root, false);
             image.rectTransform.sizeDelta = new Vector2(DotSize, DotSize);
             Label(root, 19, TextAnchor.LowerCenter, new Vector2(0f, DotSize * 0.5f + LabelGap + LabelHeight * 0.5f)).text = label;
+            var gaze = new GameObject("Gaze", typeof(Image)).GetComponent<Image>();
+            gaze.sprite = ringSprite;
+            gaze.type = Image.Type.Filled;
+            gaze.fillMethod = Image.FillMethod.Radial360;
+            gaze.fillOrigin = (int)Image.Origin360.Top;
+            gaze.fillClockwise = true;
+            gaze.fillAmount = 0f;
+            gaze.color = GazeColor;
+            gaze.raycastTarget = false;
+            gaze.material = material;
+            gaze.rectTransform.SetParent(root, false);
+            gaze.rectTransform.sizeDelta = new Vector2(GazeSize, GazeSize);
+            pin.Gaze = gaze;
             pins.Add(pin);
             return pin;
         }
+
+        /// Fills the ring around `pin` to `progress` while it is looked at.
+        public void SetGaze(Mark pin, float progress) => pin.Gaze.fillAmount = progress;
 
         public void Remove(Mark pin) => pin.Target = 0f;
 

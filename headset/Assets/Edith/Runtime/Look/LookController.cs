@@ -96,10 +96,16 @@ namespace Edith.Look
             }
         }
 
-        void OnEnable() => pinch.Stepped += OnPinch;
+        void OnEnable()
+        {
+            pinch.Stepped += OnPinch;
+            if (scan != null) scan.Opened += OpenBox;
+        }
+
         void OnDisable()
         {
             pinch.Stepped -= OnPinch;
+            if (scan != null) scan.Opened -= OpenBox;
             foreach (var release in releases) release.Request?.Cancel();
             foreach (var entry in hung) entry.Request?.Cancel();
         }
@@ -186,9 +192,12 @@ namespace Edith.Look
         bool Open(Vector3 pinchPoint)
         {
             if (scan == null || !scan.TryOpen(pinchPoint, new Pose(eye.position, eye.rotation), out var box)) return false;
-            releases.Add(new Release { LookId = nextLookId++, Source = LookSource.Scan, Box = box, Frame = Capture(box), Confirmed = true });
+            OpenBox(box);
             return true;
         }
+
+        void OpenBox(SightBox box) =>
+            releases.Add(new Release { LookId = nextLookId++, Source = LookSource.Scan, Box = box, Frame = Capture(box), Confirmed = true });
 
         void Hang(Release release)
         {
