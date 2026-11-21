@@ -340,3 +340,4 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/db.py`: the pooled Postgres store, or a no-op store with no database.
 - `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills and the `told_facts` table that keeps the facts told to each profile, with the embedding of their kind. `memories.embedding` is not written.
 - `tools/stream_check.py`: prints the arrival time of each event of one Look.
+- `tools/rarity_eval.py`: compares the naming prompt's rarity tiers at a git ref with the working tree's on a folder of cropped Look photos.
