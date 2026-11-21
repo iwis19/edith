@@ -30,14 +30,14 @@ def schema_url():
 
 
 def test_migrate_applies_each_file_once(schema_url):
-    assert migrate(schema_url) == ["001_init", "002_collect", "003_drop_sources", "004_memory_date", "005_place_point"]
+    assert migrate(schema_url) == ["001_init", "002_collect", "005_drop_sources", "006_memory_date", "007_place_point"]
     assert migrate(schema_url) == []
 
 
 def test_concurrent_migrations_take_turns(schema_url):
     with ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _: migrate(schema_url), range(4)))
-    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_drop_sources", "004_memory_date", "005_place_point"]]
+    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "005_drop_sources", "006_memory_date", "007_place_point"]]
 
 
 async def test_health_checks_share_one_query_while_cached(schema_url):
