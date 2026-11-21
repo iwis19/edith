@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace Edith.Ask
 {
-    public enum LiveEventKind { Ready, Audio, InputText, OutputText, Sources, TurnComplete, Interrupted, Closed, Failed }
+    public enum LiveEventKind { Ready, Audio, InputText, OutputText, Sources, TurnComplete, Interrupted, Closed, Failed, ToolCall, ToolCancelled }
 
     public readonly struct LiveEvent
     {
@@ -20,12 +20,15 @@ namespace Edith.Ask
         public readonly string Text;
         /// Why, for Failed.
         public readonly AskProblem Problem;
+        /// The function to run, for ToolCall. For ToolCancelled, `Text` is the id of the call to drop.
+        public readonly LiveToolCall Call;
 
-        public LiveEvent(LiveEventKind kind, string text = null, AskProblem problem = AskProblem.None)
+        public LiveEvent(LiveEventKind kind, string text = null, AskProblem problem = AskProblem.None, LiveToolCall call = null)
         {
             Kind = kind;
             Text = text;
             Problem = problem;
+            Call = call;
         }
     }
 
@@ -100,6 +103,10 @@ namespace Edith.Ask
             }
             waiting.Release();
         }
+
+        /// Answers a function call EDITH made, so it can speak the result. Sent in order with the rest of what goes out.
+        public void SendToolResponse(string id, string name, string responseJson) =>
+            EnqueueText(LiveRequest.ToolResponse(id, name, responseJson));
 
         public void SendImage(byte[] jpeg) => EnqueueText(LiveRequest.Image(jpeg));
 
@@ -233,6 +240,12 @@ namespace Edith.Ask
                     if (!speech.Write(pcm)) Debug.LogWarning("[EDITH ask] answer audio buffer full, dropping the rest");
                 Post(new LiveEvent(LiveEventKind.Audio));
             }
+            foreach (var call in message.ToolCalls)
+            {
+                Debug.Log($"[EDITH ask] EDITH called {call.Name}");
+                Post(new LiveEvent(LiveEventKind.ToolCall, call: call));
+            }
+            foreach (var id in message.CancelledCalls) Post(new LiveEvent(LiveEventKind.ToolCancelled, id));
             if (message.OutputText.Length > 0) Post(new LiveEvent(LiveEventKind.OutputText, message.OutputText));
             if (message.Sources.Count > 0) Post(new LiveEvent(LiveEventKind.Sources, string.Join("\n", message.Sources)));
             if (message.Interrupted)

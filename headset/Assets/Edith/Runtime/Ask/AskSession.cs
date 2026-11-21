@@ -22,6 +22,7 @@ namespace Edith.Ask
         float phaseAt;
         float fadeAt;
         bool turnComplete;
+        int calls;
 
         public AskPhase Phase { get; private set; }
         /// Why the last question got no answer; None while one is under way or after an answer.
@@ -29,6 +30,9 @@ namespace Edith.Ask
 
         /// A Live session is open or opening.
         public bool Busy => Phase == AskPhase.Connecting || Phase == AskPhase.Listening || Phase == AskPhase.Answering;
+
+        /// A function EDITH called is still running. While one is, the question stays open however quiet the session is.
+        public bool CallPending => calls > 0;
 
         /// The microphone runs from just after the chime until the answer starts.
         public bool MicWanted(float now) =>
@@ -46,6 +50,23 @@ namespace Edith.Ask
             return true;
         }
 
+        /// EDITH called a function and waits for its answer. The question stays open until CallFinished.
+        public void CallStarted()
+        {
+            if (Busy) calls++;
+        }
+
+        /// The answer to a call went back. EDITH now speaks it, so the wait for speech starts over, and a turn that
+        /// ended while the call ran does not count as the end of the answer.
+        public void CallFinished(float now)
+        {
+            if (calls == 0) return;
+            calls--;
+            if (calls > 0) return;
+            turnComplete = false;
+            phaseAt = now;
+        }
+
         public void Ready(float now)
         {
             if (Phase == AskPhase.Connecting) Enter(AskPhase.Listening, now);
@@ -59,12 +80,14 @@ namespace Edith.Ask
         public void TurnComplete(float now)
         {
             if (Phase == AskPhase.Answering) turnComplete = true;
-            else if (Phase == AskPhase.Listening) Fail(AskProblem.NotHeard, now);
+            else if (Phase == AskPhase.Listening && calls == 0) Fail(AskProblem.NotHeard, now);
         }
 
         /// The server closed the session. An answer already playing plays out.
         public void Closed(float now)
         {
+            // No answer can go back on a closed session.
+            calls = 0;
             if (Phase == AskPhase.Answering) turnComplete = true;
             else Fail(AskProblem.Dropped, now);
         }
@@ -93,10 +116,10 @@ namespace Edith.Ask
                 case AskPhase.Connecting when inPhase > ConnectSeconds:
                     Fail(AskProblem.TimedOut, now);
                     break;
-                case AskPhase.Listening when inPhase > HearSeconds:
+                case AskPhase.Listening when inPhase > HearSeconds && calls == 0:
                     Fail(AskProblem.NotHeard, now);
                     break;
-                case AskPhase.Answering when (turnComplete && speechLeft <= 0) || inPhase > AnswerSeconds:
+                case AskPhase.Answering when (turnComplete && speechLeft <= 0 && calls == 0) || inPhase > AnswerSeconds:
                     Fade(now, AnswerLingerSeconds);
                     break;
                 case AskPhase.Fading when now >= fadeAt:
@@ -131,6 +154,7 @@ namespace Edith.Ask
         {
             Phase = phase;
             phaseAt = now;
+            if (phase == AskPhase.Connecting || phase == AskPhase.Fading || phase == AskPhase.Idle) calls = 0;
         }
     }
 }

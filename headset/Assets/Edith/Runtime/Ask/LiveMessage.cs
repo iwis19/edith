@@ -1,10 +1,28 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Edith.Backend;
 using UnityEngine;
 
 namespace Edith.Ask
 {
+    /// A function EDITH asks the headset to run: its call id, its name and the arguments Ask knows how to read.
+    public sealed class LiveToolCall
+    {
+        public const string StartHunt = "start_hunt", StopHunt = "stop_hunt";
+
+        public readonly string Id, Name;
+        /// `start_hunt`'s optional `interests`; empty for any other call.
+        public readonly string[] Interests;
+
+        public LiveToolCall(string id, string name, string[] interests)
+        {
+            Id = id;
+            Name = name;
+            Interests = interests ?? new string[0];
+        }
+    }
+
     /// One server message of a Gemini Live session, reduced to what Ask uses. Safe to parse off the main thread.
     public sealed class LiveMessage
     {
@@ -18,8 +36,17 @@ namespace Edith.Ask
         public bool TurnComplete, Interrupted;
         /// Short names of the web pages Google Search grounded the answer in, as SourceName gives them.
         public readonly List<string> Sources = new List<string>();
+        /// Functions EDITH wants run. The session waits for each one's answer.
+        public readonly List<LiveToolCall> ToolCalls = new List<LiveToolCall>();
+        /// Ids of calls EDITH no longer wants answered, because the person spoke over it.
+        public readonly List<string> CancelledCalls = new List<string>();
 
-        [Serializable] sealed class Wire { public ServerContent serverContent; }
+        [Serializable] sealed class Wire { public ServerContent serverContent; public ToolCallWire toolCall; public Cancellation toolCallCancellation; }
+
+        [Serializable] sealed class ToolCallWire { public FunctionCall[] functionCalls; }
+        [Serializable] sealed class FunctionCall { public string id, name; public CallArgs args; }
+        [Serializable] sealed class CallArgs { public string[] interests; }
+        [Serializable] sealed class Cancellation { public string[] ids; }
 
         [Serializable] sealed class ServerContent
         {
@@ -56,6 +83,13 @@ namespace Edith.Ask
             {
                 return message;
             }
+            if (wire?.toolCall?.functionCalls != null)
+                foreach (var call in wire.toolCall.functionCalls)
+                    if (call != null && !string.IsNullOrEmpty(call.name))
+                        message.ToolCalls.Add(new LiveToolCall(call.id ?? "", call.name, call.args?.interests));
+            if (wire?.toolCallCancellation?.ids != null)
+                foreach (var id in wire.toolCallCancellation.ids)
+                    if (!string.IsNullOrEmpty(id)) message.CancelledCalls.Add(id);
             var content = wire?.serverContent;
             if (content == null) return message;
 
@@ -125,6 +159,11 @@ namespace Edith.Ask
         public static string Audio(byte[] pcm, int byteCount, int sampleRate) =>
             "{\"realtimeInput\":{\"audio\":{\"data\":\"" + Convert.ToBase64String(pcm, 0, byteCount) +
             "\",\"mimeType\":\"audio/pcm;rate=" + sampleRate.ToString(CultureInfo.InvariantCulture) + "\"}}}";
+
+        /// The answer to function call `id`, which EDITH is waiting on. `responseJson` must be a JSON object.
+        public static string ToolResponse(string id, string name, string responseJson) =>
+            "{\"toolResponse\":{\"functionResponses\":[{\"id\":" + JsonText.Quote(id) + ",\"name\":" + JsonText.Quote(name) +
+            ",\"response\":" + responseJson + "}]}}";
 
         /// A still photo for the question, sent as a realtime video frame.
         public static string Image(byte[] jpeg) =>
