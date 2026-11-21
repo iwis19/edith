@@ -160,7 +160,7 @@ namespace Edith.Tests
         {
             var browse = new Browse(new Memory[0]);
             Assert.AreEqual(0, browse.Visible.Count);
-            Assert.AreEqual(0, Chips(browse).Count);
+            Assert.IsTrue(Chips(browse).All(chip => !chip.Enabled), "every tier chip is dimmed");
         }
     }
 }
