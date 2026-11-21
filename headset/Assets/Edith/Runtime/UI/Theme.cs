@@ -179,7 +179,7 @@ namespace Edith.UI
             scaler.dynamicPixelsPerUnit = TextSharpness;
         }
 
-        /// A text label with a soft dark shadow so it stays readable over any room.
+        /// A text label with a soft shadow so it stays readable over any room.
         public static Text Label(Transform parent, string name, Font font, int size, Color color, TextAnchor anchor,
             Material material, bool shadow = true)
         {
@@ -197,7 +197,7 @@ namespace Edith.UI
             return text;
         }
 
-        /// A soft dark drop shadow, so light text reads over a bright room. No coloured glow or outline.
+        /// A soft dark drop shadow. No glow: a halo around every glyph blurs its edges in the headset.
         public static void AddShadows(Text text, int size)
         {
             var spread = Mathf.Max(1f, size * 0.035f);

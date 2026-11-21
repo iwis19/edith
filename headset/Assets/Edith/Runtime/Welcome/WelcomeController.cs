@@ -43,6 +43,8 @@ namespace Edith.Welcome
         const float PairWidthMetres = 0.165f, PairAhead = 0.45f, PairBelow = 0.06f;
         const float TapMargin = 10f;
         const float TypeCharsPerSecond = 55f;
+        const float ResumeOverlapSeconds = 0.15f;
+        const float RecentreDegrees = 30f, SettledDegrees = 1f;
 
         sealed class Target
         {
@@ -83,8 +85,8 @@ namespace Edith.Welcome
         AudioSource speaker;
         // What EDITH was last told to say and when, so a line cut off by an audio reset can start again.
         VoiceStyle? saying;
-        float sayingUntil;
-        bool resaying;
+        float sayingFrom, sayingUntil;
+        bool resaying, recentring;
 
         void Start()
         {
@@ -125,10 +127,16 @@ namespace Edith.Welcome
         void LateUpdate()
         {
             if (!open || group.alpha <= 0f) return;
-            var follow = 1f - Mathf.Exp(-FollowRate * Time.deltaTime);
+            // Held still in the room, as Quest's own panels are: text that trails the head every frame is redrawn at a
+            // new sub-pixel offset each frame and reads as blur. It glides back only once it is well out of view.
             var rest = Rest();
+            var off = Vector3.Angle(transform.position - eye.position, rest - eye.position);
+            if (!recentring && off > RecentreDegrees) recentring = true;
+            if (!recentring) return;
+            var follow = 1f - Mathf.Exp(-FollowRate * Time.deltaTime);
             var position = Vector3.Lerp(transform.position, rest, follow);
             transform.SetPositionAndRotation(position, Quaternion.Slerp(transform.rotation, Facing(position), follow));
+            if (off < SettledDegrees) recentring = false;
         }
 
         // ---- flow
@@ -215,13 +223,16 @@ namespace Edith.Welcome
                 return;
             }
             if (!resaying && (speaker.isPlaying || now >= sayingUntil - 0.3f)) return;
-            Debug.Log($"[EDITH welcome] the {style} line {(resaying ? "was cut by an audio reset" : "stopped early")}, saying it again");
+            // Picks up where the line was cut, a moment early so no word is lost, instead of greeting twice.
+            var at = Mathf.Max(0f, now - sayingFrom - ResumeOverlapSeconds);
+            Debug.Log($"[EDITH welcome] the {style} line {(resaying ? "was cut by an audio reset" : "stopped early")}, going on from {at:F1} s");
             resaying = false;
-            Say(style);
+            Say(style, at);
         }
 
-        /// Says EDITH's welcome line in `style`, cutting off whatever she was saying. Silent when the clip is missing.
-        void Say(VoiceStyle style)
+        /// Says EDITH's welcome line in `style` from `at` seconds in, cutting off whatever she was saying. Silent when
+        /// the clip is missing.
+        void Say(VoiceStyle style, float at = 0f)
         {
             var clip = Resources.Load<AudioClip>(VoiceFolder + style);
             if (clip == null)
@@ -237,9 +248,11 @@ namespace Edith.Welcome
             }
             speaker.Stop();
             speaker.clip = clip;
+            speaker.time = Mathf.Min(at, clip.length - 0.01f);
             speaker.Play();
             saying = style;
-            sayingUntil = Time.realtimeSinceStartup + clip.length;
+            sayingFrom = Time.realtimeSinceStartup - speaker.time;
+            sayingUntil = sayingFrom + clip.length;
             Debug.Log($"[EDITH welcome] saying the {style} line, {clip.length:F1} s, {clip.frequency} Hz, {clip.loadType} {clip.loadState}, " +
                 $"output {AudioSettings.outputSampleRate} Hz, volume {speaker.volume:F2}, listener {AudioListener.volume:F2}{(AudioListener.pause ? " paused" : "")}");
         }
@@ -445,13 +458,12 @@ namespace Edith.Welcome
             triangle.rectTransform.sizeDelta = new Vector2(11f, 13f);
             triangle.rectTransform.anchoredPosition = new Vector2(1.5f, 0f);
             voices.Add(new VoiceCard { Style = style, Glass = glass, Play = play });
-            AddTarget(play.Rect, WelcomeStep.Interests, () =>
+            // The whole card, play button included, picks the voice and plays its sample.
+            AddTarget(glass.Rect, WelcomeStep.Interests, () =>
             {
                 flow.ChooseVoice(style);
                 Say(style);
             });
-            // Added after the play button, so the button wins where the two meet.
-            targets.Insert(targets.Count - 1, new Target { Rect = glass.Rect, Step = WelcomeStep.Interests, Tap = () => flow.ChooseVoice(style) });
         }
 
         /// Only what pairing needs, large enough to read in the headset: the title, the address to open and the code.
