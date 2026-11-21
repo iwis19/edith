@@ -52,8 +52,30 @@ namespace Edith.Tests
         public void Fields_this_build_does_not_know_are_ignored()
         {
             var memories = MemoryList.Parse(
-                "{\"memories\":[{\"id\":1,\"name\":\"x\",\"date\":\"2026-11-21\",\"point\":{\"lat\":42.98,\"lon\":-81.25}}],\"next\":null}");
+                "{\"memories\":[{\"id\":1,\"name\":\"x\",\"date\":\"2026-11-21\",\"weather\":{\"sky\":\"clear\"}}],\"next\":null}");
             Assert.AreEqual(1, memories.Count);
+        }
+
+        [Test]
+        public void A_point_reads_as_latitude_then_longitude()
+        {
+            var memory = MemoryList.Parse(
+                "{\"memories\":[{\"id\":1,\"name\":\"x\",\"date\":\"2026-11-21\",\"point\":[43.00542,-81.2748]}]}")[0];
+            Assert.IsNotNull(memory.Point);
+            Assert.AreEqual(43.00542, memory.Point.Value.Lat, 1e-9);
+            Assert.AreEqual(-81.2748, memory.Point.Value.Lon, 1e-9);
+        }
+
+        [Test]
+        public void A_memory_without_a_point_has_none()
+        {
+            var memories = MemoryList.Parse(
+                "{\"memories\":[{\"id\":1,\"name\":\"x\",\"date\":\"2026-11-21\",\"point\":null}," +
+                "{\"id\":2,\"name\":\"y\",\"date\":\"2026-11-21\"}," +
+                "{\"id\":3,\"name\":\"z\",\"date\":\"2026-11-21\",\"point\":[43.0]}," +
+                "{\"id\":4,\"name\":\"w\",\"date\":\"2026-11-21\",\"point\":[143.0,-81.0]}]}");
+            Assert.AreEqual(4, memories.Count);
+            foreach (var memory in memories) Assert.IsNull(memory.Point, $"memory {memory.Id}");
         }
 
         [Test]
