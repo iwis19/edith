@@ -180,28 +180,35 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_blip_shorter_than_a_tenth_of_a_second_does_not_restart_the_hold()
+        public void A_blip_shorter_than_a_quarter_of_a_second_does_not_restart_the_hold()
         {
             Assert.AreEqual(0, Hold(Book(), 0.3f));
-            Assert.AreEqual(0, Hold(Lost(), 0.06f));
+            Assert.AreEqual(0, Hold(Lost(), 0.2f));
             Assert.AreEqual(1, Hold(Book(), 0.3f), "the hold carried on through the blip");
         }
 
         [Test]
-        public void A_blip_of_low_confidence_does_not_restart_the_hold()
+        public void Low_confidence_once_a_hold_has_started_does_not_end_it()
         {
             var (left, right) = Book();
-            left.Tracked = false;
-            Assert.AreEqual(0, Hold(Book(), 0.3f));
-            Assert.AreEqual(0, Hold((left, right), 0.06f));
-            Assert.AreEqual(1, Hold(Book(), 0.3f));
+            left.Tracked = right.Tracked = false;
+            Assert.AreEqual(0, Hold(Book(), 0.1f));
+            Assert.AreEqual(1, Hold((left, right), 0.5f), "the hold carried on through low confidence");
+        }
+
+        [Test]
+        public void Palms_tipped_forty_five_degrees_still_open()
+        {
+            var tipped = Quaternion.LookRotation(Vector3.up + Vector3.forward, Vector3.forward);
+            var (left, right) = Book();
+            Assert.AreEqual(1, Hold((Hand(left.Wrist, false, tipped), Hand(right.Wrist, true, tipped)), 0.6f));
         }
 
         [Test]
         public void A_loss_longer_than_the_grace_restarts_the_hold()
         {
             Assert.AreEqual(0, Hold(Book(), 0.3f));
-            Assert.AreEqual(0, Hold(Lost(), 0.16f));
+            Assert.AreEqual(0, Hold(Lost(), 0.3f));
             Assert.AreEqual(0, Hold(Book(), 0.4f));
             Assert.AreEqual(1, Hold(Book(), 0.2f));
         }

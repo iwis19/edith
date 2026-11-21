@@ -12,8 +12,8 @@ namespace Edith.Scrapbook
         /// The palm point, as a fraction of the way from the wrist to the middle knuckle.
         public float palmAlong = 0.5f;
 
-        /// dot(palm normal, world up) above this means a palm faces up: within 40 degrees.
-        public float palmUpMin = 0.766f;
+        /// dot(palm normal, world up) above this means a palm faces up: within 50 degrees.
+        public float palmUpMin = 0.643f;
         /// GrabTracker.Curl above this is an open hand, the same value Scan reads.
         public float openCurl = 1.45f;
         /// The wrists sit this far apart on the horizontal plane, and within heightGapMax of each other's height.
@@ -24,8 +24,9 @@ namespace Edith.Scrapbook
         public float minAheadMeters = 0.12f;
         public float maxAheadMeters = 0.60f;
         public float holdSeconds = 0.5f;
-        /// A hand lost, or out of the pose, for no longer than this does not restart a hold.
-        public float graceSeconds = 0.10f;
+        /// A hand lost, or out of the pose, for no longer than this does not restart a hold. Palms up, the headset
+        /// sees each hand from its palm side and loses it for a few frames now and then.
+        public float graceSeconds = 0.25f;
 
         /// Looser limits that only decide when a pose is close enough to log.
         public float nearPalmUp = 0.5f;
@@ -87,7 +88,8 @@ namespace Edith.Scrapbook
     /// The pose that opens and closes the Scrapbook like a book: both palms up side by side in front of the user,
     /// held. Each completed hold toggles the book, and the hands must leave the pose before the next one counts, so
     /// a held pose never flips it back. A caller blanks a hand with HandFrame.Unseen while a grab claims it. Needs
-    /// HandFrame.Tracked, since joints read at low confidence can pass for a flat palm. Deterministic in
+    /// HandFrame.Tracked to start a hold, since joints read at low confidence can pass for a flat palm; once a hold
+    /// is under way, a hand seen with low confidence in the same pose keeps it going. Deterministic in
     /// HandFrame.Time.
     public sealed class BookPose
     {
@@ -115,7 +117,8 @@ namespace Edith.Scrapbook
             var minUp = Mathf.Min(leftRead.Up, rightRead.Up);
             var minCurl = Mathf.Min(leftRead.Curl, rightRead.Curl);
             var placed = InFront(leftRead) && InFront(rightRead);
-            var posed = left.Tracked && right.Tracked && placed && minUp > tuning.palmUpMin && minCurl > tuning.openCurl
+            var sure = holding || left.Tracked && right.Tracked;
+            var posed = sure && placed && minUp > tuning.palmUpMin && minCurl > tuning.openCurl
                         && apart >= tuning.minApartMeters && apart <= tuning.maxApartMeters && heightGap <= tuning.heightGapMax;
 
             var toggled = Update(posed, time);
