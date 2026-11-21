@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using Edith.Look;
+using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace Edith.Scrapbook
 {
-    /// The row of rarity chips under the deck. It leans back to face the eye.
+    /// The row of rarity chips under the deck: pills outlined in their tier's colour, the chosen one filled with it,
+    /// on one dark glass bar. It leans back to face the eye.
     public sealed class TierBar
     {
         // Four canvas units per millimetre at the bar's old size, so the font is rasterised sharply enough.
@@ -18,18 +20,21 @@ namespace Edith.Scrapbook
         // Six chips must fit within the width of the deck's fan.
         static readonly Vector2 ChipSize = new Vector2(150f, 64f);
         const float Gap = 12f, Inset = 14f;
+        // The bar's margin round the chips.
+        const float BarPad = 12f;
         const int FontSize = 26;
-        static readonly Color Unchosen = new Color(0.04f, 0.05f, 0.07f, 0.8f);
-        static readonly Color Dark = new Color(0.04f, 0.05f, 0.07f, 1f);
+        static readonly Color Unchosen = Theme.Tint(0.8f);
+        static readonly Color BarFill = Theme.Tint(0.7f);
 
         sealed class Pill
         {
-            public Image Backing;
+            public Glass Glass;
             public Text Label;
             public Chip Chip;
         }
 
         readonly RectTransform root;
+        readonly Glass bar;
         readonly CanvasGroup group;
         readonly List<Pill> pills = new List<Pill>();
         readonly Font font;
@@ -51,6 +56,8 @@ namespace Edith.Scrapbook
             group = go.GetComponent<CanvasGroup>();
             group.interactable = false;
             group.blocksRaycasts = false;
+            bar = Glass.Build(root, "Bar", ChipSize, (ChipSize.y + 2f * BarPad) * 0.5f, material);
+            bar.SetLook(BarFill, new Color(1f, 1f, 1f, 0.1f), new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.3f), Color.clear);
         }
 
         public float Alpha
@@ -77,28 +84,32 @@ namespace Edith.Scrapbook
                 if (shown == pills.Count) pills.Add(NewPill());
                 var pill = pills[shown++];
                 pill.Chip = chip;
-                pill.Backing.gameObject.SetActive(true);
+                pill.Glass.Rect.gameObject.SetActive(true);
                 var live = chip.Enabled ? 1f : DimmedAlpha;
-                var fill = chip.Selected ? RarityColors.For(chip.Tier) : Unchosen;
+                var tier = RarityColors.For(chip.Tier);
+                var fill = chip.Selected ? tier : Unchosen;
                 fill.a = (chip.Selected ? 0.95f : Unchosen.a) * live;
-                pill.Backing.color = fill;
+                pill.Glass.SetLook(fill, new Color(1f, 1f, 1f, 0.1f * live), new Color(tier.r, tier.g, tier.b, live),
+                    chip.Selected ? new Color(tier.r, tier.g, tier.b, 0.4f * live) : Color.clear);
                 pill.Label.text = chip.Label;
-                var ink = chip.Selected ? Dark : RarityColors.For(chip.Tier);
+                var ink = chip.Selected ? Theme.OnAccent : tier;
                 ink.a = live;
                 pill.Label.color = ink;
                 var fitted = new Vector2(Mathf.Max(ChipSize.x, pill.Label.preferredWidth + 2f * Inset), ChipSize.y);
-                pill.Backing.rectTransform.sizeDelta = fitted;
+                pill.Glass.Resize(fitted);
                 pill.Label.rectTransform.sizeDelta = fitted;
                 width += fitted.x + Gap;
             }
             var x = -width * 0.5f;
             for (var i = 0; i < shown; i++)
             {
-                var rect = pills[i].Backing.rectTransform;
+                var rect = pills[i].Glass.Rect;
                 rect.anchoredPosition = new Vector2(x + rect.sizeDelta.x * 0.5f, 0f);
                 x += rect.sizeDelta.x + Gap;
             }
-            for (var i = shown; i < pills.Count; i++) pills[i].Backing.gameObject.SetActive(false);
+            for (var i = shown; i < pills.Count; i++) pills[i].Glass.Rect.gameObject.SetActive(false);
+            bar.Rect.gameObject.SetActive(shown > 0);
+            bar.Resize(new Vector2(width + 2f * BarPad, ChipSize.y + 2f * BarPad));
         }
 
         public void Hide() => Show(System.Array.Empty<Chip>());
@@ -113,7 +124,7 @@ namespace Edith.Scrapbook
             // takes a pinch aimed at a tier with nothing in it.
             for (var i = 0; i < shown; i++)
             {
-                var rect = pills[i].Backing.rectTransform;
+                var rect = pills[i].Glass.Rect;
                 if (!SightLine.Hits(eye, through, rect.position, rect.rotation, rect.sizeDelta * rect.lossyScale.x, 0f)) continue;
                 if (!pills[i].Chip.Enabled) return false;
                 chip = pills[i].Chip;
@@ -124,7 +135,7 @@ namespace Edith.Scrapbook
             for (var i = 0; i < shown; i++)
             {
                 if (!pills[i].Chip.Enabled) continue;
-                var rect = pills[i].Backing.rectTransform;
+                var rect = pills[i].Glass.Rect;
                 if (!SightLine.Hits(eye, through, rect.position, rect.rotation, rect.sizeDelta * rect.lossyScale.x, HitMargin)) continue;
                 var off = SightLine.Offset(eye, through, rect.position);
                 if (off >= degrees) continue;
@@ -137,10 +148,7 @@ namespace Edith.Scrapbook
 
         Pill NewPill()
         {
-            var backing = new GameObject("Chip", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-            backing.raycastTarget = false;
-            backing.material = material;
-            backing.rectTransform.SetParent(root, false);
+            var glass = Glass.Build(root, "Chip", ChipSize, ChipSize.y * 0.5f, material);
             var label = new GameObject("Label", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
             label.font = font;
             label.fontSize = FontSize;
@@ -149,8 +157,8 @@ namespace Edith.Scrapbook
             label.verticalOverflow = VerticalWrapMode.Overflow;
             label.raycastTarget = false;
             label.material = material;
-            label.rectTransform.SetParent(backing.rectTransform, false);
-            return new Pill { Backing = backing, Label = label };
+            label.rectTransform.SetParent(glass.Rect, false);
+            return new Pill { Glass = glass, Label = label };
         }
     }
 }

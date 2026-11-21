@@ -42,7 +42,12 @@ namespace Edith.Tests
         /// The world position of the chip that says `label`.
         Vector3 At(string label) => parent.GetComponentsInChildren<Text>().Single(text => text.text == label).transform.position;
 
-        Image Backing(string label) => parent.GetComponentsInChildren<Text>().Single(text => text.text == label).GetComponentInParent<Image>();
+        /// The chip that says `label`.
+        RectTransform ChipOf(string label) => (RectTransform)parent.GetComponentsInChildren<Text>().Single(text => text.text == label).transform.parent;
+
+        Image Backing(string label) => ChipOf(label).Find("Body").GetComponent<Image>();
+
+        Color Border(string label) => ChipOf(label).Find("Border").GetComponent<Image>().color;
 
         Color Ink(string label) => parent.GetComponentsInChildren<Text>().Single(text => text.text == label).color;
 
@@ -54,6 +59,23 @@ namespace Edith.Tests
             Show();
             CollectionAssert.AreEqual(
                 new[] { "Common 1", "Uncommon 0", "Rare 0", "Epic 2", "Legendary 0", "Mythic 0" }, bar.Labels);
+        }
+
+        [Test]
+        public void Every_chip_is_outlined_in_its_tier_colour_on_one_dark_glass_bar()
+        {
+            Show();
+            foreach (var (label, tier) in new[] { ("Common 1", Rarity.Common), ("Epic 2", Rarity.Epic), ("Mythic 0", Rarity.Mythic) })
+            {
+                var colour = RarityColors.For(tier);
+                Assert.AreEqual(colour.r, Border(label).r, 1e-4f, label);
+                Assert.AreEqual(colour.b, Border(label).b, 1e-4f, label);
+            }
+            var bar = parent.GetComponentsInChildren<RectTransform>().Single(part => part.name == "Bar");
+            foreach (var label in new[] { "Common 1", "Mythic 0" })
+                Assert.That(Mathf.Abs(ChipOf(label).anchoredPosition.x) + ChipOf(label).sizeDelta.x * 0.5f, Is.LessThan(bar.sizeDelta.x * 0.5f), label);
+            var fill = bar.Find("Body").GetComponent<Image>().color;
+            Assert.That(fill.r + fill.g + fill.b, Is.LessThan(0.5f), "dark");
         }
 
         [Test]
@@ -109,7 +131,7 @@ namespace Edith.Tests
         public void A_pinch_a_centimetre_off_a_chip_still_chooses_it_and_three_centimetres_off_does_not()
         {
             Show();
-            var rect = parent.GetComponentsInChildren<Text>().Single(text => text.text == "Epic 2").GetComponentInParent<Image>().rectTransform;
+            var rect = ChipOf("Epic 2");
             var edge = rect.position + rect.up * (rect.sizeDelta.y * 0.5f * rect.lossyScale.x);
             Assert.IsTrue(bar.Hit(Vector3.zero, (edge + rect.up * 0.01f) * 0.7f, out var chip, out _));
             Assert.AreEqual(Rarity.Epic, chip.Tier);
