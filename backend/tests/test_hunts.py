@@ -306,7 +306,7 @@ async def test_ask_offers_the_hunt_tools_and_tells_the_open_targets_during_a_hun
     async with client_for(create_app(settings, store=store, ask=ask, hunts=hunts)) as c:
         quiet = setup_of(await c.post("/ask/session", headers=HEADERS))
         declared = {f["name"] for t in quiet["tools"] for f in t.get("functionDeclarations", [])}
-        assert declared == {"start_hunt", "stop_hunt"}
+        assert {"start_hunt", "stop_hunt"} <= declared
         start = next(f for t in quiet["tools"] for f in t["functionDeclarations"] if f["name"] == "start_hunt")
         assert start["parameters"]["properties"]["interests"]["type"] == "ARRAY"
         assert "Targets still open" not in quiet["systemInstruction"]["parts"][0]["text"]

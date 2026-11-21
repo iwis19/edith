@@ -280,6 +280,9 @@ namespace Edith.Ask
                 case LiveEventKind.TurnComplete:
                     session.TurnComplete(now);
                     return;
+                case LiveEventKind.Navigation:
+                    Edith.Navigation.NavArrow.Poke();
+                    return;
                 case LiveEventKind.Interrupted:
                     Debug.Log("[EDITH ask] Gemini was interrupted");
                     return;
