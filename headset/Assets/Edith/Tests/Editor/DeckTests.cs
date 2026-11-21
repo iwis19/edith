@@ -7,6 +7,8 @@ namespace Edith.Tests
     public class DeckTests
     {
         const float Dt = 1f / 72f;
+        // How far a deck trails a hand that is moving on, in cards.
+        const float Trail = ScrubTuning.DeadbandMeters / ScrubTuning.MetersPerCard * 0.5f;
 
         static void Settle(Deck deck, float seconds = 2f)
         {
@@ -14,7 +16,7 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void It_opens_on_the_newest_card()
+        public void It_opens_on_the_first_card()
         {
             var deck = new Deck(5);
             Assert.AreEqual(0, deck.Target);
@@ -91,24 +93,24 @@ namespace Edith.Tests
         public void A_scrub_moves_the_cards_with_the_hand_and_holds_them_there()
         {
             var deck = new Deck(5);
-            deck.Scrub(1.3f);
-            Assert.AreEqual(1.3f, deck.Position, 1e-5f);
+            deck.Scrub(1.3f, 0f);
+            Assert.AreEqual(1.3f - Trail, deck.Position, 1e-5f);
             Settle(deck, 0.5f);
-            Assert.AreEqual(1.3f, deck.Position, 1e-5f, "the deck waits for the hand while it is held");
+            Assert.AreEqual(1.3f - Trail, deck.Position, 1e-5f, "the deck waits for the hand while it is held");
         }
 
         [Test]
         public void Letting_go_snaps_to_the_nearest_card()
         {
             var deck = new Deck(5);
-            deck.Scrub(1.3f);
-            deck.Release();
+            deck.Scrub(1.3f, 0f);
+            Assert.AreEqual(1, deck.Release(1f));
             Assert.AreEqual(1, deck.Target);
             Settle(deck);
             Assert.AreEqual(1f, deck.Position);
 
-            deck.Scrub(0.6f);
-            deck.Release();
+            deck.Scrub(0.6f, 2f);
+            deck.Release(3f);
             Assert.AreEqual(2, deck.Target);
         }
 
@@ -116,12 +118,28 @@ namespace Edith.Tests
         public void A_scrub_stops_at_both_ends()
         {
             var deck = new Deck(3);
-            deck.Scrub(-2f);
+            deck.Scrub(-2f, 0f);
             Assert.AreEqual(0f, deck.Position);
-            deck.Scrub(9f);
+            deck.Scrub(9f, 0f);
             Assert.AreEqual(2f, deck.Position);
-            deck.Release();
+            deck.Release(1f);
             Assert.AreEqual(2, deck.Target);
+        }
+
+        [Test]
+        public void The_deck_eases_to_the_card_it_lands_on_without_overshooting()
+        {
+            var deck = new Deck(5);
+            deck.Scrub(1.5f, 0f);
+            deck.Release(1f);
+            var beyond = float.MinValue;
+            for (var i = 0; i < 144; i++)
+            {
+                deck.Advance(Dt);
+                beyond = Mathf.Max(beyond, deck.Position - deck.Target);
+            }
+            Assert.That(beyond, Is.LessThanOrEqualTo(0f), "it never passes the card it lands on");
+            Assert.AreEqual(deck.Target, deck.Position);
         }
 
         [Test]
@@ -129,7 +147,7 @@ namespace Edith.Tests
         {
             var deck = new Deck(5);
             deck.Step(1);
-            deck.Release();
+            Assert.AreEqual(-1, deck.Release(1f));
             Assert.AreEqual(1, deck.Target);
         }
 
@@ -146,8 +164,8 @@ namespace Edith.Tests
         {
             var deck = new Deck(0);
             deck.Step(1);
-            deck.Scrub(2f);
-            deck.Release();
+            deck.Scrub(2f, 0f);
+            deck.Release(1f);
             Settle(deck, 0.2f);
             Assert.AreEqual(0, deck.Target);
             Assert.AreEqual(0f, deck.Position);

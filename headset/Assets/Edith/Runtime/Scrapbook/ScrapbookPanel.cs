@@ -33,8 +33,6 @@ namespace Edith.Scrapbook
         [SerializeField] BookTuning book = new BookTuning();
 
         const float FadeSeconds = 0.25f;
-        /// A pinch dragged this far sideways scrolls one card.
-        const float MetersPerCard = 0.07f;
         const float ListSeconds = 8f;
         const float NearLogSeconds = 1f;
         // The ring that fills while the open pose is held floats this far above the palms, clear of the hands.
@@ -308,7 +306,7 @@ namespace Edith.Scrapbook
             var at = frame.InverseTransformPoint(hand.PinchPoint);
             var wasDragging = intent.Scrubbing;
             if (!intent.Move(at)) return;
-            if (wasDragging) deck.Scrub((draggedTo.x - at.x) / MetersPerCard);
+            if (wasDragging) deck.Scrub((draggedTo.x - at.x) / ScrubTuning.MetersPerCard, Time.time);
             draggedTo = at;
         }
 
@@ -319,8 +317,7 @@ namespace Edith.Scrapbook
             var how = $"{ended}, {intent.Sideways * 100f:0.0} cm sideways";
             if (intent.Scrubbing)
             {
-                Debug.Log($"[EDITH scrapbook] scrubbed the deck ({how})");
-                deck.Release();
+                Debug.Log($"[EDITH scrapbook] scrubbed the deck ({how}), landed on card {deck.Release(Time.time)}");
                 return;
             }
             chosen = true;

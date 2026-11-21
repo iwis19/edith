@@ -3,8 +3,7 @@ using UnityEngine;
 namespace Edith.Scrapbook
 {
     /// Where a row of `Count` cards is scrolled to. Position is the card index in the middle, which can sit between
-    /// two cards while it moves; Target is the card it comes to rest on. Index 0 is the newest card and a higher
-    /// index is older.
+    /// two cards while it moves; Target is the card it comes to rest on. Index 0 is the first card.
     public sealed class Deck
     {
         // The rate of the exponential approach, per second: 12 closes 63% of the gap in 83 ms.
@@ -12,7 +11,7 @@ namespace Edith.Scrapbook
         const float Settled = 0.001f;
         const float FormSeconds = 0.2f;
 
-        bool scrubbing;
+        ScrubDrag drag;
         float elapsed;
 
         /// `reforming` starts the deck unformed, with its cards folded into the middle, and Form rises to 1 as it advances.
@@ -39,19 +38,23 @@ namespace Edith.Scrapbook
 
         public void JumpTo(int index) => Target = Clamp(index);
 
-        /// Moves the deck by `cards` under a dragging pinch. The deck follows the hand, not the target, until Release.
-        public void Scrub(float cards)
+        /// Moves the deck by `cards` under a dragging pinch, at time `now` in seconds. The deck follows the hand, not
+        /// the target, until Release.
+        public void Scrub(float cards, float now)
         {
-            scrubbing = true;
-            Position = Mathf.Clamp(Position + cards, 0f, Last);
+            drag ??= new ScrubDrag(Position, Last);
+            drag.Move(cards, now);
+            Position = drag.Position;
         }
 
-        /// Ends a scrub: the nearest card becomes the target.
-        public void Release()
+        /// Ends a scrub at `now`: the deck comes to rest on the card ScrubDrag.Land picks. Returns that card, or -1
+        /// when nothing was scrubbed.
+        public int Release(float now)
         {
-            if (!scrubbing) return;
-            scrubbing = false;
-            Target = Clamp(Mathf.RoundToInt(Position));
+            if (drag == null) return -1;
+            Target = Clamp(drag.Land(now));
+            drag = null;
+            return Target;
         }
 
         /// Eases Position toward Target, and Form toward 1.
@@ -63,7 +66,7 @@ namespace Edith.Scrapbook
                 var t = Mathf.Clamp01(elapsed / FormSeconds);
                 Form = t * t * (3f - 2f * t);
             }
-            if (scrubbing) return;
+            if (drag != null) return;
             Position = Mathf.Lerp(Position, Target, 1f - Mathf.Exp(-EaseRate * deltaTime));
             if (Mathf.Abs(Position - Target) < Settled) Position = Target;
         }
