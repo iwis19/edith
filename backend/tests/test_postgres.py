@@ -30,14 +30,14 @@ def schema_url():
 
 
 def test_migrate_applies_each_file_once(schema_url):
-    assert migrate(schema_url) == ["001_init", "002_collect", "003_drop_sources", "004_memory_date"]
+    assert migrate(schema_url) == ["001_init", "002_collect", "003_drop_sources", "004_memory_date", "005_place_point"]
     assert migrate(schema_url) == []
 
 
 def test_concurrent_migrations_take_turns(schema_url):
     with ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _: migrate(schema_url), range(4)))
-    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_drop_sources", "004_memory_date"]]
+    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_drop_sources", "004_memory_date", "005_place_point"]]
 
 
 async def test_health_checks_share_one_query_while_cached(schema_url):
@@ -109,6 +109,30 @@ async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(
         assert await store.list_memories(other, 10) == []
         assert await store.memory_image(profile, first_id) == b"crop-1"
         assert await store.memory_image(other, first_id) is None
+    finally:
+        await store.close()
+
+
+async def test_a_place_point_is_saved_once_for_a_memory_with_a_place(schema_url):
+    migrate(schema_url)
+    store = PostgresStore(schema_url, max_size=2)
+    await store.open()
+    try:
+        profile, other = uuid.uuid4(), uuid.uuid4()
+        placed, unplaced = a_look(profile, place="Waterloo, Ontario, Canada"), a_look(profile)
+        for record in (placed, unplaced):
+            await store.record_look(record)
+        placed_id = await store.collect(profile, placed.look_ref, b"a", date(2026, 11, 21))
+        unplaced_id = await store.collect(profile, unplaced.look_ref, b"b", date(2026, 11, 20))
+
+        assert await store.place_to_locate(profile, placed_id) == "Waterloo, Ontario, Canada"
+        assert await store.place_to_locate(other, placed_id) is None
+        assert await store.place_to_locate(profile, unplaced_id) is None
+        await store.set_place_point(placed_id, (43.47235, -80.54491))
+        await store.set_place_point(placed_id, (1.0, 2.0))
+        assert await store.place_to_locate(profile, placed_id) is None
+        points = [m.point for m in await store.list_memories(profile, 10)]
+        assert points == [(43.47235, -80.54491), None]
     finally:
         await store.close()
 

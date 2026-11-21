@@ -41,6 +41,7 @@ class Memory:
     rarity: str | None
     place: str | None
     collected_on: date
+    point: tuple[float, float] | None = None
 
 
 def collection_date(collected_at: datetime | None, now: datetime) -> date:
@@ -67,6 +68,12 @@ class Store(Protocol):
         no finished Look with that ref. Raises StoreUnavailable."""
         ...
     async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]: ...
+    async def place_to_locate(self, profile_id: UUID, memory_id: int) -> str | None:
+        """The memory's place when it has one and no point yet, else None."""
+        ...
+    async def set_place_point(self, memory_id: int, point: tuple[float, float]) -> None:
+        """Saves the point of the memory's place unless one is already saved."""
+        ...
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None: ...
 
 
@@ -89,6 +96,12 @@ class DisabledStore:
         raise StoreUnavailable("There is no database.")
 
     async def list_memories(self, profile_id: UUID, limit: int) -> list[Memory]:
+        raise StoreUnavailable("There is no database.")
+
+    async def place_to_locate(self, profile_id: UUID, memory_id: int) -> str | None:
+        raise StoreUnavailable("There is no database.")
+
+    async def set_place_point(self, memory_id: int, point: tuple[float, float]) -> None:
         raise StoreUnavailable("There is no database.")
 
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None:
@@ -184,14 +197,42 @@ class PostgresStore:
         try:
             async with self._pool.connection(timeout=10) as conn:
                 cursor = await conn.execute(
-                    """select id, name, fact, rarity, place, collected_on from memories
+                    """select id, name, fact, rarity, place, collected_on, place_lat, place_lon from memories
                        where profile_id = %s order by collected_on desc, id desc limit %s""",
                     (profile_id, limit),
                 )
-                return [Memory(*row) for row in await cursor.fetchall()]
+                return [
+                    Memory(*row[:6], point=None if row[6] is None or row[7] is None else (row[6], row[7]))
+                    for row in await cursor.fetchall()
+                ]
         except Exception as exc:
             log.exception("failed to list memories")
             raise StoreUnavailable("The memories could not be read.") from exc
+
+    async def place_to_locate(self, profile_id: UUID, memory_id: int) -> str | None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                cursor = await conn.execute(
+                    """select place from memories
+                       where id = %s and profile_id = %s and place is not null and place_lat is null""",
+                    (memory_id, profile_id),
+                )
+                row = await cursor.fetchone()
+        except Exception as exc:
+            log.exception("failed to read the place of memory %s", memory_id)
+            raise StoreUnavailable("The memory could not be read.") from exc
+        return row[0] if row else None
+
+    async def set_place_point(self, memory_id: int, point: tuple[float, float]) -> None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                await conn.execute(
+                    "update memories set place_lat = %s, place_lon = %s where id = %s and place_lat is null",
+                    (*point, memory_id),
+                )
+        except Exception as exc:
+            log.exception("failed to save the place point of memory %s", memory_id)
+            raise StoreUnavailable("The memory could not be saved.") from exc
 
     async def memory_image(self, profile_id: UUID, memory_id: int) -> bytes | None:
         try:

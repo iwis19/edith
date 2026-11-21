@@ -52,7 +52,7 @@ async def test_collecting_a_finished_look_saves_a_memory_from_the_stored_card(cl
 
     [memory] = (await client.get("/memories", headers=HEADERS)).json()["memories"]
     assert memory["id"] == memory_id
-    assert set(memory) == {"id", "name", "fact", "rarity", "place", "date"}
+    assert set(memory) == {"id", "name", "fact", "rarity", "place", "date", "point"}
     assert (memory["name"], memory["fact"], memory["rarity"]) == (events[1]["name"], events[2]["text"], events[3]["tier"])
 
 
@@ -141,9 +141,69 @@ class DetailedAgent:
         yield RarityEvent(tier="common")
 
 
+class FakeGeocoder:
+    def __init__(self, point=(43.4723456, -80.5449123), fail=False):
+        self.point, self.fail, self.asked = point, fail, []
+
+    async def locate(self, place):
+        self.asked.append(place)
+        if self.fail:
+            raise RuntimeError("down")
+        return self.point
+
+
+async def settle():
+    for _ in range(10):
+        await asyncio.sleep(0)
+
+
 async def test_a_memory_copies_the_looks_place(settings, store):
-    async with client_for(create_app(settings, agent=DetailedAgent(), store=store)) as c:
+    async with client_for(create_app(settings, agent=DetailedAgent(), store=store, geocoder=FakeGeocoder())) as c:
         ref, _ = await look(c)
         await collect(c, ref)
         [memory] = (await c.get("/memories", headers=HEADERS)).json()["memories"]
     assert memory["place"] == "Waterloo, Ontario, Canada"
+
+
+async def test_collecting_saves_the_centre_of_the_place_after_answering_and_lists_it_rounded(settings, store):
+    geocoder = FakeGeocoder()
+    async with client_for(create_app(settings, agent=DetailedAgent(), store=store, geocoder=geocoder)) as c:
+        ref, _ = await look(c)
+        response = await collect(c, ref)
+        assert response.status_code == 200
+        await settle()
+        [memory] = (await c.get("/memories", headers=HEADERS)).json()["memories"]
+    assert geocoder.asked == ["Waterloo, Ontario, Canada"]
+    assert memory["point"] == [43.47235, -80.54491]
+
+
+async def test_a_repeat_collect_does_not_look_the_place_up_again(settings, store):
+    geocoder = FakeGeocoder()
+    async with client_for(create_app(settings, agent=DetailedAgent(), store=store, geocoder=geocoder)) as c:
+        ref, _ = await look(c)
+        await collect(c, ref)
+        await settle()
+        await collect(c, ref)
+        await settle()
+    assert len(geocoder.asked) == 1
+
+
+async def test_a_failed_or_empty_lookup_leaves_the_point_null_and_collect_still_succeeds(settings, store):
+    for geocoder in (FakeGeocoder(fail=True), FakeGeocoder(point=None)):
+        async with client_for(create_app(settings, agent=DetailedAgent(), store=store, geocoder=geocoder)) as c:
+            ref, _ = await look(c)
+            assert (await collect(c, ref)).status_code == 200
+            await settle()
+            memories = (await c.get("/memories", headers=HEADERS)).json()["memories"]
+        assert all(m["point"] is None for m in memories)
+        assert geocoder.asked
+
+
+async def test_a_memory_without_a_place_is_not_looked_up(settings, store):
+    geocoder = FakeGeocoder()
+    async with client_for(create_app(settings, store=store, geocoder=geocoder)) as c:
+        ref, _ = await look(c)
+        await collect(c, ref)
+        await settle()
+        [memory] = (await c.get("/memories", headers=HEADERS)).json()["memories"]
+    assert geocoder.asked == [] and memory["point"] is None

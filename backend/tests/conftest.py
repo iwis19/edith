@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 import uuid
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -66,6 +67,15 @@ class RecordingStore:
     async def list_memories(self, profile_id, limit):
         mine = [m for m, owner, _, _ in self.memories.values() if owner == profile_id]
         return sorted(mine, key=lambda m: (m.collected_on, m.id), reverse=True)[:limit]
+
+    async def place_to_locate(self, profile_id, memory_id):
+        entry = self.memories.get(memory_id)
+        return entry[0].place if entry and entry[1] == profile_id and entry[0].point is None else None
+
+    async def set_place_point(self, memory_id, point):
+        memory, owner, image, ref = self.memories[memory_id]
+        if memory.point is None:
+            self.memories[memory_id] = (replace(memory, point=point), owner, image, ref)
 
     async def memory_image(self, profile_id, memory_id):
         entry = self.memories.get(memory_id)

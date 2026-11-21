@@ -30,7 +30,7 @@ from .events import (
 from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
-from .resolve import HttpResolver
+from .resolve import HttpResolver, PlaceLocator
 
 log = logging.getLogger("edith")
 if not log.handlers:
@@ -136,12 +136,16 @@ def create_app(
     locations: Locations | None = None,
     pairings: Pairings | None = None,
     scanner: ScanAgent | None = None,
+    geocoder: PlaceLocator | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
         raise RuntimeError("PUBLIC_SERVER is set but DEVICE_TOKEN is empty, so anyone could spend the API keys.")
-    # Made here and not per request: only the phone's position ever uses the resolver's client.
-    locations = locations or Locations(HttpResolver(httpx.AsyncClient()))
+    # Made here and not per request. The geocoder is the same resolver, so reverse and search lookups share one
+    # Nominatim rate limit.
+    resolver = HttpResolver(httpx.AsyncClient())
+    locations = locations or Locations(resolver)
+    geocoder = geocoder or resolver
     pairings = pairings or Pairings()
     agent = agent or make_card_agent(settings, locations.whereabouts)
     store = store or make_store(settings.database_url, settings.db_pool_max)
@@ -150,11 +154,14 @@ def create_app(
     # Looks still streaming, by look_ref, so a /collect that arrives before the Look is recorded can wait for it. A
     # per-process map is right because the backend runs as a single replica.
     inflight: dict[UUID, asyncio.Event] = {}
+    geocoding: set[asyncio.Task] = set()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await store.open()
         yield
+        for task in geocoding:
+            task.cancel()
         if _recording:
             await asyncio.wait(_recording, timeout=10)
         await store.close()
@@ -297,6 +304,9 @@ def create_app(
             profile_id, parsed.look_ref, data, collection_date(parsed.collected_at, datetime.now(UTC))))
         if memory_id is None:
             raise ApiError(404, "unknown_look", "This profile has no finished Look with that look_ref.")
+        task = asyncio.create_task(_locate_place(store, geocoder, profile_id, memory_id))
+        geocoding.add(task)
+        task.add_done_callback(geocoding.discard)
         return {"memory_id": memory_id}
 
     @app.get("/memories")
@@ -304,7 +314,8 @@ def create_app(
         found = await _stored(store.list_memories(profile_id, limit))
         return {"memories": [
             {"id": m.id, "name": m.name, "fact": m.fact, "rarity": m.rarity, "place": m.place,
-             "date": m.collected_on.isoformat()}
+             "date": m.collected_on.isoformat(),
+             "point": [round(m.point[0], 5), round(m.point[1], 5)] if m.point else None}
             for m in found
         ]}
 
@@ -316,6 +327,18 @@ def create_app(
         return Response(data, media_type="image/jpeg")
 
     return app
+
+
+async def _locate_place(store: Store, geocoder: PlaceLocator, profile_id: UUID, memory_id: int) -> None:
+    """Saves the centre of a memory's place after /collect has answered. Only the place text is sent out."""
+    try:
+        place = await store.place_to_locate(profile_id, memory_id)
+        if place is None:
+            return
+        if (point := await geocoder.locate(place)) is not None:
+            await store.set_place_point(memory_id, point)
+    except Exception as exc:
+        log.warning("could not locate the place of memory %s: %s", memory_id, type(exc).__name__)
 
 
 async def _stored[T](call: Awaitable[T]) -> T:

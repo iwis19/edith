@@ -84,7 +84,7 @@ The response is `{"memory_id": int}`.
 
 Lists the profile's memories, newest date first and newest first within a date, without image bytes. The optional `limit` query parameter is 1 to 500 and defaults to 100.
 
-The response is `{"memories": [{"id", "name", "fact", "rarity", "place", "date"}]}`. `date` is `YYYY-MM-DD`. `place` is `null` when the Card agent gave none. Answers 503 `db_unavailable` like `/collect`.
+The response is `{"memories": [{"id", "name", "fact", "rarity", "place", "date", "point"}]}`. `date` is `YYYY-MM-DD`. `place` is `null` when the Card agent gave none. `point` is the centre of `place` as `[lat, lon]` rounded to 5 decimals, or `null` when the memory has no place, the place was not found, or the lookup has not finished (see [Phone location](#phone-location)). Answers 503 `db_unavailable` like `/collect`.
 
 ### `GET /memories/{id}/image`
 
@@ -145,6 +145,8 @@ The headset pairs like this:
 4. The phone page sends its position to `POST /location` about every 10 s, or after moving 25 m.
 
 A position becomes a place name and named sights through OpenStreetMap: Nominatim for the address and Overpass for the buildings, landmarks and campuses around the point, with no list of places kept in this repository. The backend sends each service the position rounded to about 11 m and a `User-Agent` of `EDITH/<version>` only. It asks Nominatim at most once a second, remembers each answer for 30 min per rounded point, and looks a profile up again only after it moves 75 m or its answer is 10 min old.
+
+A memory's `point` comes from a Nominatim search (`/search`, `limit=1`) for the memory's `place` text, run in the background after `/collect` has answered. The phone's position is never part of it and is never written to the database. Searches share the reverse lookups' one-a-second limit and `User-Agent`, and each normalised place is searched once per process, including when nothing was found. A failed search leaves `point` null and is retried by a later `/collect` of the same Look.
 
 The Look and Ask prompts use a position only while its latest fix is at most 30 min old. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights, and `describe_place` turns them into prompt text. The Scan agent uses both.
 
@@ -276,7 +278,7 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/events.py`: the stream's event types, the Look metadata and the details recorded but not streamed.
 - `edith_backend/pairing.py`: pairing codes with their throttle, and the signed phone tokens.
 - `edith_backend/location.py`: the phone's position per profile, kept in memory, and the place description for prompts.
-- `edith_backend/resolve.py`: Nominatim and Overpass lookups with the cache and the rate limit.
+- `edith_backend/resolve.py`: Nominatim (reverse and place search) and Overpass lookups with the cache and the rate limit.
 - `edith_backend/static/phone.html`: the page the phone opens.
 - `edith_backend/db.py`: the pooled Postgres store, or a no-op store with no database.
 - `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills.
