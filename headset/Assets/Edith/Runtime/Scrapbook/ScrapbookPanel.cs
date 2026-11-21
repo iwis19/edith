@@ -15,11 +15,11 @@ namespace Edith.Scrapbook
 {
     /// The Scrapbook: the collected memories as a deck of cards to scroll through. Both palms held up side by side
     /// open it in front of the user, where it stays put in the room, and the palms brought together close it. A
-    /// thumb swipe moves one card, a sideways pinch-drag scrubs, and a quick pinch on a side card brings it to the
-    /// middle. The tabs under the deck pick
-    /// the lens, and the chips under them narrow the deck to a rarity or show the globe of places: a pinch on a city's pin dives into its
-    /// street map, and a pinch on a spot's pin narrows the deck to that spot. A pinch goes to the first thing in its
-    /// line: a chip, a pin, the globe, a card, and otherwise the deck. While it is open it holds the hand gate, so
+    /// thumb swipe moves one card. A pinch chooses what was under the line of sight when it was pressed, once it
+    /// ends, unless the pinch point moved 6 cm or more sideways, which scrubs the deck, or spins the globe when it
+    /// started on it. The tabs under the deck pick the lens, and the chips under them narrow the deck to a rarity or
+    /// show the globe of places: a city's pin dives into its street map, and a spot's pin narrows the deck to that
+    /// spot. The chip or pin nearest the line of sight wins over a card. While it is open it holds the hand gate, so
     /// pinches make no Looks and palms start no Scan.
     public sealed class ScrapbookPanel : MonoBehaviour
     {
