@@ -42,7 +42,6 @@ namespace Edith.Pinch
         {
             public float Time;
             public Vector3 Point;
-            public float Gap;
             public Pose Eye;
         }
 
@@ -108,7 +107,7 @@ namespace Edith.Pinch
                 if (Vector3.Distance(hand.PinchPoint, start) < tuning.minDragMeters) return Reading(PinchEvent.None);
                 phase = PinchPhase.Dragging;
             }
-            return Reading(PinchEvent.None, SpanToSteadyEnd());
+            return Reading(PinchEvent.None, SpanTo(Newest));
         }
 
         PinchReading StepReleased(in HandFrame hand)
@@ -121,7 +120,7 @@ namespace Edith.Pinch
                 unpinchedSince = -1f;
                 lastSeen = hand.Time;
                 Record(hand);
-                return Reading(PinchEvent.Resumed, SpanToSteadyEnd());
+                return Reading(PinchEvent.Resumed, SpanTo(Newest));
             }
 
             // Twice the rejoin distance, because a dropout can wander before it comes back.
@@ -144,7 +143,7 @@ namespace Edith.Pinch
         {
             if (phase == PinchPhase.Pressed) return End(PinchEvent.Tap, PinchRejection.None);
 
-            var rejection = SpanToSteadyEnd();
+            var rejection = SpanTo(SampleBefore(unpinchedSince - tuning.releaseLookbackSeconds));
             if (rejection != PinchRejection.None) return End(PinchEvent.Cancelled, rejection);
             var size = box.Tangent.size;
             if (size.x < tuning.minTangentSize || size.y < tuning.minTangentSize) return End(PinchEvent.Cancelled, PinchRejection.TooSmall);
@@ -152,7 +151,7 @@ namespace Edith.Pinch
 
             phase = PinchPhase.Released;
             releasedAt = unpinchedSince;
-            releasedPoint = recent[recent.Count - 1].Point;
+            releasedPoint = Newest.Point;
             return Reading(PinchEvent.Completed);
         }
 
@@ -163,9 +162,8 @@ namespace Edith.Pinch
             return Reading(pinchEvent, rejection);
         }
 
-        PinchRejection SpanToSteadyEnd()
+        PinchRejection SpanTo(in Sample end)
         {
-            var end = SteadyEnd();
             hasBox = TrySpan(end.Eye, start, end.Point, tuning.minDepthMeters, out box);
             return hasBox ? PinchRejection.None : PinchRejection.TooClose;
         }
@@ -189,18 +187,19 @@ namespace Edith.Pinch
             return true;
         }
 
-        /// The newest sample with the fingertips still together, within the lookback; otherwise the newest sample.
-        Sample SteadyEnd()
+        Sample Newest => recent[recent.Count - 1];
+
+        /// The newest sample at or before `time`, or the oldest kept one when the drag is younger than that.
+        Sample SampleBefore(float time)
         {
-            var newest = recent[recent.Count - 1];
-            for (var i = recent.Count - 1; i >= 0 && newest.Time - recent[i].Time <= tuning.steadyLookbackSeconds + 1e-4f; i--)
-                if (recent[i].Gap <= tuning.steadyGapMeters) return recent[i];
-            return newest;
+            for (var i = recent.Count - 1; i >= 0; i--)
+                if (recent[i].Time <= time + 1e-4f) return recent[i];
+            return recent[0];
         }
 
         void Record(in HandFrame hand)
         {
-            recent.Add(new Sample { Time = hand.Time, Point = hand.PinchPoint, Gap = hand.FingerGap, Eye = hand.Eye });
+            recent.Add(new Sample { Time = hand.Time, Point = hand.PinchPoint, Eye = hand.Eye });
             while (recent.Count > 1 && hand.Time - recent[0].Time > KeepSeconds) recent.RemoveAt(0);
         }
 

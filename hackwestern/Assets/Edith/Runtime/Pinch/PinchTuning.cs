@@ -16,11 +16,9 @@ namespace Edith.Pinch
         public float rejoinMeters = 0.08f;
         /// A lost hand is tolerated this long mid-drag.
         public float lostSeconds = 0.20f;
-        /// The box ends at the last pinch point with the fingertips this close. They part before the pinch flag
-        /// drops, and the pinch point slides and the arm falls while they do.
-        public float steadyGapMeters = 0.025f;
-        /// How far back to look for that point. A pinch held looser than steadyGapMeters for longer uses its latest point.
-        public float steadyLookbackSeconds = 0.20f;
+        /// The released box ends where the pinch was this long before letting go, because the arm drops and the
+        /// pinch point slides as the fingers open while the pinch still reads as held.
+        public float releaseLookbackSeconds = 0.10f;
         /// Pinch points nearer the eye are ignored.
         public float minDepthMeters = 0.15f;
         /// Smallest box side, about 3.4 degrees, and the widest aspect ratio, both checked on release.

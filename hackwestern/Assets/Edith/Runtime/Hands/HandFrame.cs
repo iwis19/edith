@@ -17,7 +17,6 @@ namespace Edith.Hands
         public Vector3 ThumbTip, IndexTip, Wrist, IndexKnuckle, LittleKnuckle;
 
         public Vector3 PinchPoint => (ThumbTip + IndexTip) * 0.5f;
-        public float FingerGap => Vector3.Distance(ThumbTip, IndexTip);
         public Pose Eye => new Pose(EyePosition, EyeRotation);
 
         /// Points out of the palm. The raw cross product points into a right palm, so it is flipped.

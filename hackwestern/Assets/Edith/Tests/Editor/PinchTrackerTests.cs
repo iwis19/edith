@@ -82,6 +82,7 @@ namespace Edith.Tests
         public void A_drag_completes_on_release_and_is_confirmed_once_the_rejoin_window_passes()
         {
             Drag(From, To);
+            Feed(To, true, 0.15f);
             Feed(To, false, 0.6f);
 
             CollectionAssert.AreEqual(new[] { PinchEvent.Completed, PinchEvent.Confirmed }, Events());
@@ -101,6 +102,7 @@ namespace Edith.Tests
             Drag(From, Vector3.Lerp(From, To, 0.5f));
             Feed(Vector3.Lerp(From, To, 0.5f), false, 2 * Dt);
             Drag(Vector3.Lerp(From, To, 0.5f), To);
+            Feed(To, true, 0.15f);
             Feed(To, false, 0.6f);
 
             CollectionAssert.AreEqual(new[] { PinchEvent.Completed, PinchEvent.Confirmed }, Events());
@@ -138,13 +140,13 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_box_ends_where_the_fingers_were_still_together()
+        public void The_box_ends_where_the_pinch_was_before_the_arm_dropped()
         {
             Drag(From, To);
-            // The fingertips part and the hand falls before the pinch flag drops.
-            Feed(To + new Vector3(0f, -0.01f, 0f), true, Dt, 0.04f);
-            Feed(To + new Vector3(0f, -0.03f, 0f), true, Dt, 0.06f);
-            Feed(To + new Vector3(0f, -0.06f, 0f), false, 0.6f, 0.08f);
+            Feed(To, true, 0.15f);
+            // The arm falls for the last 0.07 s while the pinch still reads as held.
+            Drag(To, To + new Vector3(0f, -0.08f, 0f), 0.07f);
+            Feed(To + new Vector3(0f, -0.08f, 0f), false, 0.6f);
 
             var box = Last(PinchEvent.Confirmed).Box.Tangent;
             Assert.That(box.yMax, Is.EqualTo(To.y / To.z).Within(1e-3f));
