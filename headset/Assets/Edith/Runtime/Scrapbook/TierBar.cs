@@ -6,8 +6,8 @@ using UnityEngine.UI;
 
 namespace Edith.Scrapbook
 {
-    /// The row of rarity chips under the deck: pills outlined in their tier's colour, the chosen one filled with it,
-    /// on one dark glass bar. It leans back to face the eye.
+    /// The row of rarity chips under the deck: frost-lettered pills outlined in their tier's colour, the chosen one
+    /// filled with it, on one dark glass bar. It leans back to face the eye.
     public sealed class TierBar
     {
         // Four canvas units per millimetre at the bar's old size, so the font is rasterised sharply enough.
@@ -25,6 +25,8 @@ namespace Edith.Scrapbook
         const int FontSize = 26;
         static readonly Color Unchosen = Theme.Tint(0.8f);
         static readonly Color BarFill = Theme.Tint(0.7f);
+        // The chosen chip's fill: its tier's colour, soft enough for the frost text on it to read.
+        const float ChosenAlpha = 0.6f;
 
         sealed class Pill
         {
@@ -88,11 +90,11 @@ namespace Edith.Scrapbook
                 var live = chip.Enabled ? 1f : DimmedAlpha;
                 var tier = RarityColors.For(chip.Tier);
                 var fill = chip.Selected ? tier : Unchosen;
-                fill.a = (chip.Selected ? 0.95f : Unchosen.a) * live;
+                fill.a = (chip.Selected ? ChosenAlpha : Unchosen.a) * live;
                 pill.Glass.SetLook(fill, new Color(1f, 1f, 1f, 0.1f * live), new Color(tier.r, tier.g, tier.b, live),
                     chip.Selected ? new Color(tier.r, tier.g, tier.b, 0.4f * live) : Color.clear);
                 pill.Label.text = chip.Label;
-                var ink = chip.Selected ? Theme.OnAccent : tier;
+                var ink = Theme.Ice;
                 ink.a = live;
                 pill.Label.color = ink;
                 var fitted = new Vector2(Mathf.Max(ChipSize.x, pill.Label.preferredWidth + 2f * Inset), ChipSize.y);
