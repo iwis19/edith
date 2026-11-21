@@ -585,6 +585,28 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4453513310108136, guid: 835e735ca71bf78459fb2cababd74112, type: 3}
   m_PrefabInstance: {fileID: 795926750}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &795926752 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 114567484643301796, guid: 835e735ca71bf78459fb2cababd74112, type: 3}
+  m_PrefabInstance: {fileID: 795926750}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2609c54f376cffc4da1ab9401cc1a36f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &795926753 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 114428879332287356, guid: 835e735ca71bf78459fb2cababd74112, type: 3}
+  m_PrefabInstance: {fileID: 795926750}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cb7623a8f0b49cf4dbaa40aea4d4be64, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1083127874
 GameObject:
   m_ObjectHideFlags: 0
@@ -1236,6 +1258,95 @@ Transform:
   - {fileID: 66785161}
   m_Father: {fileID: 578435150}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1569223302
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1569223305}
+  - component: {fileID: 1569223304}
+  - component: {fileID: 1569223303}
+  m_Layer: 0
+  m_Name: Scan
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1569223303
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1569223302}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ac977c3c23226024c95697fecb829a2a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Scan.ScanController
+  leftHand: {fileID: 1569223304}
+  rightHand: {fileID: 1145216125}
+  headsetCamera: {fileID: 1186068193}
+  cameraAccess: {fileID: 1186068194}
+  environmentRaycast: {fileID: 1803563344}
+  eye: {fileID: 578435152}
+  font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+  material: {fileID: 2100000, guid: 536874e4d0911184dbf48aecb14b21f0, type: 2}
+  tuning:
+    openCurl: 1.45
+    palmAlong: 0.75
+    palmAwayMin: 0.5
+    palmDownMax: 0.7
+    minAheadMeters: 0.08
+    maxBelowMeters: 0.48
+    holdSeconds: 0.5
+    cooldownSeconds: 2
+    graceSeconds: 0.15
+    nearPalmAway: 0.2
+    nearCurl: 1.25
+    pinTapDegrees: 7
+    maxPinMeters: 6
+    assumedPinMeters: 1.5
+    minPinMeters: 0.35
+    farPinMeters: 25
+    farFadeMeters: 10
+    cardDepthMeters: 0.45
+    cardDepthShare: 0.8
+  jpegQuality: 85
+--- !u!114 &1569223304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1569223302}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 090f22414e3a9ff47be2ec234bfd3210, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Edith::Edith.Hands.LeftHandSource
+  hand: {fileID: 795926753}
+  skeleton: {fileID: 795926752}
+  eye: {fileID: 578435152}
+--- !u!4 &1569223305
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1569223302}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1803563343
 GameObject:
   m_ObjectHideFlags: 0
@@ -1325,3 +1436,4 @@ SceneRoots:
   - {fileID: 1803563345}
   - {fileID: 1308650307}
   - {fileID: 597487348}
+  - {fileID: 1569223305}
