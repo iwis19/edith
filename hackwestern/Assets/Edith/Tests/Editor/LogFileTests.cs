@@ -23,6 +23,12 @@ namespace Edith.Tests
         [TearDown]
         public void TearDown() => Directory.Delete(dir, true);
 
+        static string ReadShared(string file)
+        {
+            using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var reader = new StreamReader(stream)) return reader.ReadToEnd();
+        }
+
         [Test]
         public void A_message_is_one_timestamped_line_with_its_level()
         {
@@ -45,7 +51,7 @@ namespace Edith.Tests
         {
             using (var first = new LogFile(path, 1000)) first.Write("one");
             using (var second = new LogFile(path, 1000)) second.Write("two");
-            Assert.AreEqual("one\ntwo\n", File.ReadAllText(path));
+            Assert.AreEqual("one\ntwo\n", ReadShared(path));
         }
 
         [Test]
@@ -57,20 +63,20 @@ namespace Edith.Tests
                 log.Write("bbbb");
                 log.Write("cccc");
                 log.Flush();
-                Assert.AreEqual("cccc\n", File.ReadAllText(path));
-                Assert.AreEqual("aaaa\nbbbb\n", File.ReadAllText(log.OldPath));
+                Assert.AreEqual("cccc\n", ReadShared(path));
+                Assert.AreEqual("aaaa\nbbbb\n", ReadShared(log.OldPath));
                 log.Write("dddd");
                 log.Write("eeee");
             }
-            Assert.AreEqual("eeee\n", File.ReadAllText(path));
-            Assert.AreEqual("cccc\ndddd\n", File.ReadAllText(path + ".old"));
+            Assert.AreEqual("eeee\n", ReadShared(path));
+            Assert.AreEqual("cccc\ndddd\n", ReadShared(path + ".old"));
         }
 
         [Test]
         public void A_line_longer_than_the_cap_is_still_written()
         {
             using (var log = new LogFile(path, 3)) log.Write("a long line");
-            Assert.AreEqual("a long line\n", File.ReadAllText(path));
+            Assert.AreEqual("a long line\n", ReadShared(path));
         }
 
         [Test]
