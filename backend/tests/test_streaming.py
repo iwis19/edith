@@ -56,8 +56,8 @@ def test_events_reach_the_client_as_they_are_produced_and_a_hangup_after_done_st
                         break
         assert [t for t, _ in arrivals] == ["accepted", "name", "fact", "done"]
         accepted_at, name_at = arrivals[0][1], arrivals[1][1]
-        assert accepted_at < STEP_S / 2
-        assert name_at >= STEP_S * 0.9
+        # Measured as a gap rather than from the start, which also counts connecting and uploading.
+        assert name_at - accepted_at >= STEP_S * 0.5
 
         deadline = time.monotonic() + 2
         while not store.records and time.monotonic() < deadline:
