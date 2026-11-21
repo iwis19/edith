@@ -56,6 +56,7 @@ namespace Edith.Ask
         readonly LiveOutbox outbox = new LiveOutbox(MaxQueuedAudio);
         readonly SemaphoreSlim waiting = new SemaphoreSlim(0);
         readonly ConcurrentBag<float[]> chunks = new ConcurrentBag<float[]>();
+        readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
         bool droppedAudio;
 
         LiveLink(PcmRing speech, int chunkSamples)
@@ -124,8 +125,8 @@ namespace Edith.Ask
             var ready = false;
             try
             {
-                var started = DateTime.UtcNow;
                 var grant = await Mint(backendUrl, deviceToken, profileId, token).ConfigureAwait(false);
+                Debug.Log($"[EDITH ask] backend minted a {grant.Model} session in {clock.ElapsedMilliseconds} ms");
                 try
                 {
                     await socket.ConnectAsync(new Uri(grant.Url), token).ConfigureAwait(false);
@@ -135,7 +136,7 @@ namespace Edith.Ask
                     throw new Failure(AskProblem.Unreachable, $"websocket: {e.GetBaseException().Message}");
                 }
                 await SendText(socket, grant.SetupFrame, token).ConfigureAwait(false);
-                Debug.Log($"[EDITH ask] {grant.Model} session open {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms after the tap");
+                Debug.Log($"[EDITH ask] websocket open {clock.ElapsedMilliseconds} ms after the tap");
                 await Receive(socket, token, () =>
                 {
                     ready = true;
@@ -201,6 +202,7 @@ namespace Edith.Ask
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     Debug.Log($"[EDITH ask] Gemini closed the session: {result.CloseStatus} {result.CloseStatusDescription}");
+                    speech.Finish();
                     Post(new LiveEvent(LiveEventKind.Closed));
                     return;
                 }
@@ -215,8 +217,11 @@ namespace Edith.Ask
 
         void Handle(LiveMessage message, Action onReady)
         {
+            // The next question's link shares `speech`.
+            if (cancel.IsCancellationRequested) return;
             if (message.SetupComplete)
             {
+                Debug.Log($"[EDITH ask] setupComplete {clock.ElapsedMilliseconds} ms after the tap");
                 onReady();
                 Post(new LiveEvent(LiveEventKind.Ready));
             }
@@ -233,7 +238,11 @@ namespace Edith.Ask
                 speech.Clear();
                 Post(new LiveEvent(LiveEventKind.Interrupted));
             }
-            if (message.TurnComplete) Post(new LiveEvent(LiveEventKind.TurnComplete));
+            if (message.TurnComplete)
+            {
+                speech.Finish();
+                Post(new LiveEvent(LiveEventKind.TurnComplete));
+            }
             if (message.GoAway) Debug.Log("[EDITH ask] Gemini will close the session soon");
         }
 
