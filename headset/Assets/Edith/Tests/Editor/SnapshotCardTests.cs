@@ -54,6 +54,21 @@ namespace Edith.Tests
             Assert.AreEqual(1, snapshot.GetComponentsInChildren<Text>().Length, "one line of text, no name above it");
         }
 
+        static float WorldWidth(Component part)
+        {
+            var rect = (RectTransform)part.transform;
+            return rect.rect.width * rect.lossyScale.x;
+        }
+
+        [Test]
+        public void The_fact_wraps_within_the_photo_width()
+        {
+            var snapshot = room.Place(Box(0f));
+            var photo = snapshot.GetComponentsInChildren<RawImage>().Single(image => image.name == "Photo");
+            var fact = snapshot.GetComponentsInChildren<Text>().Single(text => text.name == "Fact");
+            Assert.AreEqual(WorldWidth(photo), WorldWidth(fact), 1e-4f);
+        }
+
         [Test]
         public void A_look_without_a_fact_shows_its_name()
         {
