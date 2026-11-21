@@ -1,8 +1,6 @@
 using System;
 using Edith.Ask;
-using Edith.Grab;
 using Edith.Hands;
-using Edith.Pinch;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -10,8 +8,8 @@ using UnityEngine.SceneManagement;
 
 namespace Edith.Editor
 {
-    /// Ask in the scene: the right hand's microgestures, the voice and the controller, next to the pinch and grab it
-    /// shares the hand with. Every step converges, so running it again is safe.
+    /// Ask in the scene: the right hand's microgestures, the voice and the controller, next to the pinch it shares the
+    /// hand with. Every step converges, so running it again is safe.
     public static class AskSetup
     {
         const string PinchObjectName = "Pinch";
@@ -45,8 +43,6 @@ namespace Edith.Editor
 
             var pinch = Array.Find(scene.GetRootGameObjects(), go => go.name == PinchObjectName)
                 ?? throw new InvalidOperationException($"{scenePath} has no {PinchObjectName} object; run PinchSetup first");
-            var grab = pinch.GetComponent<GrabInput>();
-            if (grab == null) throw new InvalidOperationException($"{PinchObjectName} has no GrabInput; run GrabSetup first");
             var hand = new SerializedObject(pinch.GetComponent<RightHandSource>()).FindProperty("hand").objectReferenceValue as OVRHand
                 ?? throw new InvalidOperationException("RightHandSource has no hand");
             var rig = UnityEngine.Object.FindAnyObjectByType<OVRCameraRig>()
@@ -62,8 +58,6 @@ namespace Edith.Editor
             var controller = PinchSetup.Ensure<AskController>(ask);
             PinchSetup.SetObject(controller, "gestures", gestures);
             PinchSetup.SetObject(controller, "voice", voice);
-            PinchSetup.SetObject(controller, "grab", grab);
-            PinchSetup.SetObject(controller, "pinch", pinch.GetComponent<PinchInput>());
             PinchSetup.SetObject(controller, "eye", rig.centerEyeAnchor);
             PinchSetup.SetObject(controller, "font", Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
             PinchSetup.SetObject(controller, "material",

@@ -18,7 +18,10 @@ namespace Edith.Ask
         public const int ChunkSamples = MicRate / 25;
         const int MicClipSeconds = 2;
         const int SpeechSeconds = 90;
+        /// Speech waiting before the speaker starts, and again after it runs dry, so short network gaps do not stutter.
+        const int PrebufferMilliseconds = 120;
         const float ReopenDelaySeconds = 1f;
+        const float SpeakerCheckSeconds = 1f;
 
         AudioSource speaker;
         AudioSource cues;
@@ -26,10 +29,17 @@ namespace Edith.Ask
         int micRead;
         float reopenAt = -1f;
         bool focusLostWhileAsking;
+        bool speakerOpen;
+        float speakerCheckAt;
         volatile int access;
 
         /// Answer speech waiting to play.
-        public PcmRing Speech { get; } = new PcmRing(SpeakerRate * SpeechSeconds);
+        public PcmRing Speech { get; } = new PcmRing(SpeakerRate * SpeechSeconds, SpeakerRate * PrebufferMilliseconds / 1000);
+
+        /// The sound output and the answer speaker's state, for the log.
+        public string OutputState =>
+            $"output {AudioSettings.outputSampleRate} Hz, speaker volume {speaker.volume:F2} mute {speaker.mute} " +
+            $"playing {speaker.isPlaying}, listener pause {AudioListener.pause} volume {AudioListener.volume:F2}";
 
         public MicAccess Access => (MicAccess)access;
         public bool MicRunning => mic != null;
@@ -57,23 +67,31 @@ namespace Edith.Ask
         public void PlayChime() => cues.PlayOneShot(chime);
         public void PlayLowTone() => cues.PlayOneShot(lowTone);
 
-        /// Starts the answer stream from silence.
+        /// Starts the answer stream from silence. Until StopSpeaker, the speaker is restarted if it stops.
         public void StartSpeaker()
         {
             Speech.Clear();
+            PlayAnswerClip();
+            speakerOpen = true;
+            speakerCheckAt = Time.realtimeSinceStartup + SpeakerCheckSeconds;
+        }
+
+        public void StopSpeaker()
+        {
+            speakerOpen = false;
             speaker.Stop();
-            // A clip made in code plays nothing after AudioSettings.Reset, so each answer gets a new one.
+            Speech.Clear();
+        }
+
+        void PlayAnswerClip()
+        {
+            speaker.Stop();
+            // A clip made in code plays nothing after AudioSettings.Reset, so each start gets a new one.
             var old = answer;
             answer = AudioClip.Create("EDITH answer", SpeakerRate, 1, SpeakerRate, true, FillSpeaker);
             speaker.clip = answer;
             speaker.Play();
             if (old != null) Destroy(old);
-        }
-
-        public void StopSpeaker()
-        {
-            speaker.Stop();
-            Speech.Clear();
         }
 
         /// Asks for the microphone if it has not been granted, without waiting for the answer.
@@ -149,11 +167,24 @@ namespace Edith.Ask
 
         void Update()
         {
-            if (reopenAt < 0f || Time.realtimeSinceStartup < reopenAt) return;
+            var now = Time.realtimeSinceStartup;
+            if (reopenAt >= 0f && now >= reopenAt) Reopen();
+            else if (speakerOpen && now >= speakerCheckAt) CheckSpeaker(now);
+        }
+
+        void CheckSpeaker(float now)
+        {
+            speakerCheckAt = now + SpeakerCheckSeconds;
+            if (speaker.isPlaying) return;
+            PlayAnswerClip();
+            Debug.Log($"[EDITH ask] the answer speaker had stopped, restarted it with {Speech.Count} samples waiting");
+        }
+
+        void Reopen()
+        {
             reopenAt = -1f;
             StopMic();
-            speaker.Stop();
-            Speech.Clear();
+            StopSpeaker();
             AudioSettings.Reset(AudioSettings.GetConfiguration());
             BuildCues();
             Debug.Log($"[EDITH ask] sound reopened, output {AudioSettings.outputSampleRate} Hz");

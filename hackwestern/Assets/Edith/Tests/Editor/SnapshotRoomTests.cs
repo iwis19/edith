@@ -35,6 +35,21 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_snapshot_keeps_the_photo_it_shows()
+        {
+            var photo = new Texture2D(4, 4);
+            try
+            {
+                Assert.AreSame(photo, Snapshot.Create(Box(0f), parent.transform, photo).Photo);
+                Assert.IsNull(Snapshot.Create(Box(0f), parent.transform).Photo);
+            }
+            finally
+            {
+                Object.DestroyImmediate(photo);
+            }
+        }
+
+        [Test]
         public void Dragging_over_a_snapshot_fades_it_and_dragging_off_brings_it_back()
         {
             var old = room.Place(Box(0f));

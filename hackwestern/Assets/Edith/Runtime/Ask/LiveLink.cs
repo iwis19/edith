@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Net.WebSockets;
@@ -35,17 +36,11 @@ namespace Edith.Ask
     public sealed class LiveLink : IDisposable
     {
         public const int MicRate = 16000;
-        // About five seconds of microphone audio can wait for the session; later chunks are dropped.
-        const int MaxQueuedAudio = 125;
+        /// About five seconds of microphone audio can wait for the session.
+        public const int MaxQueuedAudio = 125;
         const int ReceiveBufferBytes = 64 * 1024;
 
         static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-
-        sealed class Outgoing
-        {
-            public float[] Audio;
-            public string Text;
-        }
 
         sealed class Failure : Exception
         {
@@ -54,18 +49,19 @@ namespace Edith.Ask
             public Failure(AskProblem problem, string detail) : base(detail) => Problem = problem;
         }
 
-        readonly PcmRing speech;
+        readonly PcmRing.Feed speech;
         readonly int chunkSamples;
         readonly CancellationTokenSource cancel = new CancellationTokenSource();
         readonly ConcurrentQueue<LiveEvent> events = new ConcurrentQueue<LiveEvent>();
-        readonly ConcurrentQueue<Outgoing> outbox = new ConcurrentQueue<Outgoing>();
+        readonly LiveOutbox outbox = new LiveOutbox(MaxQueuedAudio);
         readonly SemaphoreSlim waiting = new SemaphoreSlim(0);
         readonly ConcurrentBag<float[]> chunks = new ConcurrentBag<float[]>();
-        int queuedAudio;
+        readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+        bool droppedAudio;
 
         LiveLink(PcmRing speech, int chunkSamples)
         {
-            this.speech = speech;
+            this.speech = speech.OpenFeed();
             this.chunkSamples = chunkSamples;
         }
 
@@ -86,29 +82,35 @@ namespace Edith.Ask
         /// Hands back a rented array that was not sent.
         public void ReturnChunk(float[] chunk) => chunks.Add(chunk);
 
+        /// Past MaxQueuedAudio chunks waiting, the oldest is dropped.
         public void SendAudio(float[] chunk)
         {
-            if (Interlocked.Increment(ref queuedAudio) > MaxQueuedAudio)
+            if (cancel.IsCancellationRequested)
             {
-                Interlocked.Decrement(ref queuedAudio);
                 chunks.Add(chunk);
                 return;
             }
-            Enqueue(new Outgoing { Audio = chunk });
+            if (outbox.AddAudio(chunk) is { } dropped)
+            {
+                chunks.Add(dropped);
+                if (!droppedAudio) Debug.Log("[EDITH ask] the session is slow to open, dropping the oldest microphone audio");
+                droppedAudio = true;
+            }
+            waiting.Release();
         }
 
-        public void SendImage(byte[] jpeg) => Enqueue(new Outgoing { Text = LiveRequest.Image(jpeg) });
+        public void SendImage(byte[] jpeg) => EnqueueText(LiveRequest.Image(jpeg));
 
         /// Tells Gemini the microphone has stopped.
-        public void EndAudio() => Enqueue(new Outgoing { Text = LiveRequest.AudioStreamEnd });
+        public void EndAudio() => EnqueueText(LiveRequest.AudioStreamEnd);
 
         /// Closes the session. Events still queued are dropped.
         public void Dispose() => cancel.Cancel();
 
-        void Enqueue(Outgoing item)
+        void EnqueueText(string json)
         {
             if (cancel.IsCancellationRequested) return;
-            outbox.Enqueue(item);
+            outbox.AddText(json);
             waiting.Release();
         }
 
@@ -123,8 +125,8 @@ namespace Edith.Ask
             var ready = false;
             try
             {
-                var started = DateTime.UtcNow;
                 var grant = await Mint(backendUrl, deviceToken, profileId, token).ConfigureAwait(false);
+                Debug.Log($"[EDITH ask] backend minted a {grant.Model} session in {clock.ElapsedMilliseconds} ms");
                 try
                 {
                     await socket.ConnectAsync(new Uri(grant.Url), token).ConfigureAwait(false);
@@ -134,7 +136,7 @@ namespace Edith.Ask
                     throw new Failure(AskProblem.Unreachable, $"websocket: {e.GetBaseException().Message}");
                 }
                 await SendText(socket, grant.SetupFrame, token).ConfigureAwait(false);
-                Debug.Log($"[EDITH ask] {grant.Model} session open {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms after the tap");
+                Debug.Log($"[EDITH ask] websocket open {clock.ElapsedMilliseconds} ms after the tap");
                 await Receive(socket, token, () =>
                 {
                     ready = true;
@@ -200,6 +202,7 @@ namespace Edith.Ask
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     Debug.Log($"[EDITH ask] Gemini closed the session: {result.CloseStatus} {result.CloseStatusDescription}");
+                    speech.Finish();
                     Post(new LiveEvent(LiveEventKind.Closed));
                     return;
                 }
@@ -216,6 +219,7 @@ namespace Edith.Ask
         {
             if (message.SetupComplete)
             {
+                Debug.Log($"[EDITH ask] setupComplete {clock.ElapsedMilliseconds} ms after the tap");
                 onReady();
                 Post(new LiveEvent(LiveEventKind.Ready));
             }
@@ -229,10 +233,14 @@ namespace Edith.Ask
             if (message.OutputText.Length > 0) Post(new LiveEvent(LiveEventKind.OutputText, message.OutputText));
             if (message.Interrupted)
             {
-                speech.Clear();
+                speech.Drop();
                 Post(new LiveEvent(LiveEventKind.Interrupted));
             }
-            if (message.TurnComplete) Post(new LiveEvent(LiveEventKind.TurnComplete));
+            if (message.TurnComplete)
+            {
+                speech.Finish();
+                Post(new LiveEvent(LiveEventKind.TurnComplete));
+            }
             if (message.GoAway) Debug.Log("[EDITH ask] Gemini will close the session soon");
         }
 
@@ -244,13 +252,11 @@ namespace Edith.Ask
                 while (!token.IsCancellationRequested)
                 {
                     await waiting.WaitAsync(token).ConfigureAwait(false);
-                    if (!outbox.TryDequeue(out var item)) continue;
-                    var json = item.Text;
-                    if (item.Audio != null)
+                    if (!outbox.TryTake(out var audio, out var json)) continue;
+                    if (audio != null)
                     {
-                        var bytes = Pcm16.Write(item.Audio, item.Audio.Length, pcm);
-                        chunks.Add(item.Audio);
-                        Interlocked.Decrement(ref queuedAudio);
+                        var bytes = Pcm16.Write(audio, audio.Length, pcm);
+                        chunks.Add(audio);
                         json = LiveRequest.Audio(pcm, bytes, MicRate);
                     }
                     await SendText(socket, json, token).ConfigureAwait(false);
@@ -271,5 +277,47 @@ namespace Edith.Ask
             socket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(json)), WebSocketMessageType.Text, true, token);
 
         static string Clip(string text) => text.Length <= 200 ? text : text.Substring(0, 200);
+    }
+
+    /// Messages waiting to go out on a Live session, taken in the order they were added. At most `maxAudio`
+    /// microphone chunks wait: one more drops the oldest, so the latest words of a question outlast a slow connect.
+    public sealed class LiveOutbox
+    {
+        readonly int maxAudio;
+        readonly object gate = new object();
+        readonly Queue<(long order, float[] chunk)> audio = new Queue<(long order, float[] chunk)>();
+        readonly Queue<(long order, string json)> text = new Queue<(long order, string json)>();
+        long added;
+
+        public LiveOutbox(int maxAudio) => this.maxAudio = maxAudio;
+
+        /// Returns the chunk dropped to make room, or null.
+        public float[] AddAudio(float[] chunk)
+        {
+            lock (gate)
+            {
+                audio.Enqueue((added++, chunk));
+                return audio.Count > maxAudio ? audio.Dequeue().chunk : null;
+            }
+        }
+
+        public void AddText(string json)
+        {
+            lock (gate) text.Enqueue((added++, json));
+        }
+
+        /// The oldest message waiting: a microphone chunk in `chunk`, or a JSON message in `json`. False when none is.
+        public bool TryTake(out float[] chunk, out string json)
+        {
+            lock (gate)
+            {
+                chunk = null;
+                json = null;
+                if (audio.Count == 0 && text.Count == 0) return false;
+                if (text.Count == 0 || (audio.Count > 0 && audio.Peek().order < text.Peek().order)) chunk = audio.Dequeue().chunk;
+                else json = text.Dequeue().json;
+                return true;
+            }
+        }
     }
 }

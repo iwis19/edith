@@ -135,6 +135,24 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_failure_after_the_whole_answer_arrived_lets_it_play_out()
+        {
+            Answered(at: 3f);
+            session.Fail(AskProblem.Dropped, 3.5f);
+            Assert.AreEqual(AskPhase.Answering, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+            session.Tick(4f, speechLeft: 0);
+            Assert.AreEqual(AskPhase.Fading, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+
+            session.Tap(20f);
+            session.Ready(21f);
+            session.AnswerAudio(22f);
+            session.Fail(AskProblem.Dropped, 23f);
+            Assert.AreEqual(AskProblem.Dropped, session.Problem, "a failure before the turn ended still fails");
+        }
+
+        [Test]
         public void Dismiss_goes_straight_to_idle_from_anywhere()
         {
             session.Tap(0f);
@@ -184,6 +202,18 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_point_more_than_25_degrees_off_the_line_of_sight_is_not_looked_at()
+        {
+            var eye = new Vector3(0f, 1.6f, 0f);
+            Vector3 At(float degrees) => eye + Quaternion.Euler(0f, degrees, 0f) * Vector3.forward * 2f;
+            Assert.AreEqual(0, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(24f) }));
+            Assert.AreEqual(-1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(26f) }));
+            Assert.AreEqual(-1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(90f), At(180f) }),
+                "beside and behind");
+            Assert.AreEqual(1, AskGeometry.NearestToGaze(eye, Vector3.forward, new List<Vector3> { At(-60f), At(20f) }));
+        }
+
+        [Test]
         public void A_tap_in_line_with_a_card_hits_it_from_any_distance()
         {
             var box = new SightBox(new Pose(Vector3.zero, Quaternion.identity), Rect.MinMaxRect(-0.2f, -0.1f, 0.2f, 0.1f), 2f);
@@ -192,16 +222,6 @@ namespace Edith.Tests
             Assert.IsTrue(box.InLine(eye, eye + new Vector3(0f, 0f, 0.05f), 0.02f));
             Assert.IsFalse(box.InLine(eye, eye + new Vector3(0.3f, 0f, 0.4f), 0.02f), "off to the side");
             Assert.IsFalse(box.InLine(eye, eye + new Vector3(0f, 0f, -0.4f), 0.02f), "behind the eye");
-        }
-
-        [TestCase(1280, 960, 512, 512, 384)]
-        [TestCase(960, 1280, 512, 384, 512)]
-        [TestCase(1000, 1000, 512, 512, 512)]
-        [TestCase(300, 200, 512, 300, 200)]
-        [TestCase(4000, 10, 512, 512, 1)]
-        public void Photos_shrink_to_the_long_side_limit_and_never_grow(int w, int h, int max, int ew, int eh)
-        {
-            Assert.AreEqual(new Vector2Int(ew, eh), AskGeometry.FitLongSide(w, h, max));
         }
     }
 }

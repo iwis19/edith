@@ -19,11 +19,14 @@ namespace Edith.Capture
     {
         public readonly byte[] Jpeg;
         public readonly Vector2Int Size;
+        /// When the camera took the image, in UTC.
+        public readonly DateTime CapturedAt;
 
-        public CameraFrame(byte[] jpeg, Vector2Int size)
+        public CameraFrame(byte[] jpeg, Vector2Int size, DateTime capturedAt)
         {
             Jpeg = jpeg;
             Size = size;
+            CapturedAt = capturedAt;
         }
     }
 
@@ -41,7 +44,8 @@ namespace Edith.Capture
         }
     }
 
-    /// Streams the headset's left passthrough camera once the user allows it, and hands out JPEG crops of it.
+    /// Streams the headset's left passthrough camera once the user allows it, and hands out JPEG crops of it, scaled
+    /// to at most CropSize.MaxSide on the longer side.
     public sealed class HeadsetCamera : MonoBehaviour
     {
         public const string HeadsetCameraPermission = "horizonos.permission.HEADSET_CAMERA";
@@ -105,7 +109,7 @@ namespace Edith.Capture
             var pose = cameraAccess.GetCameraPose();
             var texture = cameraAccess.GetTexture();
             var pixels = RegionPixels(region, pose, new Vector2Int(texture.width, texture.height));
-            return Readback(texture, pixels);
+            return Readback(texture, pixels, cameraAccess.Timestamp);
         }
 
         RectInt RegionPixels(WorldQuad quad, Pose pose, Vector2Int image)
@@ -123,11 +127,19 @@ namespace Edith.Capture
                    ?? throw new InvalidOperationException("Crop frame is mostly or wholly outside the camera image.");
         }
 
-        Task<CameraFrame> Readback(Texture texture, RectInt pixels)
+        /// The GPU scales the region down while it copies it out, so only the fitted size crosses to the CPU.
+        Task<CameraFrame> Readback(Texture texture, RectInt pixels, DateTime capturedAt)
         {
+            var size = CropSize.FitLongSide(pixels.width, pixels.height, CropSize.MaxSide);
+            var scaled = RenderTexture.GetTemporary(size.x, size.y, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            Graphics.Blit(texture, scaled,
+                new Vector2(pixels.width / (float)texture.width, pixels.height / (float)texture.height),
+                new Vector2(pixels.x / (float)texture.width, pixels.y / (float)texture.height));
+
             var completion = new TaskCompletionSource<CameraFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
-            AsyncGPUReadback.Request(texture, 0, pixels.x, pixels.width, pixels.y, pixels.height, 0, 1, TextureFormat.RGBA32, request =>
+            AsyncGPUReadback.Request(scaled, 0, TextureFormat.RGBA32, request =>
             {
+                RenderTexture.ReleaseTemporary(scaled);
                 if (request.hasError)
                 {
                     completion.SetException(new InvalidOperationException("GPU readback of the camera texture failed."));
@@ -140,7 +152,7 @@ namespace Edith.Capture
                         request.GetData<byte>(), GraphicsFormat.R8G8B8A8_UNorm, (uint)request.width, (uint)request.height, 0, jpegQuality);
                     var jpeg = encoded.ToArray();
                     encoded.Dispose();
-                    completion.SetResult(new CameraFrame(jpeg, new Vector2Int(request.width, request.height)));
+                    completion.SetResult(new CameraFrame(jpeg, new Vector2Int(request.width, request.height), capturedAt));
                 }
                 catch (Exception e)
                 {

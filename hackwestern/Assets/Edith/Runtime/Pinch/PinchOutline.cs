@@ -3,7 +3,8 @@ using UnityEngine;
 
 namespace Edith.Pinch
 {
-    /// Draws the box while it is dragged, freezes it on release, and keeps the confirmed box until the next pinch.
+    /// Draws the box while it is dragged and freezes it on release. Once the release is confirmed the snapshot's photo
+    /// takes its place.
     [RequireComponent(typeof(LineRenderer))]
     public sealed class PinchOutline : MonoBehaviour
     {
@@ -30,10 +31,10 @@ namespace Edith.Pinch
             {
                 case PinchEvent.Tap:
                 case PinchEvent.Cancelled:
+                case PinchEvent.Confirmed:
                     line.enabled = false;
                     return;
                 case PinchEvent.Completed:
-                case PinchEvent.Confirmed:
                     Show(reading.Box, LockedWidth);
                     return;
             }

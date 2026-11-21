@@ -641,8 +641,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Edith::Edith.Ask.AskController
   gestures: {fileID: 1083127877}
   voice: {fileID: 1083127876}
-  grab: {fileID: 1145216128}
-  pinch: {fileID: 1145216124}
   eye: {fileID: 578435152}
   font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   material: {fileID: 2100000, guid: 536874e4d0911184dbf48aecb14b21f0, type: 2}
@@ -1041,6 +1039,8 @@ MonoBehaviour:
   ask: {fileID: 1083127875}
   eye: {fileID: 578435152}
   environmentRaycast: {fileID: 1803563344}
+  occludedMaterial: {fileID: 2100000, guid: 536874e4d0911184dbf48aecb14b21f0, type: 2}
+  font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!4 &1308650307
 Transform:
   m_ObjectHideFlags: 0
