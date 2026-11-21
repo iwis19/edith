@@ -61,6 +61,9 @@ class Sight(BaseModel):
 class Whereabouts(BaseModel):
     place: str | None
     sights: list[Sight]
+    # The phone's position the place was resolved for, rounded to about 10 m.
+    lat: float | None = None
+    lon: float | None = None
 
 
 class LocationSummary(BaseModel):
@@ -199,6 +202,8 @@ def describe_place(found: Whereabouts | None, max_sights: int) -> str | None:
     if found is None or not found.place and not found.sights:
         return None
     head = f"This person is at {found.place}." if found.place else "This person's place name is not known."
+    if found.lat is not None and found.lon is not None:
+        head += f" Their phone puts them at latitude {found.lat:.4f}, longitude {found.lon:.4f}."
     if not found.sights:
         return f"{head} No named sights are known nearby."
     # The sights with a fact are listed first, so a far landmark's fact is not cut off by a nearer plain building.

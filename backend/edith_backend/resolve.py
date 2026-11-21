@@ -226,7 +226,7 @@ class HttpResolver:
         campus = normalise(osm.campus) if osm.campus else None
         near = [s for s in osm.sights if s.distance_m <= MAX_SIGHT_M and (normalise(s.name) != campus or s.wikipedia)]
         sights = await self._with_facts(merge_sights(near))
-        resolution = Resolution(whereabouts=Whereabouts(place=place, sights=sights), complete=not failed)
+        resolution = Resolution(whereabouts=Whereabouts(place=place, sights=sights, lat=lat, lon=lon), complete=not failed)
         if resolution.complete:
             self._remember(lat, lon, resolution)
         return resolution
