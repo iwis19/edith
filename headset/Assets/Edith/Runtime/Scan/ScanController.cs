@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Threading;
 using Edith.Backend;
 using Edith.Capture;
+using Edith.Grab;
 using Edith.Hands;
 using Edith.Snapshots;
 using Meta.XR;
@@ -50,6 +51,8 @@ namespace Edith.Scan
         // The backend gives up at 7 s and says why; past this the person is told EDITH could not be reached.
         const float ReplySeconds = 8f;
         const float NearLogSeconds = 1f;
+        // About half the bytes of the full 1280x960 frame, so the upload stays short on slow Wi-Fi.
+        const int FrameLongSide = 960;
         // The depth remembered for a scan: cells about 4 degrees across, a few sight lines measured each frame so
         // the whole frame is covered several times a second.
         const int DepthColumns = 16, DepthRows = 12, DepthRaysPerFrame = 24;
@@ -66,6 +69,8 @@ namespace Edith.Scan
         readonly List<Placed> placed = new List<Placed>();
         readonly List<Vector3> points = new List<Vector3>();
         ScanPoseTracker tracker;
+        // On the right hand's object when Grab is set up.
+        GrabInput grab;
         ScanMarks marks;
         ScanClient client;
         AudioSource sound;
@@ -91,6 +96,7 @@ namespace Edith.Scan
         void Awake()
         {
             tracker = new ScanPoseTracker(tuning);
+            grab = rightHand.GetComponent<GrabInput>();
             marks = new ScanMarks(font, material);
             sound = gameObject.AddComponent<AudioSource>();
             sound.spatialBlend = 0f;
@@ -135,7 +141,12 @@ namespace Edith.Scan
         // After hand tracking has updated, like the pinch and the grab.
         void LateUpdate()
         {
-            var pose = tracker.Step(leftHand.Read(), rightHand.Read());
+            var left = leftHand.Read();
+            var right = rightHand.Read();
+            // A hand closing on, holding or letting go of a card is busy, so its open hand cannot pose.
+            if (grab != null && grab.Claimed(HandSide.Left)) left.Tracked = false;
+            if (grab != null && grab.Claimed(HandSide.Right)) right.Tracked = false;
+            var pose = tracker.Step(left, right);
             holdProgress = pose.Progress;
             if (pose.Progress > 0f) ringAt = pose.Between;
             if (pose.Fired)
@@ -178,7 +189,7 @@ namespace Edith.Scan
             try
             {
                 var capturedAt = DateTime.UtcNow;
-                var frame = await headsetCamera.CaptureFullAsync();
+                var frame = await headsetCamera.CaptureFullAsync(FrameLongSide);
                 if (this == null) return;
                 Debug.Log($"[EDITH scan] {id} captured {frame.Size.x}x{frame.Size.y}, {frame.Jpeg.Length / 1024} KB, {Ms()} ms in");
                 if (environmentRaycast != null)
@@ -208,7 +219,7 @@ namespace Edith.Scan
             {
                 if (this == null) return;
                 var why = e is OperationCanceledException ? "timeout" : e.GetBaseException().Message;
-                Debug.Log($"[EDITH scan] {id} failed {Ms()} ms in: {why}");
+                Debug.Log($"[EDITH scan] {id} failed {Ms()} ms in: {why}\n{e}");
                 // No answer at all is nearly always the headset's Wi-Fi, such as a network waiting on a sign-in page.
                 var unreachable = e is OperationCanceledException || e is HttpRequestException;
                 Fail(unreachable ? "Couldn't reach EDITH. Check the Wi-Fi." : "Couldn't look around.");

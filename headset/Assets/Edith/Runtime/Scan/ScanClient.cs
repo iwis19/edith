@@ -33,7 +33,8 @@ namespace Edith.Scan
 
         async Task<List<ScanPick>> Post(byte[] jpeg, DateTime capturedAt, CancellationToken token)
         {
-            using var form = new MultipartFormDataContent();
+            // The request owns the form and disposes it; disposing the form as well throws in MultipartContent.Dispose.
+            var form = new MultipartFormDataContent();
             var image = new ByteArrayContent(jpeg);
             image.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
             form.Add(image, "image", "frame.jpg");
