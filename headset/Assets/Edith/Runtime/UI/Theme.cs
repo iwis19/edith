@@ -19,7 +19,6 @@ namespace Edith.UI
         public static readonly Color InnerFill = Tint(0.25f);
         public static readonly Color DiscFill = new Color32(8, 10, 24, 235);
         public static readonly Color TextShadow = new Color(0f, 0.02f, 0.06f, 0.8f);
-        public static readonly Color TextGlow = new Color(0.75f, 0.91f, 1f, 0.2f);
         /// Ink, from EDITH's pixel outline: text on an accent fill.
         public static readonly Color OnAccent = new Color32(13, 10, 79, 255);
 
@@ -180,7 +179,7 @@ namespace Edith.UI
             scaler.dynamicPixelsPerUnit = TextSharpness;
         }
 
-        /// A text label with a soft shadow and a faint ice-blue glow so it stays readable over any room.
+        /// A text label with a soft shadow so it stays readable over any room.
         public static Text Label(Transform parent, string name, Font font, int size, Color color, TextAnchor anchor,
             Material material, bool shadow = true)
         {
@@ -198,13 +197,10 @@ namespace Edith.UI
             return text;
         }
 
-        /// The glow first and the dark drop shadow over it.
+        /// A soft dark drop shadow. No glow: a halo around every glyph blurs its edges in the headset.
         public static void AddShadows(Text text, int size)
         {
             var spread = Mathf.Max(1f, size * 0.035f);
-            var halo = text.gameObject.AddComponent<UnityEngine.UI.Outline>();
-            halo.effectColor = TextGlow;
-            halo.effectDistance = new Vector2(spread * 1.8f, spread * 1.8f);
             var drop = text.gameObject.AddComponent<UnityEngine.UI.Shadow>();
             drop.effectColor = TextShadow;
             drop.effectDistance = new Vector2(spread, -spread);
