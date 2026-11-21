@@ -124,7 +124,9 @@ namespace Edith.Editor
         static GameObject FindRoot(Scene scene, string name) =>
             Array.Find(scene.GetRootGameObjects(), go => go.name == name);
 
-        static Material MaterialAsset(string path, string shaderName)
+        /// The material asset at `path`, made with the shader named `shaderName` when it does not exist yet. A shader
+        /// a material asset in the scene uses is kept in the player build.
+        public static Material MaterialAsset(string path, string shaderName)
         {
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (material != null) return material;
