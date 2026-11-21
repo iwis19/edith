@@ -73,14 +73,14 @@ namespace Edith.Editor
             return material;
         }
 
-        static T Ensure<T>(GameObject go) where T : Component
+        internal static T Ensure<T>(GameObject go) where T : Component
         {
             // A missing component is Unity's fake null, which ?? does not see.
             var component = go.GetComponent<T>();
             return component != null ? component : go.AddComponent<T>();
         }
 
-        static void SetObject(UnityEngine.Object target, string field, UnityEngine.Object value)
+        internal static void SetObject(UnityEngine.Object target, string field, UnityEngine.Object value)
         {
             var so = new SerializedObject(target);
             (so.FindProperty(field) ?? throw new InvalidOperationException($"{target.GetType().Name} has no {field}")).objectReferenceValue = value;
