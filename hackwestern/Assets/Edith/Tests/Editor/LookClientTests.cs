@@ -5,9 +5,12 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Edith.Look;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Edith.Tests
 {
@@ -20,10 +23,10 @@ namespace Edith.Tests
 
         sealed class Received
         {
-            public string Token, Profile, Body;
+            public string Path, Token, Profile, Body;
         }
 
-        /// Answers each POST /look with `respond`, which gets the 1-based number of the request.
+        /// Answers each POST with `respond`, which gets the 1-based number of the request.
         sealed class FakeBackend : IDisposable
         {
             readonly HttpListener listener = new HttpListener();
@@ -58,6 +61,7 @@ namespace Edith.Tests
                         using var reader = new StreamReader(context.Request.InputStream, Encoding.GetEncoding("iso-8859-1"));
                         Requests.Enqueue(new Received
                         {
+                            Path = context.Request.Url.AbsolutePath,
                             Token = context.Request.Headers["X-Edith-Token"],
                             Profile = context.Request.Headers["X-Edith-Profile"],
                             Body = reader.ReadToEnd(),
@@ -299,6 +303,47 @@ namespace Edith.Tests
             gate.Set();
             Thread.Sleep(300);
             Assert.IsFalse(client.TryNext(out _));
+        }
+
+        [Test]
+        public void A_collect_carries_the_headers_the_photo_and_the_look_ref()
+        {
+            using var backend = new FakeBackend((response, _) => Line(response, "{\"memory_id\":7}"));
+            LogAssert.Expect(LogType.Log, new Regex(@"\[EDITH collect\] look abc123 saved: .*memory_id"));
+            CollectClient.Send(backend.Url, "secret", "11111111-2222-3333-4444-555555555555", "abc123", Jpeg).Wait(10000);
+            Assert.IsTrue(backend.Requests.TryPeek(out var request));
+            Assert.AreEqual("/collect", request.Path);
+            Assert.AreEqual("secret", request.Token);
+            Assert.AreEqual("11111111-2222-3333-4444-555555555555", request.Profile);
+            StringAssert.Contains("name=image", request.Body.Replace("\"", ""));
+            StringAssert.Contains("image/jpeg", request.Body);
+            StringAssert.Contains("name=meta", request.Body.Replace("\"", ""));
+            StringAssert.Contains("{\"look_ref\":\"abc123\"}", request.Body);
+        }
+
+        [Test]
+        public void An_unknown_look_is_logged_and_not_retried()
+        {
+            using var backend = new FakeBackend((response, _) => response.StatusCode = 404);
+            LogAssert.Expect(LogType.Log, new Regex(@"\[EDITH collect\] look abc123 failed with http_404"));
+            CollectClient.Send(backend.Url, "", "p", "abc123", Jpeg).Wait(10000);
+            Thread.Sleep(200);
+            Assert.AreEqual(1, backend.Requests.Count);
+        }
+
+        [Test]
+        public void A_look_is_collected_only_once_the_backend_accepted_it_and_it_did_not_fail()
+        {
+            var card = new LookCard();
+            StringAssert.Contains("never accepted", CollectClient.SkipReason(card));
+            card.Apply(LookEvent.Accepted("r"));
+            Assert.IsNull(CollectClient.SkipReason(card));
+            card.Apply(LookEvent.Done());
+            Assert.IsNull(CollectClient.SkipReason(card));
+            var failed = new LookCard();
+            failed.Apply(LookEvent.Accepted("r"));
+            failed.Apply(LookEvent.Failure("model_failed", "x"));
+            StringAssert.Contains("failed", CollectClient.SkipReason(failed));
         }
     }
 }

@@ -21,7 +21,7 @@ namespace Edith.Look
 
         // HttpClient, not UnityWebRequest: on a Quest 3S UnityWebRequest handed over a streamed response only once it
         // had all arrived. One client keeps the connection open between Looks, which skips a handshake each time.
-        static readonly HttpClient Http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        internal static readonly HttpClient Http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
 
         readonly ConcurrentQueue<LookEvent> events = new ConcurrentQueue<LookEvent>();
         readonly CancellationTokenSource cancel = new CancellationTokenSource();
@@ -102,7 +102,7 @@ namespace Edith.Look
             phase.CancelAfter(Seconds(timeouts.Upload));
             try
             {
-                using var request = Build(url, token, profile, jpeg, meta);
+                using var request = Build(url + "/look", token, profile, jpeg, meta);
                 using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, phase.Token).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode) return ($"http_{(int)response.StatusCode}", false);
                 phase.CancelAfter(Seconds(timeouts.FirstEvent));
@@ -136,14 +136,14 @@ namespace Edith.Look
             }
         }
 
-        static HttpRequestMessage Build(string url, string token, string profile, byte[] jpeg, string meta)
+        internal static HttpRequestMessage Build(string endpoint, string token, string profile, byte[] jpeg, string meta)
         {
             var form = new MultipartFormDataContent();
             var image = new ByteArrayContent(jpeg);
             image.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
             form.Add(image, "image", "look.jpg");
             form.Add(new StringContent(meta), "meta");
-            var request = new HttpRequestMessage(HttpMethod.Post, url + "/look") { Content = form };
+            var request = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = form };
             if (!string.IsNullOrEmpty(token)) request.Headers.Add("X-Edith-Token", token);
             request.Headers.Add("X-Edith-Profile", profile);
             return request;
