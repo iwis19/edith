@@ -110,3 +110,20 @@ async def test_an_agent_failure_ends_the_stream_with_an_error_and_is_recorded(se
     await asyncio.sleep(0)
     [record] = store.records
     assert (record.status, record.name, record.fact) == ("error", "a mug", None)
+
+
+class StreamingNameAgent:
+    async def run(self, image, meta, profile_id):
+        for text in ("a", "a red", "a red mug"):
+            yield Name(name=text, confidence=0.0, pending=True)
+        yield Name(name="a red mug", confidence=0.8)
+
+
+async def test_pending_names_reach_the_client_and_only_the_final_name_is_recorded(settings, store):
+    async with client_for(create_app(settings, agent=StreamingNameAgent(), store=store)) as c:
+        events = ndjson(await c.post("/look", files=look_files(), headers=HEADERS))
+    names = [(e["name"], e["pending"]) for e in events if e["type"] == "name"]
+    assert names == [("a", True), ("a red", True), ("a red mug", True), ("a red mug", False)]
+    await asyncio.sleep(0)
+    [record] = store.records
+    assert (record.name, record.confidence) == ("a red mug", 0.8)
