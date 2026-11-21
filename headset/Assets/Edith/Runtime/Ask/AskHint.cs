@@ -19,10 +19,17 @@ namespace Edith.Ask
         [Serializable] sealed class Wire { public string name, hook; }
 
         /// The POST /ask/session body: `{}` without a hint, and `{"navigate":true}` for a session the directions
-        /// gesture opened, which never carries a hint.
-        public static string RequestBody(AskHint? hint, bool navigate = false) => navigate ? "{\"navigate\":true}"
-            : hint is { } h
-                ? JsonUtility.ToJson(new Body { hint = new Wire { name = h.Name, hook = h.Hook ?? "" } })
-                : "{}";
+        /// gesture opened, which never carries a hint. A `voice` the person picked in the welcome is added to either.
+        public static string RequestBody(AskHint? hint, bool navigate = false, string voice = null)
+        {
+            var body = navigate ? "{\"navigate\":true}"
+                : hint is { } h
+                    ? JsonUtility.ToJson(new Body { hint = new Wire { name = h.Name, hook = h.Hook ?? "" } })
+                    : "{}";
+            if (string.IsNullOrEmpty(voice)) return body;
+            // The voice is one of Gemini's plain voice names, so it needs no escaping.
+            var field = "\"voice\":\"" + voice + "\"";
+            return body == "{}" ? "{" + field + "}" : body.Substring(0, body.Length - 1) + "," + field + "}";
+        }
     }
 }
