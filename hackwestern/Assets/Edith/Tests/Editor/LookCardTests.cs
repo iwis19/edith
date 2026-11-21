@@ -11,6 +11,14 @@ namespace Edith.Tests
         public void SetUp() => card = new LookCard();
 
         [Test]
+        public void The_look_ref_is_empty_until_the_look_is_accepted()
+        {
+            Assert.AreEqual("", card.LookRef);
+            card.Apply(LookEvent.Accepted("abc123"));
+            Assert.AreEqual("abc123", card.LookRef);
+        }
+
+        [Test]
         public void A_new_card_is_looking()
         {
             Assert.AreEqual(LookPhase.Looking, card.Phase);

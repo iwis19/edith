@@ -11,6 +11,8 @@ namespace Edith.Look
         const float CharsPerSecond = 150f;
 
         public LookPhase Phase { get; private set; }
+        /// The backend's id for this Look, empty until it accepts the photo.
+        public string LookRef { get; private set; } = "";
         public string Name { get; private set; } = "";
         /// Null until the backend rates the Look.
         public Rarity? Tier { get; private set; }
@@ -26,6 +28,9 @@ namespace Edith.Look
             if (Finished) return;
             switch (e.Kind)
             {
+                case LookEventKind.Accepted:
+                    LookRef = e.LookRef ?? "";
+                    break;
                 case LookEventKind.Name:
                     if (Phase == LookPhase.Named && e.Pending) return;
                     Name = e.Name;
