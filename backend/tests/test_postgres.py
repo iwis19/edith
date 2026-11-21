@@ -5,13 +5,14 @@ import os
 import uuid
 from array import array
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
 
 from edith_backend.config import Settings
-from edith_backend.db import TOLD_FACTS_KEPT, LookRecord, PostgresStore, ToldFact
+from edith_backend.db import TOLD_FACTS_KEPT, LookRecord, PostgresStore, StoreUnavailable, ToldFact
+from edith_backend.hunts import Hunt, Hunts, Target
 from edith_backend.migrate import migrate
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -31,14 +32,14 @@ def schema_url():
 
 
 def test_migrate_applies_each_file_once(schema_url):
-    assert migrate(schema_url) == ["001_init", "002_collect", "003_told_facts", "004_photo_place"]
+    assert migrate(schema_url) == ["001_init", "002_collect", "003_told_facts", "004_photo_place", "005_hunts"]
     assert migrate(schema_url) == []
 
 
 def test_concurrent_migrations_take_turns(schema_url):
     with ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _: migrate(schema_url), range(4)))
-    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_told_facts", "004_photo_place"]]
+    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_told_facts", "004_photo_place", "005_hunts"]]
 
 
 async def test_health_checks_share_one_query_while_cached(schema_url):
@@ -191,3 +192,115 @@ async def test_recent_places_load_only_photo_places_within_the_window_oldest_fir
     finally:
         await store.close()
     assert [(p, place) for p, place, _ in places] == [(profile, "Porto, Portugal"), (other, "Paris, France")]
+
+
+async def a_hunt(store: PostgresStore, profile: uuid.UUID, started: datetime, **overrides) -> Hunt:
+    hunt = Hunt(
+        hunt_ref=uuid.uuid4(), profile_id=profile, started_at=started, ends_at=started + timedelta(seconds=300),
+        place="Waterloo, Ontario, Canada",
+        targets=tuple([Target(0, "something red"), Target(1, "something round"), Target(2, "something wooden"),
+                       Target(3, "something Uncommon or better", "uncommon"),
+                       Target(4, "something Rare or better", "rare")]),
+    )
+    hunt = Hunt(**{**hunt.__dict__, **overrides})
+    await store.save_hunt(hunt)
+    return hunt
+
+
+async def test_a_hunt_round_trips_with_its_ticks_its_end_and_the_collected_memory(schema_url):
+    migrate(schema_url)
+    store = PostgresStore(schema_url, max_size=2)
+    await store.open()
+    try:
+        profile, other = uuid.uuid4(), uuid.uuid4()
+        now = datetime.now(UTC)
+        older = await a_hunt(store, profile, now - timedelta(hours=1))
+        hunt = await a_hunt(store, profile, now)
+        await a_hunt(store, other, now)
+        found_look, uncollected_look = a_look(profile), a_look(profile)
+        await store.record_look(found_look)
+        await store.save_tick(hunt.hunt_ref, Target(0, "something red", None, now, found_look.look_ref))
+        await store.save_tick(hunt.hunt_ref, Target(3, "something Uncommon or better", "uncommon", now,
+                                                    uncollected_look.look_ref))
+        memory_id = await store.collect(profile, found_look.look_ref, b"crop")
+        await store.end_hunt(hunt.hunt_ref, now + timedelta(seconds=90), "stopped")
+        await store.end_hunt(hunt.hunt_ref, now + timedelta(seconds=99), "found_all")
+        await store.save_hunt(hunt)
+
+        listed = await store.list_hunts(profile, 10)
+        assert [s.hunt.hunt_ref for s in listed] == [hunt.hunt_ref, older.hunt_ref]
+        newest = listed[0]
+        assert (newest.hunt.end_reason, newest.hunt.ended_at, newest.hunt.place) == (
+            "stopped", now + timedelta(seconds=90), "Waterloo, Ontario, Canada")
+        assert [(t.index, t.text, t.tier) for t in newest.hunt.targets][3] == (3, "something Uncommon or better", "uncommon")
+        assert [t.look_ref for t in newest.hunt.targets] == [found_look.look_ref, None, None,
+                                                            uncollected_look.look_ref, None]
+        assert [t.found_at is not None for t in newest.hunt.targets] == [True, False, False, True, False]
+        assert newest.memory_ids == (memory_id, None, None, None, None)
+        assert len(await store.list_hunts(profile, 1)) == 1
+        assert [s.hunt.profile_id for s in await store.list_hunts(other, 10)] == [other]
+    finally:
+        await store.close()
+
+
+async def test_only_hunts_that_have_neither_ended_nor_timed_out_are_loaded_as_active(schema_url):
+    migrate(schema_url)
+    store = PostgresStore(schema_url, max_size=2)
+    await store.open()
+    try:
+        profile = uuid.uuid4()
+        now = datetime.now(UTC)
+        running = await a_hunt(store, profile, now - timedelta(seconds=60))
+        stopped = await a_hunt(store, profile, now - timedelta(seconds=30))
+        await a_hunt(store, profile, now - timedelta(seconds=900))
+        await store.end_hunt(stopped.hunt_ref, now, "stopped")
+        [loaded] = await store.load_active_hunts()
+        assert loaded.hunt_ref == running.hunt_ref
+        assert (loaded.targets, loaded.ends_at) == (running.targets, running.ends_at)
+    finally:
+        await store.close()
+
+
+async def test_hunts_go_through_the_service_to_postgres_and_back_after_a_restart(schema_url):
+    migrate(schema_url)
+    store = PostgresStore(schema_url, max_size=2)
+    await store.open()
+    try:
+        profile = uuid.uuid4()
+
+        async def draft(place, interests):
+            return [Target(0, "something red"), Target(1, "something round"), Target(2, "something wooden"),
+                    Target(3, "something Uncommon or better", "uncommon"), Target(4, "something Rare or better", "rare")]
+
+        hunts = Hunts(store, draft)
+        started = await hunts.start(profile)
+        look_ref = uuid.uuid4()
+        assert hunts.tick(profile, look_ref, 1, None) is not None
+        await hunts.settle()
+        reborn = Hunts(store, draft)
+        await reborn.restore()
+        [stored] = await reborn.history(profile, 10)
+        assert stored.hunt.hunt_ref == started.hunt_ref
+        assert (reborn.current(profile).found, reborn.current(profile).targets[1].look_ref) == (1, look_ref)
+        reborn.stop(profile)
+        await reborn.settle()
+        assert (await store.list_hunts(profile, 1))[0].hunt.end_reason == "stopped"
+    finally:
+        await store.close()
+
+
+async def test_a_database_that_fails_loses_no_hunt_and_the_list_reports_it(schema_url):
+    store = PostgresStore(schema_url, max_size=1)
+    await store.open()
+    try:
+        profile = uuid.uuid4()
+        hunt = Hunt(hunt_ref=uuid.uuid4(), profile_id=profile, started_at=datetime.now(UTC),
+                    ends_at=datetime.now(UTC), targets=())
+        await store.save_hunt(hunt)
+        await store.save_tick(hunt.hunt_ref, Target(0, "x"))
+        await store.end_hunt(hunt.hunt_ref, datetime.now(UTC), "stopped")
+        assert await store.load_active_hunts() == []
+        with pytest.raises(StoreUnavailable):
+            await store.list_hunts(profile, 5)
+    finally:
+        await store.close()

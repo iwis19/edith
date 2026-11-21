@@ -12,6 +12,8 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
+from .hunts import EndReason, Hunt, StoredHunt, Target
+
 log = logging.getLogger("edith.db")
 
 _STATUS_TTL_S = 5.0
@@ -94,6 +96,22 @@ class Store(Protocol):
         """(profile_id, place, epoch seconds) for each Look whose photo showed a place within the place window, oldest
         first. Empty when there are none or the query failed."""
         ...
+    async def save_hunt(self, hunt: Hunt) -> None:
+        """Keeps a new hunt with its targets. Never raises."""
+        ...
+    async def save_tick(self, hunt_ref: UUID, target: Target) -> None:
+        """Keeps a found target. Never raises."""
+        ...
+    async def end_hunt(self, hunt_ref: UUID, ended_at: datetime, reason: EndReason) -> None:
+        """Marks a hunt as ended, once. Never raises."""
+        ...
+    async def load_active_hunts(self) -> list[Hunt]:
+        """The hunts that have neither ended nor timed out. Empty when there are none or the query failed."""
+        ...
+    async def list_hunts(self, profile_id: UUID, limit: int) -> list[StoredHunt]:
+        """The profile's hunts, newest first, with the memory collected for each found target. Raises
+        StoreUnavailable."""
+        ...
 
 
 class DisabledStore:
@@ -128,6 +146,21 @@ class DisabledStore:
 
     async def save_told_fact(self, profile_id: UUID, told: ToldFact) -> None:
         pass
+
+    async def save_hunt(self, hunt: Hunt) -> None:
+        pass
+
+    async def save_tick(self, hunt_ref: UUID, target: Target) -> None:
+        pass
+
+    async def end_hunt(self, hunt_ref: UUID, ended_at: datetime, reason: EndReason) -> None:
+        pass
+
+    async def load_active_hunts(self) -> list[Hunt]:
+        return []
+
+    async def list_hunts(self, profile_id: UUID, limit: int) -> list[StoredHunt]:
+        raise StoreUnavailable("There is no database.")
 
 
 class PostgresStore:
@@ -291,6 +324,93 @@ class PostgresStore:
                 )
         except Exception:
             log.exception("failed to save a told fact")
+
+
+    async def save_hunt(self, hunt: Hunt) -> None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                async with conn.transaction():
+                    await conn.execute(
+                        "insert into profiles (id) values (%s) on conflict (id) do nothing", (hunt.profile_id,)
+                    )
+                    await conn.execute(
+                        """insert into hunts (id, profile_id, started_at, ends_at, ended_at, end_reason, place)
+                           values (%s, %s, %s, %s, %s, %s, %s) on conflict (id) do nothing""",
+                        (hunt.hunt_ref, hunt.profile_id, hunt.started_at, hunt.ends_at, hunt.ended_at,
+                         hunt.end_reason, hunt.place),
+                    )
+                    cursor = conn.cursor()
+                    await cursor.executemany(
+                        """insert into hunt_targets (hunt_id, idx, text, tier, found_at, look_ref)
+                           values (%s, %s, %s, %s, %s, %s) on conflict (hunt_id, idx) do nothing""",
+                        [(hunt.hunt_ref, t.index, t.text, t.tier, t.found_at, t.look_ref) for t in hunt.targets],
+                    )
+        except Exception:
+            log.exception("failed to save hunt %s", hunt.hunt_ref)
+
+    async def save_tick(self, hunt_ref: UUID, target: Target) -> None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                await conn.execute(
+                    "update hunt_targets set found_at = %s, look_ref = %s where hunt_id = %s and idx = %s",
+                    (target.found_at, target.look_ref, hunt_ref, target.index),
+                )
+        except Exception:
+            log.exception("failed to save a tick for hunt %s", hunt_ref)
+
+    async def end_hunt(self, hunt_ref: UUID, ended_at: datetime, reason: EndReason) -> None:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                await conn.execute(
+                    "update hunts set ended_at = %s, end_reason = %s where id = %s and ended_at is null",
+                    (ended_at, reason, hunt_ref),
+                )
+        except Exception:
+            log.exception("failed to end hunt %s", hunt_ref)
+
+    async def load_active_hunts(self) -> list[Hunt]:
+        try:
+            async with self._pool.connection(timeout=30) as conn:
+                found = await _read_hunts(conn, "where ended_at is null and ends_at > now() order by started_at", ())
+        except Exception:
+            log.exception("failed to load active hunts")
+            return []
+        return [stored.hunt for stored in found]
+
+    async def list_hunts(self, profile_id: UUID, limit: int) -> list[StoredHunt]:
+        try:
+            async with self._pool.connection(timeout=10) as conn:
+                return await _read_hunts(
+                    conn, "where profile_id = %s order by started_at desc, id limit %s", (profile_id, limit))
+        except Exception as exc:
+            log.exception("failed to list hunts")
+            raise StoreUnavailable("The hunts could not be read.") from exc
+
+
+async def _read_hunts(conn, tail: str, params: tuple) -> list[StoredHunt]:
+    """The hunts a `where ... order by ...` tail selects, in that order, each with its targets and, per found target,
+    the memory collected from the finding Look."""
+    cursor = await conn.execute(
+        f"select id, profile_id, started_at, ends_at, ended_at, end_reason, place from hunts {tail}", params
+    )
+    rows = await cursor.fetchall()
+    cursor = await conn.execute(
+        """select t.hunt_id, t.idx, t.text, t.tier, t.found_at, t.look_ref, m.id from hunt_targets t
+           left join memories m on m.look_ref = t.look_ref where t.hunt_id = any(%s::uuid[]) order by t.hunt_id, t.idx""",
+        ([row[0] for row in rows],),
+    )
+    targets: dict[UUID, list[tuple[Target, int | None]]] = {}
+    for hunt_id, idx, text, tier, found_at, look_ref, memory_id in await cursor.fetchall():
+        targets.setdefault(hunt_id, []).append((Target(idx, text, tier, found_at, look_ref), memory_id))
+    return [
+        StoredHunt(
+            Hunt(hunt_ref=hunt_id, profile_id=profile_id, started_at=started_at, ends_at=ends_at,
+                 targets=tuple(t for t, _ in targets.get(hunt_id, [])), place=place, ended_at=ended_at,
+                 end_reason=end_reason),
+            tuple(m for _, m in targets.get(hunt_id, [])),
+        )
+        for hunt_id, profile_id, started_at, ends_at, ended_at, end_reason, place in rows
+    ]
 
 
 def _vector_text(embedding: array | None) -> str | None:

@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import httpx
@@ -10,6 +11,7 @@ import pytest
 from edith_backend.app import create_app
 from edith_backend.config import Settings
 from edith_backend.db import LookRecord, Memory, ToldFact
+from edith_backend.hunts import Hunt, StoredHunt
 
 def pytest_asyncio_loop_factories(config, item):
     # psycopg's async mode cannot run on Windows' default proactor loop.
@@ -38,6 +40,7 @@ class RecordingStore:
         self.records: list[LookRecord] = []
         self.memories: dict[int, tuple[Memory, uuid.UUID, bytes]] = {}
         self.told: dict[uuid.UUID, dict[str, ToldFact]] = {}
+        self.hunts: dict[uuid.UUID, Hunt] = {}
 
     async def open(self) -> None:
         pass
@@ -79,6 +82,26 @@ class RecordingStore:
 
     async def save_told_fact(self, profile_id, told):
         self.told.setdefault(profile_id, {})[told.fact] = told
+
+    async def save_hunt(self, hunt):
+        self.hunts[hunt.hunt_ref] = hunt
+
+    async def save_tick(self, hunt_ref, target):
+        hunt = self.hunts[hunt_ref]
+        targets = tuple(target if t.index == target.index else t for t in hunt.targets)
+        self.hunts[hunt_ref] = replace(hunt, targets=targets)
+
+    async def end_hunt(self, hunt_ref, ended_at, reason):
+        self.hunts[hunt_ref] = replace(self.hunts[hunt_ref], ended_at=ended_at, end_reason=reason)
+
+    async def load_active_hunts(self):
+        return [h for h in self.hunts.values() if h.ended_at is None]
+
+    async def list_hunts(self, profile_id, limit):
+        mine = sorted((h for h in self.hunts.values() if h.profile_id == profile_id),
+                      key=lambda h: h.started_at, reverse=True)[:limit]
+        by_ref = {m.look_ref: m.id for m, _, _ in self.memories.values()}
+        return [StoredHunt(h, tuple(by_ref.get(t.look_ref) for t in h.targets)) for h in mine]
 
     async def load_recent_places(self):
         return [(r.profile_id, r.photo_place, r.captured_at.timestamp()) for r in self.records if r.photo_place]
