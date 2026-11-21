@@ -4,7 +4,7 @@ import asyncio
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import psycopg
 import pytest
@@ -30,14 +30,14 @@ def schema_url():
 
 
 def test_migrate_applies_each_file_once(schema_url):
-    assert migrate(schema_url) == ["001_init", "002_collect", "003_drop_sources"]
+    assert migrate(schema_url) == ["001_init", "002_collect", "003_drop_sources", "004_memory_date"]
     assert migrate(schema_url) == []
 
 
 def test_concurrent_migrations_take_turns(schema_url):
     with ThreadPoolExecutor(4) as pool:
         results = list(pool.map(lambda _: migrate(schema_url), range(4)))
-    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_drop_sources"]]
+    assert sorted(results) == [[], [], [], ["001_init", "002_collect", "003_drop_sources", "004_memory_date"]]
 
 
 async def test_health_checks_share_one_query_while_cached(schema_url):
@@ -93,19 +93,18 @@ async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(
         for record in (first, second, failed, a_look(other)):
             await store.record_look(record)
 
-        first_id = await store.collect(profile, first.look_ref, b"crop-1",
-                                       datetime(2026, 11, 21, 8, tzinfo=UTC))
-        assert await store.collect(profile, first.look_ref, b"other bytes") == first_id
-        second_id = await store.collect(profile, second.look_ref, b"crop-2")
-        assert await store.collect(profile, failed.look_ref, b"x") is None
-        assert await store.collect(other, first.look_ref, b"x") is None
-        assert await store.collect(profile, uuid.uuid4(), b"x") is None
+        first_id = await store.collect(profile, first.look_ref, b"crop-1", date(2026, 11, 20))
+        assert await store.collect(profile, first.look_ref, b"other bytes", date(2026, 11, 22)) == first_id
+        second_id = await store.collect(profile, second.look_ref, b"crop-2", date(2026, 11, 21))
+        assert await store.collect(profile, failed.look_ref, b"x", date(2026, 11, 21)) is None
+        assert await store.collect(other, first.look_ref, b"x", date(2026, 11, 21)) is None
+        assert await store.collect(profile, uuid.uuid4(), b"x", date(2026, 11, 21)) is None
 
         memories = await store.list_memories(profile, 10)
         assert [(m.id, m.name, m.rarity) for m in memories] == [(second_id, "lamp", "epic"), (first_id, "mug", "rare")]
         assert memories[1].fact == first.fact
-        assert memories[1].created_at == datetime(2026, 11, 21, 8, tzinfo=UTC)
-        assert [(m.kind, m.place) for m in memories] == [(None, None), ("mug", "Waterloo, Ontario, Canada")]
+        assert [m.collected_on for m in memories] == [date(2026, 11, 21), date(2026, 11, 20)]
+        assert [m.place for m in memories] == [None, "Waterloo, Ontario, Canada"]
         assert await store.list_memories(profile, 1) == memories[:1]
         assert await store.list_memories(other, 10) == []
         assert await store.memory_image(profile, first_id) == b"crop-1"

@@ -26,13 +26,15 @@ def collect(client, look_ref: str, image: bytes = CROP, headers=HEADERS, collect
     return client.post("/collect", files=files, headers=headers)
 
 
-async def test_a_memory_is_dated_when_it_was_collected_but_never_in_the_future(client):
-    past, future = await look(client), await look(client)
-    await collect(client, past[0], collected_at="2026-11-21T08:00:00Z")
-    await collect(client, future[0], collected_at="2099-01-01T00:00:00Z")
-    dates = {m["look_ref"]: m["created_at"] for m in (await client.get("/memories", headers=HEADERS)).json()["memories"]}
-    assert dates[past[0]].startswith("2026-11-21T08:00:00")
-    assert not dates[future[0]].startswith("2099")
+async def test_a_memory_is_dated_with_the_headsets_local_day_and_never_a_future_one(client):
+    evening, future, none = await look(client), await look(client), await look(client)
+    await collect(client, evening[0], collected_at="2026-11-20T22:30:00-05:00")
+    await collect(client, future[0], collected_at="2099-01-01T00:00:00+09:00")
+    await collect(client, none[0])
+    listed = (await client.get("/memories", headers=HEADERS)).json()["memories"]
+    dates = [m["date"] for m in listed]
+    assert dates[-1] == "2026-11-20"
+    assert max(dates) < "2099"
 
 
 async def test_a_collected_at_without_a_timezone_is_refused(client):
@@ -50,10 +52,8 @@ async def test_collecting_a_finished_look_saves_a_memory_from_the_stored_card(cl
 
     [memory] = (await client.get("/memories", headers=HEADERS)).json()["memories"]
     assert memory["id"] == memory_id
-    assert memory["look_ref"] == ref
+    assert set(memory) == {"id", "name", "fact", "rarity", "place", "date"}
     assert (memory["name"], memory["fact"], memory["rarity"]) == (events[1]["name"], events[2]["text"], events[3]["tier"])
-    assert "sources" not in memory
-    assert "image" not in memory
 
 
 async def test_a_collect_during_the_stream_waits_for_the_look_to_be_recorded(store, monkeypatch):
@@ -97,13 +97,13 @@ async def test_another_profiles_look_cannot_be_collected(client):
 
 
 async def test_memories_are_listed_newest_first_for_the_calling_profile(client):
-    refs = [(await look(client))[0] for _ in range(3)]
+    refs = [(await look(client))[0] for _ in range(3)]  # ids are 1, 2, 3 in collection order
     for ref in refs:
         await collect(client, ref)
     listed = (await client.get("/memories", headers=HEADERS)).json()["memories"]
-    assert [m["look_ref"] for m in listed] == refs[::-1]
+    assert [m["id"] for m in listed] == [3, 2, 1]
     limited = (await client.get("/memories?limit=1", headers=HEADERS)).json()["memories"]
-    assert [m["look_ref"] for m in limited] == [refs[2]]
+    assert [m["id"] for m in limited] == [3]
 
 
 async def test_the_image_route_serves_the_crop_as_a_jpeg_to_its_owner_only(client):
@@ -141,9 +141,9 @@ class DetailedAgent:
         yield RarityEvent(tier="common")
 
 
-async def test_a_memory_copies_the_looks_kind_and_place(settings, store):
+async def test_a_memory_copies_the_looks_place(settings, store):
     async with client_for(create_app(settings, agent=DetailedAgent(), store=store)) as c:
         ref, _ = await look(c)
         await collect(c, ref)
         [memory] = (await c.get("/memories", headers=HEADERS)).json()["memories"]
-    assert (memory["kind"], memory["place"]) == ("mug", "Waterloo, Ontario, Canada")
+    assert memory["place"] == "Waterloo, Ontario, Canada"

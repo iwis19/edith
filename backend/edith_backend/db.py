@@ -3,7 +3,7 @@ import logging
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, date, datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -36,13 +36,19 @@ class LookRecord:
 @dataclass(frozen=True)
 class Memory:
     id: int
-    look_ref: UUID
     name: str
-    kind: str | None
     fact: str | None
     rarity: str | None
     place: str | None
-    created_at: datetime
+    collected_on: date
+
+
+def collection_date(collected_at: datetime | None, now: datetime) -> date:
+    """The calendar date of a collection in the headset's own offset. A time ahead of `now` counts as `now`, and with
+    no time the date is the UTC date of `now`."""
+    if collected_at is None:
+        return now.astimezone(UTC).date()
+    return min(collected_at, now).astimezone(collected_at.tzinfo).date()
 
 
 class StoreUnavailable(Exception):
@@ -55,7 +61,7 @@ class Store(Protocol):
     async def status(self) -> str: ...
     async def record_look(self, record: LookRecord) -> None: ...
     async def collect(
-        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_on: date
     ) -> int | None:
         """Saves the finished Look as a memory, once per Look, and returns the memory's id. None when the profile has
         no finished Look with that ref. Raises StoreUnavailable."""
@@ -78,7 +84,7 @@ class DisabledStore:
         pass
 
     async def collect(
-        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_on: date
     ) -> int | None:
         raise StoreUnavailable("There is no database.")
 
@@ -149,20 +155,19 @@ class PostgresStore:
             log.exception("failed to record look %s", record.look_ref)
 
     async def collect(
-        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_at: datetime | None = None
+        self, profile_id: UUID, look_ref: UUID, image: bytes, collected_on: date
     ) -> int | None:
         try:
             async with self._pool.connection(timeout=10) as conn:
                 # The fields are copied from the stored Look, so the client cannot supply card text. A repeat inserts
-                # nothing and the existing row is read back. A headset clock ahead of the server is capped at now().
+                # nothing and the existing row is read back.
                 cursor = await conn.execute(
-                    """insert into memories (profile_id, look_ref, name, kind, fact, rarity, place, image, created_at)
-                       select profile_id, id, name, kind, fact, rarity, place, %s,
-                              least(coalesce(%s::timestamptz, now()), now()) from looks
+                    """insert into memories (profile_id, look_ref, name, fact, rarity, place, image, collected_on)
+                       select profile_id, id, name, fact, rarity, place, %s, %s from looks
                        where id = %s and profile_id = %s and status = 'done' and name is not null
                        on conflict (look_ref) do nothing
                        returning id""",
-                    (image, collected_at, look_ref, profile_id),
+                    (image, collected_on, look_ref, profile_id),
                 )
                 row = await cursor.fetchone()
                 if row is None:
@@ -179,8 +184,8 @@ class PostgresStore:
         try:
             async with self._pool.connection(timeout=10) as conn:
                 cursor = await conn.execute(
-                    """select id, look_ref, name, kind, fact, rarity, place, created_at from memories
-                       where profile_id = %s order by created_at desc, id desc limit %s""",
+                    """select id, name, fact, rarity, place, collected_on from memories
+                       where profile_id = %s order by collected_on desc, id desc limit %s""",
                     (profile_id, limit),
                 )
                 return [Memory(*row) for row in await cursor.fetchall()]

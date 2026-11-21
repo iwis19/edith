@@ -22,7 +22,7 @@ from .agents.ask import AskError, AskRequest, AskSession, LiveAsk, make_live_ask
 from .agents.card import CardAgent, make_card_agent
 from .agents.scan import ScanAgent, make_scan_agent
 from .config import Settings
-from .db import LookRecord, Store, StoreUnavailable, make_store
+from .db import LookRecord, Store, StoreUnavailable, collection_date, make_store
 from .events import (
     Accepted, CollectMeta, Done, ErrorEvent, Fact, LookDetails, LookEvent, LookMeta, Name, RarityEvent, ScanMeta,
     ScanReply,
@@ -293,7 +293,8 @@ def create_app(
                 await asyncio.wait_for(recording.wait(), settings.look_timeout_s + 5)
             except TimeoutError:
                 pass
-        memory_id = await _stored(store.collect(profile_id, parsed.look_ref, data, parsed.collected_at))
+        memory_id = await _stored(store.collect(
+            profile_id, parsed.look_ref, data, collection_date(parsed.collected_at, datetime.now(UTC))))
         if memory_id is None:
             raise ApiError(404, "unknown_look", "This profile has no finished Look with that look_ref.")
         return {"memory_id": memory_id}
@@ -302,8 +303,8 @@ def create_app(
     async def memories(limit: int = Query(100, ge=1, le=500), profile_id: UUID = Depends(profile)) -> dict:
         found = await _stored(store.list_memories(profile_id, limit))
         return {"memories": [
-            {"id": m.id, "look_ref": m.look_ref.hex, "name": m.name, "kind": m.kind, "fact": m.fact,
-             "rarity": m.rarity, "place": m.place, "created_at": m.created_at.isoformat()}
+            {"id": m.id, "name": m.name, "fact": m.fact, "rarity": m.rarity, "place": m.place,
+             "date": m.collected_on.isoformat()}
             for m in found
         ]}
 
