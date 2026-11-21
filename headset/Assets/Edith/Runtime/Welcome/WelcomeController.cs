@@ -84,6 +84,7 @@ namespace Edith.Welcome
         // What EDITH was last told to say and when, so a line cut off by an audio reset can start again.
         VoiceStyle? saying;
         float sayingUntil;
+        bool resaying;
 
         void Start()
         {
@@ -100,6 +101,7 @@ namespace Edith.Welcome
             HandFrame rightHand = right.ReadUngated(), leftHand = left.ReadUngated();
             if (summon.Step(leftHand, rightHand) && (!open || leaving)) Open();
             if (!open) return;
+            KeepSaying();
             WatchPhone();
             if (!leaving) ReadTaps(rightHand, leftHand);
             if (flow.Step != shownStep) Enter(flow.Step);
@@ -196,14 +198,26 @@ namespace Edith.Welcome
 
         void OnDestroy() => AudioSettings.OnAudioConfigurationChanged -= OnAudioReset;
 
-        /// Starts the line again when an audio reset cut it off.
+        /// Starts the line again on the next frame when an audio reset cut it off, once the reset is over.
         void OnAudioReset(bool deviceWasChanged)
         {
-            if (saying is VoiceStyle style && !leaving && Time.realtimeSinceStartup < sayingUntil)
+            if (saying != null && !leaving && Time.realtimeSinceStartup < sayingUntil) resaying = true;
+        }
+
+        /// Keeps the current line playing to its end: says it again after an audio reset, or when it stopped early.
+        void KeepSaying()
+        {
+            if (saying is not VoiceStyle style || leaving || speaker == null) return;
+            var now = Time.realtimeSinceStartup;
+            if (now >= sayingUntil)
             {
-                Debug.Log($"[EDITH welcome] audio reset cut the {style} line, saying it again");
-                Say(style);
+                saying = null;
+                return;
             }
+            if (!resaying && (speaker.isPlaying || now >= sayingUntil - 0.3f)) return;
+            Debug.Log($"[EDITH welcome] the {style} line {(resaying ? "was cut by an audio reset" : "stopped early")}, saying it again");
+            resaying = false;
+            Say(style);
         }
 
         /// Says EDITH's welcome line in `style`, cutting off whatever she was saying. Silent when the clip is missing.
@@ -226,7 +240,8 @@ namespace Edith.Welcome
             speaker.Play();
             saying = style;
             sayingUntil = Time.realtimeSinceStartup + clip.length;
-            Debug.Log($"[EDITH welcome] saying the {style} line, {clip.length:F1} s");
+            Debug.Log($"[EDITH welcome] saying the {style} line, {clip.length:F1} s, {clip.frequency} Hz, {clip.loadType} {clip.loadState}, " +
+                $"output {AudioSettings.outputSampleRate} Hz, volume {speaker.volume:F2}, listener {AudioListener.volume:F2}{(AudioListener.pause ? " paused" : "")}");
         }
 
         /// Step one fills the screen with EDITH beside it. Step two shows only its pane, scaled and held like
