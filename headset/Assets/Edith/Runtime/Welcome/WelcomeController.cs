@@ -23,6 +23,8 @@ namespace Edith.Welcome
         [SerializeField] PhonePairing pairing;
         [SerializeField] RightHandSource right;
         [SerializeField] LeftHandSource left;
+        [Tooltip("Show the welcome on every launch, even once it has been finished. On while the welcome is being tried out.")]
+        [SerializeField] bool everyLaunch = true;
 
         // EDITH's welcome line recorded in each voice, named after the VoiceStyle, from voice_samples.py.
         const string VoiceFolder = "EdithUI/Voices/";
@@ -83,7 +85,7 @@ namespace Edith.Welcome
 
         void Start()
         {
-            if (WelcomeStore.Done)
+            if (WelcomeStore.Done && !everyLaunch)
             {
                 enabled = false;
                 return;
