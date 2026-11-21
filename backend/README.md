@@ -29,6 +29,45 @@ When the phone has shared a position within the last 30 minutes (see [Phone loca
 
 Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The facts told and the places seen are kept per profile in process memory: places for 6 h, and both are lost on restart.
 
+### Model trade-offs
+
+Measured on 68 photos, one run each, so differences of about 3 are noise. Names were graded blind against labels from a separate labeller, and shown facts were checked by a web-searching model. Times are medians.
+
+**Naming call**
+
+| Model | Specific | Generic | Wrong | First word |
+| --- | --- | --- | --- | --- |
+| `gpt-4o` | 23 | 34 | 11 | 0.63 s |
+| `gpt-5.4-mini`, one long card prompt | 9 | 50 | 9 | 0.65 s |
+| Gemini Flash-Lite | 23 | 29 | 14 | 1.2 to 1.6 s |
+
+- `gpt-4o` names as many objects specifically as Gemini Flash-Lite, with fewer wrong names. Its wrong names are mostly near misses, such as a neighbouring model of the same product or a too-narrow guess.
+- `gpt-5.4-mini` names few objects wrongly only because it names most of them generically. Asked plainly, without the long card prompt, it named some objects specifically that the long prompt left generic, so its generic names come from the prompt as much as the model.
+- Gemini Flash-Lite's wrong names are invented specifics, such as a made-up title, where OpenAI's wrong names are more often the wrong object. It is about twice as slow to the first word, and the free tier allows 15 requests a minute.
+- Neither provider's confidence separates right names from wrong ones.
+
+**Fact call**
+
+| Model | Beats the other on a blind judge | Median length | Median time | Shown facts false |
+| --- | --- | --- | --- | --- |
+| `gpt-5.4-mini`, effort none | 42 to 26 | 30 words | 1.82 s | similar to `gpt-4o` |
+| `gpt-4o` | 26 to 42 | 29 words | 1.90 s | similar to `gpt-5.4-mini` |
+
+- Written in one call with the name and passed through a second-model check, `gpt-4o`'s shown facts had 3 of 68 false, against 10 of 65 for `gpt-5.4-mini`. As a separate call told the name, the two have a similar share of stretched details, and `gpt-5.4-mini` costs less per Look.
+- A web check of `gpt-4o`'s separate-call facts found about half embellished and about 1 in 17 invented. The push for specific details causes this, so a fact is a fun fact, not a checked one.
+- Gemini Flash-Lite's facts arrive at a median of 2.4 to 3.0 s, with 12 of 59 false, against 2.1 s for OpenAI in a single call.
+- Larger Gemini models think for seconds before writing, which is too slow for a Look.
+
+`gpt-4o` is reported to leave the OpenAI API on 2027-01-14, with `gpt-6-luna` named as its replacement. Measure the replacement on the same photos before then, and set it with `OPENAI_NAME_MODEL`.
+
+**Two calls rather than one**
+
+- Separate calls let each job use the model that suits it: `gpt-4o` names, `gpt-5.4-mini` writes the fact. The fact call carries its own prompt, the facts already told to the profile and the repeat check. The cost is a second request per Look.
+- The fact call starts only once the name is final, at about 0.76 s. Started blind beside the naming call, it picked a different object in the crop on 16 of 68 photos, so the fact described a different object from the name. Told the name, it did so on none. The cost is the fact arriving after the name, not with it.
+- A failed fact call never costs the card its name or rarity; the card goes out without a fact.
+
+The tests in `tests/test_card_model.py` check the parsing, the repeat check and the call ordering against fake writers, so they pass without a key and say nothing about the quality or speed of any model. To measure a setup, set `CARD_PROVIDER`, the key and the model settings, run the backend, and send the same photos through `tools.stream_check`, which prints when the name, fact and rarity events arrive.
+
 ## API
 
 Every endpoint except `/health` needs two headers:
