@@ -34,7 +34,6 @@ namespace Edith.Diagnostics
         /// False when the build has no backend, so the pairing panel never started.
         public bool HasPairing;
         public PairPhase Pairing;
-        public PairHideReason PairingHidden;
         public string ScanResult;
         public string BackendHost;
         public BackendHealth Backend;
@@ -90,13 +89,7 @@ namespace Edith.Diagnostics
                 case PairPhase.Requesting: return "requesting a code";
                 case PairPhase.Showing: return "code on screen";
                 case PairPhase.Connected: return "phone connected";
-            }
-            switch (view.PairingHidden)
-            {
-                case PairHideReason.HasLocation: return "location kept";
-                case PairHideReason.Done: return "paired";
-                case PairHideReason.TimedOut: return "not paired, timed out";
-                default: return "not paired, backend errors";
+                default: return "paired";
             }
         }
 

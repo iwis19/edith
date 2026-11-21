@@ -21,6 +21,17 @@ namespace Edith.Hands
         public Vector3 MiddleKnuckle, MiddleTip, RingKnuckle, RingTip;
 
         public Vector3 PinchPoint => (ThumbTip + IndexTip) * 0.5f;
+
+        /// This frame with the hand unseen, so every gesture reads it as lost. The clock and the eye stay.
+        public HandFrame Unseen()
+        {
+            var frame = this;
+            frame.Tracked = frame.Visible = frame.Pinching = false;
+            return frame;
+        }
+
+        /// The frame as gestures may read it: unseen while the pairing gate is closed.
+        public HandFrame Gated(bool open) => open ? this : Unseen();
         public Pose Eye => new Pose(EyePosition, EyeRotation);
 
         /// Points out of the palm. The raw cross product points into a right palm, so it is flipped.

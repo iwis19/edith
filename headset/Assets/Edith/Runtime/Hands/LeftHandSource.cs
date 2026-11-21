@@ -1,3 +1,4 @@
+using Edith.Pairing;
 using UnityEngine;
 
 namespace Edith.Hands
@@ -12,6 +13,6 @@ namespace Edith.Hands
 
         HandReader reader;
 
-        public HandFrame Read() => (reader ??= new HandReader(hand, skeleton, eye)).Read();
+        public HandFrame Read() => (reader ??= new HandReader(hand, skeleton, eye)).Read().Gated(PairingGate.Open);
     }
 }

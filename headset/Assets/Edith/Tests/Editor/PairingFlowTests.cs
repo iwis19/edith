@@ -7,7 +7,7 @@ namespace Edith.Tests
     {
         static PairingFlow ShowingCode(out float now)
         {
-            var flow = new PairingFlow(0f);
+            var flow = new PairingFlow(false, 0f);
             Assert.AreEqual(PairCall.CheckLocation, flow.Next(0f));
             flow.OnLocation(false, 0.2f);
             Assert.AreEqual(PairCall.RequestCode, flow.Next(0.2f));
@@ -16,31 +16,47 @@ namespace Edith.Tests
             return flow;
         }
 
+        static PairingFlow PairedAt(float now)
+        {
+            var flow = new PairingFlow(true, now);
+            Assert.IsFalse(flow.Locked);
+            return flow;
+        }
+
+        [Test]
+        public void AnUnpairedHeadsetStartsLockedWithThePanelUp()
+        {
+            var flow = new PairingFlow(false, 0f);
+            Assert.IsTrue(flow.Locked);
+            Assert.IsTrue(flow.Visible);
+        }
+
         [Test]
         public void ChecksThenRequestsThenShowsTheCode()
         {
             var flow = ShowingCode(out _);
             Assert.AreEqual(PairPhase.Showing, flow.Phase);
+            Assert.IsTrue(flow.Locked);
             Assert.IsTrue(flow.Visible);
             Assert.AreEqual("4821", flow.Code);
             Assert.AreEqual("https://edith.example/phone", flow.PhoneUrl);
         }
 
         [Test]
-        public void AKnownPhoneLocationHidesTheFlowWithoutAskingForACode()
+        public void AKnownPhoneLocationUnlocksWithoutAskingForACode()
         {
-            var flow = new PairingFlow(0f);
+            var flow = new PairingFlow(false, 0f);
             flow.Next(0f);
             flow.OnLocation(true, 0.1f);
-            Assert.AreEqual(PairPhase.Hidden, flow.Phase);
-            Assert.AreEqual(PairHideReason.HasLocation, flow.HideReason);
-            Assert.AreEqual(PairCall.None, flow.Next(0.2f));
+            Assert.AreEqual(PairPhase.Paired, flow.Phase);
+            Assert.IsFalse(flow.Locked);
+            Assert.IsFalse(flow.Visible);
         }
 
         [Test]
         public void OneCallIsInFlightAtATime()
         {
-            var flow = new PairingFlow(0f);
+            var flow = new PairingFlow(false, 0f);
             Assert.AreEqual(PairCall.CheckLocation, flow.Next(0f));
             Assert.AreEqual(PairCall.None, flow.Next(1f));
         }
@@ -57,18 +73,19 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void PairingShowsConnectedForTwoSecondsThenHides()
+        public void TheConfirmedPairingUnlocksAtOnceAndShowsConnectedForTwoSeconds()
         {
             var flow = ShowingCode(out _);
             flow.Next(4f);
             flow.OnStatus(true, false, 4f);
             Assert.AreEqual(PairPhase.Connected, flow.Phase);
+            Assert.IsFalse(flow.Locked);
             Assert.IsTrue(flow.Visible);
             Assert.AreEqual(PairCall.None, flow.Next(5.9f));
             Assert.IsTrue(flow.Visible);
             Assert.AreEqual(PairCall.None, flow.Next(6f));
-            Assert.AreEqual(PairPhase.Hidden, flow.Phase);
-            Assert.AreEqual(PairHideReason.Done, flow.HideReason);
+            Assert.AreEqual(PairPhase.Paired, flow.Phase);
+            Assert.IsFalse(flow.Visible);
         }
 
         [Test]
@@ -85,32 +102,22 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void HidesAfterThreeMinutesUnpaired()
+        public void StaysLockedAndPollingLongAfterThreeMinutes()
         {
-            var flow = ShowingCode(out _);
-            flow.Next(179.9f);
-            flow.OnStatus(false, false, 179.9f);
+            var flow = ShowingCode(out var now);
+            for (; now < 600f; now += PairingFlow.PollSeconds)
+            {
+                Assert.AreEqual(PairCall.PollStatus, flow.Next(now + PairingFlow.PollSeconds));
+                flow.OnStatus(false, false, now + PairingFlow.PollSeconds);
+            }
+            Assert.IsTrue(flow.Locked);
             Assert.IsTrue(flow.Visible);
-            flow.Next(180f);
-            Assert.AreEqual(PairHideReason.TimedOut, flow.HideReason);
-            Assert.IsFalse(flow.Visible);
-        }
-
-        [Test]
-        public void ALateReplyAfterHidingChangesNothing()
-        {
-            var flow = ShowingCode(out _);
-            flow.Next(3.5f);
-            flow.Next(181f);
-            flow.OnStatus(true, false, 181.5f);
-            Assert.AreEqual(PairPhase.Hidden, flow.Phase);
-            Assert.AreEqual(PairHideReason.TimedOut, flow.HideReason);
         }
 
         [Test]
         public void AReplyToTheWrongCallIsIgnored()
         {
-            var flow = new PairingFlow(0f);
+            var flow = new PairingFlow(false, 0f);
             flow.Next(0f);
             flow.OnCode("1111", "https://edith.example/phone", 0.1f);
             Assert.AreEqual(PairPhase.Checking, flow.Phase);
@@ -118,39 +125,84 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void ErrorsRetryTenSecondsApartThenHideAfterThree()
+        public void ErrorsRetryTenSecondsApartForeverWhileLocked()
         {
-            var flow = new PairingFlow(0f);
+            var flow = new PairingFlow(false, 0f);
             flow.Next(0f);
             flow.OnLocation(false, 0f);
             var now = 0f;
-            for (var retry = 1; retry <= PairingFlow.MaxRetries; retry++)
+            for (var retry = 1; retry <= 20; retry++)
             {
                 Assert.AreEqual(PairCall.RequestCode, flow.Next(now));
                 flow.OnError(now);
-                Assert.AreEqual(PairCall.None, flow.Next(now + 9.9f), $"retry {retry} too early");
-                now += 10f;
+                Assert.AreEqual(PairCall.None, flow.Next(now + 9.9f), "retry " + retry + " too early");
+                now += PairingFlow.RetrySeconds;
             }
+            Assert.AreEqual(20, flow.Failures);
+            Assert.IsTrue(flow.Locked);
+            Assert.IsTrue(flow.Visible);
             Assert.AreEqual(PairCall.RequestCode, flow.Next(now));
-            flow.OnError(now);
-            Assert.AreEqual(PairPhase.Hidden, flow.Phase);
-            Assert.AreEqual(PairHideReason.Errors, flow.HideReason);
+            flow.OnCode("4821", "https://edith.example/phone", now);
+            Assert.AreEqual(0, flow.Failures);
         }
 
         [Test]
-        public void ASuccessResetsTheRetryBudget()
+        public void APairedHeadsetStartsUnlockedAndWatchesThePhonePosition()
         {
-            var flow = ShowingCode(out var now);
-            for (var i = 0; i < 5; i++)
+            var flow = PairedAt(0f);
+            Assert.IsFalse(flow.Visible);
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(0f));
+            flow.OnLocation(true, 0.1f);
+            Assert.AreEqual(PairCall.None, flow.Next(30f));
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(30.1f));
+            Assert.IsFalse(flow.Locked);
+        }
+
+        [Test]
+        public void ALostPhonePositionLocksAgainAndAsksForANewCode()
+        {
+            var flow = PairedAt(0f);
+            var now = 0f;
+            for (var miss = 1; miss < PairingFlow.LostAfterMisses; miss++)
             {
-                now += 3f;
-                Assert.AreEqual(PairCall.PollStatus, flow.Next(now));
-                flow.OnError(now);
-                now += 10f;
-                Assert.AreEqual(PairCall.PollStatus, flow.Next(now));
-                flow.OnStatus(false, false, now);
+                Assert.AreEqual(PairCall.CheckLocation, flow.Next(now));
+                flow.OnLocation(false, now);
+                Assert.IsFalse(flow.Locked, "locked after only " + miss + " misses");
+                now += PairingFlow.WatchSeconds;
             }
-            Assert.AreEqual(PairPhase.Showing, flow.Phase);
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(now));
+            flow.OnLocation(false, now);
+            Assert.IsTrue(flow.Locked);
+            Assert.IsTrue(flow.Visible);
+            Assert.AreEqual(PairCall.RequestCode, flow.Next(now));
+        }
+
+        [Test]
+        public void APositionComingBackClearsTheMisses()
+        {
+            var flow = PairedAt(0f);
+            var now = 0f;
+            for (var i = 0; i < 10; i++)
+            {
+                flow.Next(now);
+                flow.OnLocation(i % 2 == 1, now);
+                now += PairingFlow.WatchSeconds;
+            }
+            Assert.IsFalse(flow.Locked);
+        }
+
+        [Test]
+        public void AnUnreachableBackendNeverLocksAPairedHeadset()
+        {
+            var flow = PairedAt(0f);
+            var now = 0f;
+            for (var i = 0; i < 20; i++)
+            {
+                Assert.AreEqual(PairCall.CheckLocation, flow.Next(now));
+                flow.OnError(now);
+                now += PairingFlow.RetrySeconds;
+            }
+            Assert.IsFalse(flow.Locked);
         }
 
         [Test]

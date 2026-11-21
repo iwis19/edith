@@ -106,7 +106,7 @@ namespace Edith.Diagnostics
                 shown = !shown;
                 Debug.Log($"[EDITH diagnostics] panel {(shown ? "shown" : "hidden")}");
             }
-            group.alpha = Mathf.MoveTowards(group.alpha, shown ? 1f : 0f, Time.deltaTime / FadeSeconds);
+            group.alpha = Mathf.MoveTowards(group.alpha, shown && PairingGate.Open ? 1f : 0f, Time.deltaTime / FadeSeconds);
 
             if (settings != null && now >= nextHealth)
             {
@@ -137,7 +137,6 @@ namespace Edith.Diagnostics
                 Camera = headsetCamera.Status,
                 HasPairing = flow != null,
                 Pairing = flow?.Phase ?? default,
-                PairingHidden = flow?.HideReason ?? default,
                 ScanResult = scan.LastResult,
                 BackendHost = backendHost,
                 Backend = health,
