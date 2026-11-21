@@ -2,112 +2,160 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<title>EDITH location</title>
+<meta name="theme-color" content="#1c1a68">
+<title>Pair with EDITH</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&display=swap">
 <style>
-  /* Quiet by design: near-black text, one grey for everything secondary, and the one accent on the main action. The
-     soft blue wash behind the frosted card is the only other colour. */
   :root {
-    color-scheme: light;
-    --text: #111318;
-    --secondary: #6b7280;
-    --hairline: rgba(17, 19, 24, .08);
-    --accent: #1f4dff;
-    --accent-pressed: #1a3fd6;
-    --glass: rgba(255, 255, 255, .62);
-    --danger: #c42b3f;
+    color-scheme: dark;
+    --ice: #BFE9FF;
+    --frost: #EAF8FF;
+    --ink: #0D0A4F;
+    --text: #FFFFFF;
+    --soft: rgba(234, 248, 255, .82);
+    --line: rgba(234, 248, 255, .38);
+    --glass: rgba(234, 248, 255, .10);
+    --error: #FF9B9B;
   }
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  html { min-height: 100%; background: #08063F; }
   body {
-    margin: 0; min-height: 100vh; padding: 48px 20px 40px; color: var(--text);
+    margin: 0; min-height: 100vh; min-height: 100dvh;
+    color: var(--text); font: 300 18px/1.45 Jost, "Futura", "Century Gothic", system-ui, sans-serif;
     background:
-      radial-gradient(120% 60% at 50% 0%, #dcebff 0%, rgba(220, 235, 255, 0) 70%),
-      linear-gradient(180deg, #f4f8ff 0%, #fbfcfe 100%);
-    font: 17px/1.47 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
+      radial-gradient(120% 55% at 50% 22%, #262379 0%, rgba(38, 35, 121, 0) 70%),
+      linear-gradient(180deg, #1F1C6E 0%, #0C0A52 45%, #070537 100%);
+    background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
   }
-  main { max-width: 420px; margin: 0 auto; }
-  .brand { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--secondary); }
-  h1 { margin: 6px 0 6px; font-size: 30px; line-height: 1.15; font-weight: 650; letter-spacing: -.025em; }
-  p { margin: 0; color: var(--secondary); }
-  .lead { margin-bottom: 28px; }
-  button {
-    width: 100%; height: 54px; border: 0; border-radius: 14px; background: var(--accent); color: #fff;
-    font-family: inherit; font-size: 17px; font-weight: 600; line-height: 1; letter-spacing: -.01em; cursor: pointer;
-    transition: background .15s, opacity .15s;
+  main {
+    display: flex; flex-direction: column; align-items: center;
+    max-width: 420px; min-height: 100vh; min-height: 100dvh; margin: 0 auto;
+    padding: max(48px, env(safe-area-inset-top)) 28px max(28px, env(safe-area-inset-bottom));
+    text-align: center;
   }
-  button:active { background: var(--accent-pressed); }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  /* Disabled is how the page shows it is sharing: quiet, not greyed out. */
-  button[disabled] { background: var(--glass); color: var(--text); box-shadow: inset 0 0 0 1px var(--hairline); cursor: default; }
-  .card {
-    margin-top: 16px; padding: 4px 20px; border-radius: 20px;
-    background: var(--glass); border: 1px solid rgba(255, 255, 255, .8);
-    box-shadow: 0 1px 1px rgba(17, 19, 24, .03), 0 12px 32px rgba(31, 77, 255, .06);
-    -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  section { display: flex; flex-direction: column; align-items: center; width: 100%; }
+  .hidden { display: none !important; }
+
+  h1 { margin: 0; font-weight: 600; font-size: 30px; line-height: 1.15; letter-spacing: .005em; }
+  .lede { margin: 12px 0 0; color: var(--soft); font-size: 16px; }
+
+  /* EDITH's portrait: pixel art kept crisp at any size. */
+  .logo { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+  .badge {
+    display: grid; place-items: center;
+    width: 116px; height: 116px; margin-bottom: 26px; padding: 22px;
+    border-radius: 50%; background: #FFFFFF;
+    box-shadow: 0 0 0 7px rgba(191, 233, 255, .28), 0 0 34px 6px rgba(191, 233, 255, .35);
   }
-  .row { padding: 14px 0; border-top: 1px solid var(--hairline); }
-  .row:first-child { border-top: 0; }
-  .label { font-size: 13px; color: var(--secondary); }
-  .place { margin-top: 2px; font-size: 20px; font-weight: 600; letter-spacing: -.015em; line-height: 1.3; word-break: break-word; }
-  #sent { margin-top: 2px; }
-  .error { padding: 14px 20px; color: var(--danger); font-size: 15px; }
-  .hidden { display: none; }
-  #code {
-    display: block; width: 100%; height: 76px; margin: 0 0 12px; border: 1px solid var(--hairline); border-radius: 16px;
-    background: var(--glass); color: var(--text); text-align: center;
-    font-family: inherit; font-size: 40px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: .5em; text-indent: .5em;
-    -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  .portrait { width: 150px; margin: 18px 0 26px; filter: drop-shadow(0 0 14px rgba(191, 233, 255, .25)); }
+
+  .label { margin: 34px 0 14px; color: var(--ice); font-size: 12px; font-weight: 400; letter-spacing: .28em; text-transform: uppercase; }
+
+  /* One real input sits over four drawn boxes, so autofill, paste and the numeric keypad all work. */
+  .code { position: relative; display: flex; gap: 12px; justify-content: center; }
+  .code input {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0;
+    border: 0; padding: 0; font-size: 16px; color: transparent; caret-color: transparent;
+  }
+  .box {
+    display: grid; place-items: center; width: 56px; height: 66px;
+    border: 1.5px solid var(--line); border-radius: 16px; background: var(--glass);
+    font-weight: 600; font-size: 31px; line-height: 1;
     transition: border-color .15s, box-shadow .15s;
   }
-  #code::placeholder { color: rgba(17, 19, 24, .18); }
-  #code:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px rgba(31, 77, 255, .12); }
-  #hint { margin-top: 20px; font-size: 13px; text-align: center; }
+  .code.focused .box.active { border-color: var(--frost); box-shadow: 0 0 14px rgba(191, 233, 255, .45); }
+
+  button {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    width: 100%; min-height: 54px; margin-top: 24px; border: 0; border-radius: 999px;
+    background: var(--frost); color: var(--ink);
+    font: 500 18px/1 Jost, "Futura", "Century Gothic", system-ui, sans-serif;
+    box-shadow: 0 0 22px rgba(191, 233, 255, .35);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  button:active { transform: scale(.985); }
+  button[disabled] { opacity: .55; box-shadow: none; }
+  button svg { width: 22px; height: 22px; flex: none; }
+
+  .check {
+    display: grid; place-items: center; width: 58px; height: 58px; margin-bottom: 30px;
+    border-radius: 50%; background: var(--ice); color: var(--ink);
+    box-shadow: 0 0 22px rgba(191, 233, 255, .5);
+  }
+  .check svg { width: 26px; height: 26px; }
+  #paired .lede { margin-top: 18px; }
+
+  .tip { margin: 12px 0 0; color: var(--soft); font-size: 14px; }
+  .status span { display: block; }
+  .status { margin-top: 22px; color: var(--ice); font-size: 14px; font-weight: 400; }
+  .status span { color: var(--soft); font-weight: 300; }
+
+  button.link {
+    width: auto; min-height: 0; margin-top: 18px; padding: 6px 10px; background: none; box-shadow: none;
+    color: var(--ice); font-size: 15px; font-weight: 400; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .error {
+    width: 100%; margin-top: 20px; padding: 12px 16px;
+    border: 1.5px solid var(--error); border-radius: 16px; color: var(--error);
+    font-size: 15px; font-weight: 400;
+  }
+
+  .note {
+    width: 100%; margin-top: auto; padding: 14px 20px;
+    border: 1.5px solid var(--line); border-radius: 22px;
+    color: var(--soft); font-size: 14px; line-height: 1.4;
+  }
+  .spacer { flex: 1 0 40px; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="edith" viewBox="0 0 21 17"><rect x="3" y="0" width="3" height="1" fill="#0D0A4F"/><rect x="2" y="1" width="1" height="1" fill="#0D0A4F"/><rect x="3" y="1" width="3" height="1" fill="#D2454B"/><rect x="6" y="1" width="1" height="1" fill="#0D0A4F"/><rect x="1" y="2" width="1" height="1" fill="#0D0A4F"/><rect x="2" y="2" width="5" height="1" fill="#D2454B"/><rect x="7" y="2" width="8" height="1" fill="#0D0A4F"/><rect x="0" y="3" width="1" height="1" fill="#0D0A4F"/><rect x="1" y="3" width="5" height="1" fill="#D2454B"/><rect x="6" y="3" width="1" height="1" fill="#0D0A4F"/><rect x="7" y="3" width="2" height="1" fill="#78C4E6"/><rect x="9" y="3" width="1" height="1" fill="#0D0A4F"/><rect x="10" y="3" width="5" height="1" fill="#D2454B"/><rect x="15" y="3" width="1" height="1" fill="#0D0A4F"/><rect x="0" y="4" width="1" height="1" fill="#0D0A4F"/><rect x="1" y="4" width="4" height="1" fill="#D2454B"/><rect x="5" y="4" width="1" height="1" fill="#0D0A4F"/><rect x="6" y="4" width="2" height="1" fill="#78C4E6"/><rect x="8" y="4" width="1" height="1" fill="#0D0A4F"/><rect x="9" y="4" width="7" height="1" fill="#D2454B"/><rect x="16" y="4" width="1" height="1" fill="#0D0A4F"/><rect x="0" y="5" width="1" height="1" fill="#0D0A4F"/><rect x="1" y="5" width="3" height="1" fill="#D2454B"/><rect x="4" y="5" width="1" height="1" fill="#0D0A4F"/><rect x="5" y="5" width="2" height="1" fill="#78C4E6"/><rect x="7" y="5" width="1" height="1" fill="#0D0A4F"/><rect x="8" y="5" width="9" height="1" fill="#D2454B"/><rect x="17" y="5" width="1" height="1" fill="#0D0A4F"/><rect x="1" y="6" width="1" height="1" fill="#0D0A4F"/><rect x="2" y="6" width="1" height="1" fill="#D2454B"/><rect x="3" y="6" width="1" height="1" fill="#0D0A4F"/><rect x="4" y="6" width="2" height="1" fill="#78C4E6"/><rect x="6" y="6" width="1" height="1" fill="#0D0A4F"/><rect x="7" y="6" width="4" height="1" fill="#D2454B"/><rect x="11" y="6" width="3" height="1" fill="#0D0A4F"/><rect x="14" y="6" width="4" height="1" fill="#D2454B"/><rect x="18" y="6" width="1" height="1" fill="#0D0A4F"/><rect x="2" y="7" width="2" height="1" fill="#0D0A4F"/><rect x="4" y="7" width="1" height="1" fill="#78C4E6"/><rect x="5" y="7" width="1" height="1" fill="#0D0A4F"/><rect x="6" y="7" width="4" height="1" fill="#D2454B"/><rect x="10" y="7" width="1" height="1" fill="#0D0A4F"/><rect x="11" y="7" width="3" height="1" fill="#F3F0F0"/><rect x="14" y="7" width="1" height="1" fill="#0D0A4F"/><rect x="15" y="7" width="4" height="1" fill="#D2454B"/><rect x="19" y="7" width="1" height="1" fill="#0D0A4F"/><rect x="3" y="8" width="2" height="1" fill="#0D0A4F"/><rect x="5" y="8" width="4" height="1" fill="#D2454B"/><rect x="9" y="8" width="4" height="1" fill="#0D0A4F"/><rect x="13" y="8" width="1" height="1" fill="#F3F0F0"/><rect x="14" y="8" width="4" height="1" fill="#0D0A4F"/><rect x="18" y="8" width="2" height="1" fill="#D2454B"/><rect x="20" y="8" width="1" height="1" fill="#0D0A4F"/><rect x="3" y="9" width="1" height="1" fill="#0D0A4F"/><rect x="4" y="9" width="4" height="1" fill="#D2454B"/><rect x="8" y="9" width="1" height="1" fill="#0D0A4F"/><rect x="9" y="9" width="4" height="1" fill="#9EEDEF"/><rect x="13" y="9" width="1" height="1" fill="#0D0A4F"/><rect x="14" y="9" width="3" height="1" fill="#9EEDEF"/><rect x="17" y="9" width="3" height="1" fill="#0D0A4F"/><rect x="3" y="10" width="1" height="1" fill="#0D0A4F"/><rect x="4" y="10" width="3" height="1" fill="#D2454B"/><rect x="7" y="10" width="1" height="1" fill="#0D0A4F"/><rect x="8" y="10" width="2" height="1" fill="#9EEDEF"/><rect x="10" y="10" width="1" height="1" fill="#0D0A4F"/><rect x="11" y="10" width="2" height="1" fill="#9EEDEF"/><rect x="13" y="10" width="1" height="1" fill="#0D0A4F"/><rect x="14" y="10" width="1" height="1" fill="#9EEDEF"/><rect x="15" y="10" width="1" height="1" fill="#0D0A4F"/><rect x="16" y="10" width="2" height="1" fill="#9EEDEF"/><rect x="18" y="10" width="1" height="1" fill="#0D0A4F"/><rect x="19" y="10" width="1" height="1" fill="#D2454B"/><rect x="20" y="10" width="1" height="1" fill="#0D0A4F"/><rect x="4" y="11" width="1" height="1" fill="#0D0A4F"/><rect x="5" y="11" width="2" height="1" fill="#D2454B"/><rect x="7" y="11" width="2" height="1" fill="#0D0A4F"/><rect x="9" y="11" width="3" height="1" fill="#9EEDEF"/><rect x="12" y="11" width="1" height="1" fill="#0D0A4F"/><rect x="13" y="11" width="1" height="1" fill="#F3F0F0"/><rect x="14" y="11" width="1" height="1" fill="#0D0A4F"/><rect x="15" y="11" width="3" height="1" fill="#9EEDEF"/><rect x="18" y="11" width="1" height="1" fill="#0D0A4F"/><rect x="19" y="11" width="1" height="1" fill="#D2454B"/><rect x="20" y="11" width="1" height="1" fill="#0D0A4F"/><rect x="5" y="12" width="1" height="1" fill="#0D0A4F"/><rect x="6" y="12" width="2" height="1" fill="#D2454B"/><rect x="8" y="12" width="4" height="1" fill="#0D0A4F"/><rect x="12" y="12" width="3" height="1" fill="#F3F0F0"/><rect x="15" y="12" width="5" height="1" fill="#0D0A4F"/><rect x="5" y="13" width="1" height="1" fill="#0D0A4F"/><rect x="6" y="13" width="2" height="1" fill="#D2454B"/><rect x="8" y="13" width="1" height="1" fill="#0D0A4F"/><rect x="9" y="13" width="5" height="1" fill="#F3F0F0"/><rect x="14" y="13" width="1" height="1" fill="#0D0A4F"/><rect x="15" y="13" width="1" height="1" fill="#F3F0F0"/><rect x="16" y="13" width="1" height="1" fill="#0D0A4F"/><rect x="5" y="14" width="1" height="1" fill="#0D0A4F"/><rect x="6" y="14" width="2" height="1" fill="#D2454B"/><rect x="8" y="14" width="1" height="1" fill="#0D0A4F"/><rect x="9" y="14" width="2" height="1" fill="#F3F0F0"/><rect x="11" y="14" width="3" height="1" fill="#0D0A4F"/><rect x="14" y="14" width="2" height="1" fill="#F3F0F0"/><rect x="16" y="14" width="1" height="1" fill="#0D0A4F"/><rect x="6" y="15" width="3" height="1" fill="#0D0A4F"/><rect x="9" y="15" width="6" height="1" fill="#F3F0F0"/><rect x="15" y="15" width="1" height="1" fill="#0D0A4F"/><rect x="9" y="16" width="6" height="1" fill="#0D0A4F"/></symbol>
+</svg>
 <main>
-<div class="brand">EDITH</div>
-<form id="pair" autocomplete="off">
-  <h1>Connect your phone</h1>
-  <p class="lead" id="codeLabel">Enter the code shown in your headset.</p>
-  <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code from the headset" placeholder="0000">
-  <button id="connect" type="submit">Connect</button>
-</form>
-<div id="shared" class="hidden">
-  <h1>Location</h1>
-  <p class="lead">EDITH uses it to name what you see.</p>
-</div>
-<button id="share" type="button" class="hidden">Share location</button>
-<div id="error" class="card error hidden" role="alert"></div>
-<div id="status" class="card hidden">
-  <div class="row">
-    <div class="label">You're at</div>
-    <div id="place" class="place">Not shared yet</div>
-  </div>
-  <div class="row">
-    <div class="label">Last sent</div>
-    <div id="sent">Never</div>
-  </div>
-  <div class="row">
-    <div class="label">Compass</div>
-    <div id="compass">Off</div>
-  </div>
-</div>
-<p id="hint" class="hidden">Keep this page open with the screen on. For directions, hold the phone flat and pointing the way you face.</p>
+  <form id="pair" class="hidden" autocomplete="off">
+    <section>
+      <div class="badge"><svg class="logo" viewBox="0 0 21 17" shape-rendering="crispEdges" aria-hidden="true"><use href="#edith"/></svg></div>
+      <h1>Pair with EDITH</h1>
+      <p class="lede">Type the 4 digits floating in your headset so EDITH knows where you are.</p>
+      <div class="label" id="code-label">Pairing code</div>
+      <label class="code" id="code-boxes">
+        <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" aria-labelledby="code-label">
+        <span class="box" aria-hidden="true"></span><span class="box" aria-hidden="true"></span><span class="box" aria-hidden="true"></span><span class="box" aria-hidden="true"></span>
+      </label>
+      <button id="connect" type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.1-7-11.5a7 7 0 0 1 14 0C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Share location</span></button>
+    </section>
+  </form>
+
+  <section id="paired" class="hidden">
+    <svg class="logo portrait" viewBox="0 0 21 17" shape-rendering="crispEdges" role="img" aria-label="EDITH"><use href="#edith"/></svg>
+    <div class="check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+    <h1>You’re paired!</h1>
+    <p class="lede">Put your phone away and look back through the headset. Keep this page open while you explore so EDITH knows where you are.</p>
+    <p class="tip">For directions, hold the phone flat and pointing the way you face.</p>
+    <div id="status" class="status hidden" aria-live="polite"><div id="place"></div><span id="sent"></span><span id="compass"></span></div>
+    <button id="share" type="button" class="hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.1-7-11.5a7 7 0 0 1 14 0C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Share location</span></button>
+    <button id="recode" type="button" class="link">Use a new code</button>
+  </section>
+
+  <div id="error" class="error hidden" role="alert"></div>
+  <div class="spacer"></div>
+  <p class="note">Kept in memory for 6 hours, never saved, never shown to anyone else.</p>
 </main>
 <script>
 (function () {
   "use strict";
   // While the headset is giving directions, the position and compass go every two seconds so the arrow keeps up.
   var SEND_EVERY_MS = 10000, NAV_SEND_EVERY_MS = 2000, SEND_AFTER_METRES = 25, HEADING_FRESH_MS = 3000;
-  var navigating = false, heading = null, headingAccuracy = null, headingAt = 0, compassOn = false;
+  var navigating = false, heading = null, headingAccuracy = null, headingAt = 0, compassOn = false, compassAsked = false;
   var $ = function (id) { return document.getElementById(id); };
   var TOKEN_KEY = "edith.phone";
-  var token = null, watchId = null, wakeLock = null;
+  var token = null, watchId = null, wakeLock = null, recoding = false;
   var last = { lat: null, lon: null, at: 0 }, latest = null, sending = false, pairing = false;
+  var boxes = $("code-boxes").querySelectorAll(".box");
 
   function load() {
     try {
@@ -124,19 +172,27 @@
   }
 
   function showScreen() {
-    var paired = !!token;
-    $("codeLabel").textContent = paired ? "Enter a new code" : "Enter the code shown in your headset.";
-    $("share").classList.toggle("hidden", !paired);
-    $("status").classList.toggle("hidden", !paired);
-    $("shared").classList.toggle("hidden", !paired);
-    $("hint").classList.toggle("hidden", !paired);
-    if (!paired) $("code").focus();
+    var asking = !token || recoding;
+    $("pair").classList.toggle("hidden", !asking);
+    $("paired").classList.toggle("hidden", asking);
+    $("share").classList.toggle("hidden", watchId !== null);
+    if (asking) { drawCode(); $("code").focus(); }
+  }
+
+  function drawCode() {
+    var value = $("code").value;
+    for (var i = 0; i < boxes.length; i++) {
+      boxes[i].textContent = value.charAt(i);
+      boxes[i].classList.toggle("active", i === Math.min(value.length, boxes.length - 1));
+    }
   }
 
   function claim() {
     var code = $("code").value.replace(/\D/g, "");
     if (pairing) return;
-    if (code.length !== 4) { showError("Type the 4 digits shown in the headset."); return; }
+    if (code.length !== 4) { showError("Type the 4 digits shown in the headset."); $("code").focus(); return; }
+    // iOS asks for motion access only inside the tap itself, so the compass is asked for before the code goes out.
+    startCompass();
     pairing = true;
     $("connect").disabled = true;
     fetch("/pair/claim", {
@@ -150,12 +206,15 @@
       return res.json();
     }).then(function (reply) {
       saveToken(reply.phone_token);
+      recoding = false;
       $("code").value = "";
       showError("");
       showScreen();
+      start();
     }).catch(function (err) {
       showError(err instanceof TypeError ? "Cannot reach the backend. Check the phone's connection." : err.message);
       $("code").value = "";
+      drawCode();
       $("code").focus();
     }).finally(function () { pairing = false; $("connect").disabled = false; });
   }
@@ -173,9 +232,15 @@
     return 12742000 * Math.asin(Math.sqrt(a));
   }
 
-  function render(summary) {
-    $("place").textContent = summary.place || (summary.resolving ? "Finding where you are..." : "Place not found yet");
+  function render(summary, accuracy) {
+    $("place").textContent = summary.place ? "You're at " + summary.place :
+      (summary.resolving ? "Finding where you are..." : "Place not found yet");
+    $("sent").textContent = "Sent " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) +
+      ", accurate to " + Math.round(accuracy) + " m";
+    $("status").classList.remove("hidden");
   }
+
+  function showCompass(text) { $("compass").textContent = "Compass: " + text; }
 
   function send(position) {
     if (sending || !token) return;
@@ -205,10 +270,9 @@
       return res.json();
     }).then(function (summary) {
       last = { lat: body.lat, lon: body.lon, at: Date.now() };
-      $("sent").textContent = new Date().toLocaleTimeString() + ", accurate to " + Math.round(c.accuracy) + " m";
       showError("");
       navigating = !!summary.navigating;
-      render(summary);
+      render(summary, c.accuracy);
     }).catch(function (err) {
       showError(err instanceof TypeError ? "Cannot reach the backend. Check the phone's connection." : err.message);
     }).finally(function () { sending = false; });
@@ -238,26 +302,28 @@
     var turn = screen.orientation && typeof screen.orientation.angle === "number" ? screen.orientation.angle : (window.orientation || 0);
     heading = Math.round((((h + turn) % 360) + 360) % 360 * 10) / 10;
     headingAt = Date.now();
-    if (!compassOn) { compassOn = true; $("compass").textContent = "On"; }
+    if (!compassOn) { compassOn = true; showCompass("on"); }
   }
 
   function listenCompass() {
     if ("ondeviceorientationabsolute" in window) window.addEventListener("deviceorientationabsolute", onOrientation);
     else window.addEventListener("deviceorientation", onOrientation);
-    setTimeout(function () { if (!compassOn) $("compass").textContent = "Not available on this phone"; }, 4000);
+    setTimeout(function () { if (!compassOn) showCompass("not available on this phone"); }, 4000);
   }
 
   // iOS asks for motion access, and only inside the tap itself, before anything else waits.
   function startCompass() {
+    if (compassAsked) return;
+    compassAsked = true;
     var D = window.DeviceOrientationEvent;
     if (D && typeof D.requestPermission === "function") {
       D.requestPermission().then(function (answer) {
-        if (answer === "granted") listenCompass(); else $("compass").textContent = "Motion access was denied";
-      }).catch(function () { $("compass").textContent = "Motion access was denied"; });
+        if (answer === "granted") listenCompass(); else { compassAsked = false; showCompass("motion access was denied"); }
+      }).catch(function () { compassAsked = false; showCompass("motion access was denied"); });
     } else if (D) {
       listenCompass();
     } else {
-      $("compass").textContent = "Not available on this phone";
+      showCompass("not available on this phone");
     }
   }
 
@@ -276,23 +342,23 @@
   function stop() {
     if (watchId !== null) navigator.geolocation.clearWatch(watchId);
     watchId = null;
-    $("share").disabled = false;
-    $("share").textContent = "Share location";
+    $("share").classList.toggle("hidden", !token);
   }
 
   function unpair() {
     stop();
     saveToken(null);
+    $("status").classList.add("hidden");
     showScreen();
   }
 
   function start() {
     if (!token) { showScreen(); return; }
+    startCompass();
+    if (watchId !== null) return;
     if (!navigator.geolocation) { showError("This browser has no location support."); return; }
-    if (!compassOn) startCompass();
     showError("");
-    $("share").disabled = true;
-    $("share").textContent = "Sharing location";
+    $("share").classList.add("hidden");
     holdWake();
     watchId = navigator.geolocation.watchPosition(onPosition, onGeoError,
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
@@ -308,11 +374,14 @@
   });
 
   $("share").addEventListener("click", start);
+  $("recode").addEventListener("click", function () { recoding = true; showError(""); showScreen(); });
   $("pair").addEventListener("submit", function (e) { e.preventDefault(); claim(); });
   $("code").addEventListener("input", function () {
     this.value = this.value.replace(/\D/g, "").slice(0, 4);
-    if (this.value.length === 4) claim();
+    drawCode();
   });
+  $("code").addEventListener("focus", function () { $("code-boxes").classList.add("focused"); });
+  $("code").addEventListener("blur", function () { $("code-boxes").classList.remove("focused"); });
   load();
 })();
 </script>

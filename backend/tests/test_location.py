@@ -296,11 +296,11 @@ async def test_the_phone_page_is_served_without_the_device_token_and_holds_no_se
     assert '"/pair/claim"' in response.text and "X-Edith-Phone" in response.text
 
 
-async def test_the_phone_page_offers_a_code_box_even_while_paired(http):
+async def test_the_phone_page_offers_a_new_code_while_paired(http):
     page = (await http.get("/phone")).text
-    assert '<form id="pair" autocomplete="off">' in page, "the code form is never hidden by markup"
-    assert 'paired ? "Enter a new code"' in page
-    assert '$("pair").classList' not in page, "the script never hides the code form"
+    assert '<button id="recode" type="button" class="link">Use a new code</button>' in page
+    assert '$("recode").addEventListener("click", function () { recoding = true;' in page
+    assert "var asking = !token || recoding;" in page, "the code form shows while recoding even with a token"
 
 
 async def test_no_other_route_is_open_without_the_device_token(http):

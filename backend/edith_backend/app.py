@@ -275,7 +275,9 @@ def create_app(
         return HTMLResponse(_PHONE_PAGE, headers={
             "Cache-Control": "no-store",
             "Referrer-Policy": "no-referrer",
-            "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+            "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; "
+                                       "style-src 'unsafe-inline' https://fonts.googleapis.com; "
+                                       "font-src https://fonts.gstatic.com; "
                                        "connect-src 'self'; base-uri 'none'; form-action 'none'",
         })
 
