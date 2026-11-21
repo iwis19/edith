@@ -31,6 +31,8 @@ class LookRecord:
     fact_sources: list[dict]
     rarity: str | None
     duration_ms: int
+    kind: str | None = None
+    place: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,12 +136,12 @@ class PostgresStore:
                 )
                 await conn.execute(
                     """insert into looks (id, profile_id, client_look_id, source, captured_at, width, height, status,
-                           name, confidence, fact, fact_sources, rarity, duration_ms)
-                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                           name, confidence, fact, fact_sources, rarity, duration_ms, kind, place)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         record.look_ref, record.profile_id, record.client_look_id, record.source, record.captured_at,
                         record.width, record.height, record.status, record.name, record.confidence, record.fact,
-                        Jsonb(record.fact_sources), record.rarity, record.duration_ms,
+                        Jsonb(record.fact_sources), record.rarity, record.duration_ms, record.kind, record.place,
                     ),
                 )
         except Exception:

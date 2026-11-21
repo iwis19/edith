@@ -4,6 +4,7 @@ import uuid
 from edith_backend.app import create_app
 from edith_backend.config import Settings
 from edith_backend.db import DisabledStore
+from edith_backend.events import LookDetails, Name, RarityEvent
 
 from .conftest import PROFILE, client_for, look_files, make_jpeg, ndjson
 
@@ -113,3 +114,18 @@ async def test_without_a_database_the_memory_routes_answer_503(settings):
         responses = [await collect(c, "0" * 32), await c.get("/memories", headers=HEADERS),
                      await c.get("/memories/1/image", headers=HEADERS)]
     assert [(r.status_code, r.json()["error"]["code"]) for r in responses] == [(503, "db_unavailable")] * 3
+
+
+class DetailedAgent:
+    async def run(self, image, meta, profile_id):
+        yield Name(name="a red mug", confidence=0.8)
+        yield LookDetails(kind="mug", place="Waterloo, Ontario, Canada")
+        yield RarityEvent(tier="common")
+
+
+async def test_a_memory_copies_the_looks_kind_and_place(settings, store):
+    async with client_for(create_app(settings, agent=DetailedAgent(), store=store)) as c:
+        ref, _ = await look(c)
+        await collect(c, ref)
+        [memory] = (await c.get("/memories", headers=HEADERS)).json()["memories"]
+    assert (memory["kind"], memory["place"]) == ("mug", "Waterloo, Ontario, Canada")

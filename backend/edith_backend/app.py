@@ -22,7 +22,7 @@ from .agents.ask import AskError, AskRequest, AskSession, LiveAsk, make_live_ask
 from .agents.card import CardAgent, make_card_agent
 from .config import Settings
 from .db import LookRecord, Store, StoreUnavailable, make_store
-from .events import Accepted, CollectMeta, Done, ErrorEvent, Fact, LookEvent, LookMeta, Name, RarityEvent
+from .events import Accepted, CollectMeta, Done, ErrorEvent, Fact, LookDetails, LookEvent, LookMeta, Name, RarityEvent
 from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
@@ -138,7 +138,7 @@ def create_app(
     # Made here and not per request: only the phone's position ever uses the resolver's client.
     locations = locations or Locations(HttpResolver(httpx.AsyncClient()))
     pairings = pairings or Pairings()
-    agent = agent or make_card_agent(settings)
+    agent = agent or make_card_agent(settings, locations.whereabouts)
     store = store or make_store(settings.database_url, settings.db_pool_max)
     ask = ask or make_live_ask(settings)
     # Looks still streaming, by look_ref, so a /collect that arrives before the Look is recorded can wait for it. A
@@ -192,11 +192,11 @@ def create_app(
         )
 
     @app.post("/ask/session")
-    async def ask_session(request: AskRequest | None = Body(None), _: UUID = Depends(profile)) -> AskSession:
+    async def ask_session(request: AskRequest | None = Body(None), profile_id: UUID = Depends(profile)) -> AskSession:
         if ask is None:
             raise ApiError(503, "ask_unavailable", "Ask needs GEMINI_API_KEY on the backend.")
         try:
-            return await ask.start(request or AskRequest())
+            return await ask.start(request or AskRequest(), locations.whereabouts(profile_id))
         except AskError as exc:
             log.warning("ask session failed: %s", exc)
             raise ApiError(502, "ask_failed", "Gemini did not give a session token.")
@@ -351,6 +351,7 @@ async def _stream(
 
     marks: dict[str, int] = {}
     seen: dict[str, LookEvent] = {}
+    details: LookDetails | None = None
     final: LookEvent
     events = agent.run(image, meta, profile_id)
     # The budget is spent only while waiting on the agent. Time suspended at a yield belongs to the client, and a
@@ -368,6 +369,9 @@ async def _stream(
             budget -= loop.time() - waited_from
             if event is None:
                 break
+            if isinstance(event, LookDetails):
+                details = event
+                continue
             line = stamp(event)
             # The first name event, pending or not, is when the card's first words appear.
             marks.setdefault(event.type, event.t_ms)
@@ -395,7 +399,7 @@ async def _stream(
     status = "done" if isinstance(final, Done) else "error"
     # Started before the last event goes out: the headset hangs up once it reads that event, which cancels anything
     # this generator still awaits.
-    record = _record(look_ref, profile_id, meta, size, status, seen, elapsed_ms())
+    record = _record(look_ref, profile_id, meta, size, status, seen, details, elapsed_ms())
     task = asyncio.create_task(store.record_look(record))
     _recording.add(task)
     task.add_done_callback(_recording.discard)
@@ -413,6 +417,7 @@ def _record(
     size: tuple[int, int],
     status: str,
     seen: dict[str, LookEvent],
+    details: LookDetails | None,
     duration_ms: int,
 ) -> LookRecord:
     name, fact, rarity = seen.get("name"), seen.get("fact"), seen.get("rarity")
@@ -431,6 +436,8 @@ def _record(
         fact_sources=[s.model_dump() for s in fact.sources] if isinstance(fact, Fact) else [],
         rarity=rarity.tier if isinstance(rarity, RarityEvent) else None,
         duration_ms=duration_ms,
+        kind=details.kind if details else None,
+        place=details.place if details else None,
     )
 
 

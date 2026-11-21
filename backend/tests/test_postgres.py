@@ -88,7 +88,8 @@ async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(
     await store.open()
     try:
         profile, other = uuid.uuid4(), uuid.uuid4()
-        first, second, failed = a_look(profile), a_look(profile, name="lamp", rarity="epic"), a_look(
+        first = a_look(profile, kind="mug", place="Waterloo, Ontario, Canada")
+        second, failed = a_look(profile, name="lamp", rarity="epic"), a_look(
             profile, status="error", name=None, fact=None, rarity=None)
         for record in (first, second, failed, a_look(other)):
             await store.record_look(record)
@@ -103,6 +104,7 @@ async def test_collecting_copies_the_stored_look_once_and_lists_it_newest_first(
         memories = await store.list_memories(profile, 10)
         assert [(m.id, m.name, m.rarity) for m in memories] == [(second_id, "lamp", "epic"), (first_id, "mug", "rare")]
         assert memories[1].sources == first.fact_sources
+        assert [(m.kind, m.place) for m in memories] == [(None, None), ("mug", "Waterloo, Ontario, Canada")]
         assert await store.list_memories(profile, 1) == memories[:1]
         assert await store.list_memories(other, 10) == []
         assert await store.memory_image(profile, first_id) == b"crop-1"

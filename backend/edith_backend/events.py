@@ -62,5 +62,14 @@ class ErrorEvent(_Event):
     message: str
 
 
-CardEvent = Name | Fact | RarityEvent
-LookEvent = Accepted | CardEvent | Done | ErrorEvent
+class LookDetails(BaseModel):
+    """What the Card agent learned about the Look that the headset does not need: it is recorded with the Look and never
+    sent down the stream."""
+
+    kind: str
+    place: str | None = None
+
+
+StreamedEvent = Name | Fact | RarityEvent
+CardEvent = StreamedEvent | LookDetails
+LookEvent = Accepted | StreamedEvent | Done | ErrorEvent

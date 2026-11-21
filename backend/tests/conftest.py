@@ -58,8 +58,8 @@ class RecordingStore:
         if record is None or record.status != "done" or record.name is None:
             return None
         memory = Memory(
-            id=len(self.memories) + 1, look_ref=look_ref, name=record.name, kind=None, fact=record.fact,
-            sources=record.fact_sources, rarity=record.rarity, place=None, created_at=datetime.now(UTC),
+            id=len(self.memories) + 1, look_ref=look_ref, name=record.name, kind=record.kind, fact=record.fact,
+            sources=record.fact_sources, rarity=record.rarity, place=record.place, created_at=datetime.now(UTC),
         )
         self.memories[memory.id] = (memory, profile_id, image)
         return memory.id

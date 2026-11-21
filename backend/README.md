@@ -25,6 +25,8 @@ Gemini Flash-Lite models measured on the Card agent's own prompts, with 5 headse
 
 The card shows the fact, so name plus fact is the time that counts. On the same photos `openai` gave the final name in about 0.6 to 1.3 s and the fact by about 1.6 to 2.5 s.
 
+When the phone has shared a position within the last 30 minutes (see [Phone location](#phone-location)), the naming call is also told the place and the nearest named sights, in place of the recent photos' places. The Look's `kind` and `place` are recorded with it and copied into its memory, with the phone's place preferred over the photo's guess. They are not sent in the stream.
+
 Without the chosen provider's key, a stub agent streams canned cards on the real event schedule, so the pipe works with no keys at all. The facts told and the places seen are kept per profile in process memory: places for 6 h, and both are lost on restart.
 
 ## API
@@ -35,6 +37,8 @@ Every endpoint except `/health` needs two headers:
 | --- | --- |
 | `X-Edith-Token` | The device token, when `DEVICE_TOKEN` is set on the backend |
 | `X-Edith-Profile` | The profile's UUID, made by the headset when a profile is created |
+
+The phone cannot send either, so `GET /phone`, `POST /pair/claim` and `POST /location` answer without them and check their own credential instead (see [Phone location](#phone-location)).
 
 ### `GET /health`
 
@@ -103,6 +107,55 @@ The response is `{"url", "setup", "model"}`:
 | 503 | `ask_unavailable` | `GEMINI_API_KEY` is not set |
 | 502 | `ask_failed` | Gemini refused to mint a token |
 
+### Phone location
+
+The headset has no GPS, so the phone that runs its hotspot pairs with the backend and shares its position. The position is kept in process memory per profile for 6 h after the last fix, is never written to the database, and is never returned by any route. The routes below give back only the place name and the nearest sight names.
+
+The headset pairs like this:
+
+1. `POST /pair` returns a 4-digit code and the address to open on the phone.
+2. The person opens that address on the phone, types the code and taps Share location.
+3. The headset polls `GET /pair/{code}` until `paired` is `true`.
+4. The phone page sends its position to `POST /location` about every 10 s, or after moving 25 m.
+
+A position becomes a place name and named sights through OpenStreetMap: Nominatim for the address and Overpass for the buildings, landmarks and campuses around the point, with no list of places kept in this repository. The backend sends each service the position rounded to about 11 m and a `User-Agent` of `EDITH/<version>` only. It asks Nominatim at most once a second, remembers each answer for 30 min per rounded point, and looks a profile up again only after it moves 75 m or its answer is 10 min old.
+
+The Look and Ask prompts use a position only while its latest fix is at most 30 min old. `Locations.whereabouts(profile_id)` in `edith_backend/location.py` returns the place and the sights for the Scan agent to call, and `describe_place` turns them into prompt text.
+
+#### `POST /pair`
+
+Needs the device token and profile headers. Returns `{"code": "4821", "expires_in_s": 600, "phone_url": "..."}`. A new call replaces the profile's unclaimed code. `phone_url` is `PHONE_LINK` when set, else this backend's `/phone`.
+
+#### `GET /pair/{code}`
+
+Needs the device token and profile headers. Returns `{"paired": bool, "expired": bool}`. A code that is unknown, expired or issued to another profile reads as `expired`.
+
+#### `POST /pair/claim`
+
+Needs no headers. The body is `{"code": "4821"}`. A code works once and lives 10 min. Returns `{"phone_token", "expires_at"}`: a signed token for that profile, valid 30 days, that works only on `POST /location`. With `DEVICE_TOKEN` set, tokens survive a restart; without it they do not.
+
+| Status | `error.code` | Meaning |
+| --- | --- | --- |
+| 404 | `bad_code` | The code is wrong, used or expired |
+| 429 | `too_many_tries` | 5 wrong codes from one address or 10 in total within 10 min; every claim is refused until the window passes |
+
+#### `GET /phone`
+
+Needs no headers. Returns the phone page, which holds no secret. It keeps the phone token in the phone's own storage.
+
+#### `POST /location`
+
+Needs `X-Edith-Phone` with the phone token, and no other headers. The body, at most 4 KB, is `{"lat", "lon", "accuracy_m", "taken_at"}`. Returns at once with `{"place", "sights_count", "nearest", "resolving"}`, where `place` is `null` until the first lookup finishes.
+
+| Status | `error.code` | Meaning |
+| --- | --- | --- |
+| 401 | `bad_phone_token` | The token is missing, wrong or expired; the phone asks for a new code |
+| 422 | `invalid_request` | The position is outside the earth's range |
+
+#### `GET /location`
+
+Needs the device token and profile headers. Returns the same summary as `POST /location` when a position is kept for the profile, so the headset can skip pairing, else 404 `no_location`.
+
 ## Set up
 
 Install [uv](https://docs.astral.sh/uv/), then run from this folder:
@@ -130,6 +183,12 @@ Ask settings:
 | `LIVE_MODEL` | `gemini-3.8-live` | The Gemini Live model Ask talks to |
 | `LIVE_VOICE` | `Kore` | The prebuilt Live voice. Gemini silently falls back to its default for a name it does not know, so the backend accepts only listed names |
 | `LIVE_SEARCH` | `false` | Adds Google Search to the session. A free-tier key refuses the session with it on |
+
+Phone location settings:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `PHONE_LINK` | empty | The address the headset shows for the phone page. Empty shows this backend's own `/phone`. Set a short link that redirects there when the domain is too long to type |
 
 To see a Look stream end to end against a running backend:
 
@@ -179,7 +238,11 @@ Then set `TEST_DATABASE_URL=postgresql://postgres:edith@127.0.0.1:55432/postgres
 - `edith_backend/agents/card.py`: the `CardAgent` protocol, the stub, and `make_card_agent`, which picks the agent from `CARD_PROVIDER`.
 - `edith_backend/agents/card_model.py`: the two-call Card agent, its line parser, and the fact and place histories.
 - `edith_backend/agents/writers.py`: the OpenAI and Gemini streaming writers.
-- `edith_backend/events.py`: the stream's event types and the Look metadata.
+- `edith_backend/events.py`: the stream's event types, the Look metadata and the details recorded but not streamed.
+- `edith_backend/pairing.py`: pairing codes with their throttle, and the signed phone tokens.
+- `edith_backend/location.py`: the phone's position per profile, kept in memory, and the place description for prompts.
+- `edith_backend/resolve.py`: Nominatim and Overpass lookups with the cache and the rate limit.
+- `edith_backend/static/phone.html`: the page the phone opens.
 - `edith_backend/db.py`: the pooled Postgres store, or a no-op store with no database.
 - `edith_backend/migrate.py` and `edith_backend/migrations/`: the schema, including the `memories` table that `/collect` fills.
 - `tools/stream_check.py`: prints the arrival time of each event of one Look.
