@@ -212,16 +212,19 @@ async def _stream(
     seen: dict[str, LookEvent] = {}
     final: LookEvent
     events = agent.run(image, meta, profile_id)
-    # The deadline covers only waits on the agent. Time spent suspended at a yield belongs to the client, and a timeout
-    # firing there would cancel the response's send instead of the agent.
-    deadline = asyncio.get_running_loop().time() + settings.look_timeout_s
+    # The budget is spent only while waiting on the agent. Time suspended at a yield belongs to the client, and a
+    # timeout firing there would cancel the response's send instead of the agent.
+    loop = asyncio.get_running_loop()
+    budget = settings.look_timeout_s
     try:
         accepted = Accepted(look_id=meta.look_id, look_ref=look_ref.hex)
         yield stamp(accepted)
         marks["accepted"] = accepted.t_ms
         while True:
-            async with asyncio.timeout_at(deadline):
+            waited_from = loop.time()
+            async with asyncio.timeout(budget):
                 event = await anext(events, None)
+            budget -= loop.time() - waited_from
             if event is None:
                 break
             line = stamp(event)

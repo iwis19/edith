@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from edith_backend.app import _stream, create_app
-from edith_backend.events import LookMeta, Name
+from edith_backend.events import Fact, LookMeta, Name
 
 from .conftest import PROFILE, RecordingStore, look_files, make_jpeg
 
@@ -58,8 +58,13 @@ async def test_a_body_with_no_length_is_cut_off_at_the_cap(settings, store):
 
 
 class QuickAgent:
+    """Each event takes 10 ms of real waiting, so the deadline is armed while the agent is awaited."""
+
     async def run(self, image, meta, profile_id):
+        await asyncio.sleep(0.01)
         yield Name(name="a mug", confidence=0.9)
+        await asyncio.sleep(0.01)
+        yield Fact(text="Handles came late to European cups.", sources=[])
 
 
 async def test_the_look_deadline_does_not_count_time_the_client_spends_reading(settings, store):
@@ -70,7 +75,7 @@ async def test_the_look_deadline_does_not_count_time_the_client_spends_reading(s
     async for line in stream:
         types.append(json.loads(line)["type"])
         await asyncio.sleep(0.15)
-    assert types == ["accepted", "name", "done"]
+    assert types == ["accepted", "name", "fact", "done"]
 
 
 class SlowStore(RecordingStore):
