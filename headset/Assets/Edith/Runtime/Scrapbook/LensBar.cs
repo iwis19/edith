@@ -15,6 +15,8 @@ namespace Edith.Scrapbook
         static readonly Vector3 Centre = new Vector3(0f, -0.205f, 0.42f);
         static readonly Vector2 TabSize = new Vector2(200f, 72f), ChipSize = new Vector2(176f, 72f);
         const float Gap = 16f;
+        // A label wider than its chip widens the chip, keeping this much clear on each side.
+        const float LabelInset = 20f;
         const int FontSize = 28;
         // A pinch this near a chip still chooses it: a fingertip is about this much wider than the chip's gap.
         const float HitMargin = 0.002f;
@@ -94,20 +96,28 @@ namespace Edith.Scrapbook
 
         void Row(IReadOnlyList<Chip> chips, Vector2 size, float y)
         {
-            var x = -(chips.Count * size.x + (chips.Count - 1) * Gap) * 0.5f + size.x * 0.5f;
+            var first = shown;
+            var width = -Gap;
             foreach (var chip in chips)
             {
                 if (shown == pills.Count) pills.Add(NewPill());
                 var pill = pills[shown++];
                 pill.Chip = chip;
                 pill.Backing.gameObject.SetActive(true);
-                pill.Backing.rectTransform.sizeDelta = size;
-                pill.Backing.rectTransform.anchoredPosition = new Vector2(x, y);
                 pill.Backing.color = chip.Selected ? Chosen : Unchosen;
-                pill.Label.rectTransform.sizeDelta = size;
                 pill.Label.text = chip.Label;
                 pill.Label.color = chip.Selected ? Dark : chip.Kind == ChipKind.Tier ? RarityColors.For(chip.Tier) : Bright;
-                x += size.x + Gap;
+                var fitted = new Vector2(Mathf.Max(size.x, pill.Label.preferredWidth + 2f * LabelInset), size.y);
+                pill.Backing.rectTransform.sizeDelta = fitted;
+                pill.Label.rectTransform.sizeDelta = fitted;
+                width += fitted.x + Gap;
+            }
+            var x = -width * 0.5f;
+            for (var i = first; i < shown; i++)
+            {
+                var rect = pills[i].Backing.rectTransform;
+                rect.anchoredPosition = new Vector2(x + rect.sizeDelta.x * 0.5f, y);
+                x += rect.sizeDelta.x + Gap;
             }
         }
 
