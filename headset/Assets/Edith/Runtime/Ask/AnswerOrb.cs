@@ -91,12 +91,12 @@ namespace Edith.Ask
             var regular = Theme.Regular(font);
             // The ring behind the disc: it breathes while EDITH listens and swells with the voice while it speaks.
             orb.haloGlass = Glass.Build(rect, "Halo", Vector2.one * diameter, diameter * 0.5f, material);
-            orb.haloGlass.SetLook(Color.clear, Color.clear, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f), Color.clear);
+            orb.haloGlass.SetLook(Color.clear, Color.clear, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f), Color.clear);
             orb.halo = orb.haloGlass.Rect;
 
             var body = Glass.Build(rect, "Disc", Vector2.one * diameter, diameter * 0.5f, material);
-            body.SetLook(Theme.DiscFill, new Color(1f, 1f, 1f, 0.1f), Theme.Cyan,
-                new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.38f));
+            body.SetLook(Theme.DiscFill, new Color(1f, 1f, 1f, 0.1f), Theme.Accent,
+                new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.38f));
             orb.disc = body.Rect;
             var head = Theme.Pixels(orb.disc, "Head", Theme.Head, material);
             var headWidth = diameter * HeadShare;
@@ -303,16 +303,16 @@ namespace Edith.Ask
         /// voice's loudness while speaking.
         void Breathe()
         {
-            var cyan = Theme.Cyan;
+            var accent = Theme.Accent;
             if (listening)
             {
                 var swell = 0.5f + 0.5f * Mathf.Sin(Time.time * PulseRate);
                 halo.localScale = Vector3.one * (1f + 0.22f * swell);
-                haloGlass.SetOutline(new Color(cyan.r, cyan.g, cyan.b, Mathf.Lerp(0.55f, 0.08f, swell)));
+                haloGlass.SetOutline(new Color(accent.r, accent.g, accent.b, Mathf.Lerp(0.55f, 0.08f, swell)));
                 return;
             }
             halo.localScale = Vector3.one * (1f + 0.3f * level);
-            haloGlass.SetOutline(new Color(cyan.r, cyan.g, cyan.b, 0.12f + 0.4f * level));
+            haloGlass.SetOutline(new Color(accent.r, accent.g, accent.b, 0.12f + 0.4f * level));
         }
     }
 }

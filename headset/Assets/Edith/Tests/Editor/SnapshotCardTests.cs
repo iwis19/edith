@@ -40,20 +40,18 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void The_card_says_looking_until_the_fact_then_shows_the_name_above_it()
+        public void The_card_says_looking_until_the_fact_and_never_shows_the_name()
         {
             var snapshot = room.Place(Box(0f));
             snapshot.Apply(LookEvent.Named("Red m", pending: true));
             Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
             snapshot.Apply(LookEvent.Named("Red mug"));
             Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
-            Assert.AreEqual("Red mug", Shown(snapshot, "Title"));
             snapshot.Apply(LookEvent.Fact("Mugs are old."));
             snapshot.Card.Advance(10f);
             snapshot.Apply(LookEvent.Done());
             Assert.AreEqual("Mugs are old.", Shown(snapshot, "Fact"));
-            Assert.AreEqual("Red mug", Shown(snapshot, "Title"));
-            Assert.AreEqual(2, snapshot.GetComponentsInChildren<Text>().Length, "a title and a body");
+            Assert.AreEqual(1, snapshot.GetComponentsInChildren<Text>().Length, "the fact alone");
         }
 
         [Test]
@@ -65,7 +63,6 @@ namespace Edith.Tests
             snapshot.Card.Advance(10f);
             snapshot.Apply(LookEvent.Done());
             Assert.AreEqual("Red mug", Shown(snapshot, "Fact"));
-            Assert.AreEqual("", Shown(snapshot, "Title"), "the name is the fact, so it is not said twice");
         }
 
         [Test]

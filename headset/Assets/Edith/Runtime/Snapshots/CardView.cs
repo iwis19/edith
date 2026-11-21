@@ -6,8 +6,8 @@ using UnityEngine.UI;
 namespace Edith.Snapshots
 {
     /// A snapshot's card: the photo sits in a liquid-glass panel whose outline and halo take the rarity's colour, with
-    /// a thin frame and four white sight corners around the photo. Under it, past a divider with a dot, the name in
-    /// bold and the fact below it, "Looking…" until the fact types out. The photo's rect is in millimetres.
+    /// a thin frame and four white sight corners around the photo. Under it, past a divider with a dot, the fact,
+    /// "Looking…" until it types out. The photo's rect is in millimetres.
     sealed class CardView
     {
         // Text is laid out in quarter millimetres and scaled down, so the font is rasterised sharply at this size.
@@ -19,24 +19,23 @@ namespace Edith.Snapshots
         const float GapMm = 5f;
         const float MinTextWidthMm = 90f;
         const int FactSize = 36;
-        const int TitleSize = 44;
         const float LineHeight = 1.25f;
         const int MinLines = 2;
         const float ArmMm = 6f, ThickMm = 1.3f, InsetMm = 3.5f;
-        // The divider's distance under the photo, the gap from it to the name, and from the name to the fact.
-        const float DividerMm = 5f, TitleGapMm = 6f, FactGapMm = 1.5f, DotMm = 2.6f;
+        // The divider's distance under the photo, and the gap from it to the fact.
+        const float DividerMm = 5f, TextGapMm = 6f, DotMm = 2.6f;
         // The thin frame round the photo: how far out from it and its corner radius. The photo's own corners are cut
         // to sit concentric inside it.
         const float FrameEdgeMm = 3f, FrameRadiusMm = 7f;
         static readonly Color Quiet = Theme.Muted;
-        static readonly Color Waiting = new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f);
+        static readonly Color Waiting = new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f);
 
         // Sizes above are for a card at arm's length. A card hung farther away, such as one on the object a scan pin
         // marked, grows its glass, gap and text with its distance so they look the same size from the eye.
         const float ArmsLengthMeters = 0.45f;
 
         Glass glass, frame;
-        Text title, fact;
+        Text fact;
         RectTransform column, divider;
         float scale;
         Vector2 photoMm;
@@ -60,7 +59,7 @@ namespace Edith.Snapshots
             view.BuildGlass(photo, material);
             view.BuildCorners(photo, material);
             view.BuildDivider(photo, material);
-            view.BuildText(photo, Theme.Regular(font), Theme.SemiBold(font), material);
+            view.BuildText(photo, Theme.Regular(font), material);
             view.Fit();
             return view;
         }
@@ -74,11 +73,9 @@ namespace Edith.Snapshots
             else
                 glass.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.12f), Waiting, Color.clear);
 
-            var rimLook = rated ?? Theme.Cyan;
+            var rimLook = rated ?? Theme.Accent;
             frame.SetLook(Color.clear, Color.clear, new Color(rimLook.r, rimLook.g, rimLook.b, 0.75f), Color.clear);
 
-            // The name leads once it arrives, unless the card has nothing else to say, when the name is the fact.
-            title.text = card.Phase == LookPhase.Failed || card.Name == card.Fact.Visible ? "" : card.Name;
             if (caption != null)
             {
                 fact.text = caption;
@@ -99,22 +96,17 @@ namespace Edith.Snapshots
                 fact.text = card.Fact.Render();
                 fact.color = Theme.Ice;
             }
-            var key = fact.text.Length * 64 + Mathf.Min(title.text.Length, 63);
-            if (key != fittedLength) Fit(key);
+            if (fact.text.Length != fittedLength) Fit();
         }
 
         /// Sizes the glass to the photo and the text under it, and keeps the photo's top and sides where they were.
-        void Fit(int key = 0)
+        void Fit()
         {
-            fittedLength = key;
-            var titleUnits = title.text.Length > 0 ? TitleSize * LineHeight : 0f;
-            fact.rectTransform.anchoredPosition = new Vector2(0f, -(titleUnits > 0f ? titleUnits + FactGapMm * TextUnitsPerMm : 0f));
-            var textUnits = titleUnits + (titleUnits > 0f ? FactGapMm * TextUnitsPerMm : 0f)
-                + Mathf.Max(fact.preferredHeight, FactSize * LineHeight * MinLines);
-            var textMm = textUnits * scale / TextUnitsPerMm;
+            fittedLength = fact.text.Length;
+            var textMm = Mathf.Max(fact.preferredHeight, FactSize * LineHeight * MinLines) * scale / TextUnitsPerMm;
             var pad = PadMm * scale;
             var width = textWidthMm + 2f * pad;
-            var height = photoMm.y + (DividerMm + TitleGapMm) * scale + textMm + 2f * pad;
+            var height = photoMm.y + (DividerMm + TextGapMm) * scale + textMm + 2f * pad;
             glass.Resize(new Vector2(width, height));
             glass.Rect.anchoredPosition = new Vector2(0f, photoMm.y * 0.5f + pad - height * 0.5f);
         }
@@ -128,10 +120,10 @@ namespace Edith.Snapshots
             divider = new GameObject("Divider", typeof(RectTransform)).GetComponent<RectTransform>();
             Anchor(divider, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0f, -(photoMm.y * 0.5f + DividerMm * scale)));
             var half = textWidthMm * 0.5f - DotMm * scale * 3f;
-            var line = new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.45f);
+            var line = new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.45f);
             Segment(material, new Vector2(half, 0.5f * scale), new Vector2(-(half * 0.5f + DotMm * scale * 1.5f), 0f), line);
             Segment(material, new Vector2(half, 0.5f * scale), new Vector2(half * 0.5f + DotMm * scale * 1.5f, 0f), line);
-            Segment(material, Vector2.one * (DotMm * scale), Vector2.zero, Theme.Cyan, round: true);
+            Segment(material, Vector2.one * (DotMm * scale), Vector2.zero, Theme.Accent, round: true);
         }
 
         void Segment(Material material, Vector2 size, Vector2 position, Color color, bool round = false)
@@ -179,16 +171,14 @@ namespace Edith.Snapshots
             Anchor(image.rectTransform, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), size, position);
         }
 
-        void BuildText(RectTransform photo, Font regular, Font semibold, Material material)
+        void BuildText(RectTransform photo, Font regular, Material material)
         {
             column = new GameObject("Text", typeof(RectTransform)).GetComponent<RectTransform>();
             Anchor(column, photo, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), Vector2.zero,
-                new Vector2(0f, -(photoMm.y * 0.5f + (DividerMm + TitleGapMm) * scale)));
+                new Vector2(0f, -(photoMm.y * 0.5f + (DividerMm + TextGapMm) * scale)));
             column.localScale = Vector3.one * (scale / TextUnitsPerMm);
 
             var lineWidth = textWidthMm * TextUnitsPerMm / scale;
-            title = Label("Title", column, semibold, material, TitleSize, new Vector2(lineWidth, TitleSize * LineHeight));
-            title.color = Theme.Ice;
             fact = Label("Fact", column, regular, material, FactSize, new Vector2(lineWidth, FactSize * LineHeight * MinLines));
             // TypedText hides the part not yet typed with a transparent colour tag.
             fact.supportRichText = true;

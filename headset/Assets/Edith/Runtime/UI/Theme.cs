@@ -4,21 +4,27 @@ using UnityEngine.UI;
 
 namespace Edith.UI
 {
-    /// The look of EDITH's headset UI: deep-teal liquid glass with a cyan accent, Jost type and the pixel-art EDITH.
-    /// Everything is drawn from a handful of baked sprites, so panels of any size share them.
+    /// The look of EDITH's headset UI: lightly tinted liquid glass with a pale ice-blue accent, Jost type and the
+    /// pixel-art EDITH. Everything is drawn from a handful of baked sprites, so panels of any size share them.
     public static class Theme
     {
-        public static readonly Color Cyan = new Color32(110, 225, 255, 255);
-        /// Body text: a white with a trace of ice.
-        public static readonly Color Ice = new Color32(229, 250, 254, 255);
-        public static readonly Color Muted = new Color32(178, 214, 224, 255);
-        public static readonly Color PanelFill = new Color(0.03f, 0.15f, 0.15f, 0.62f);
-        public static readonly Color ChipFill = new Color(0.04f, 0.2f, 0.22f, 0.42f);
-        public static readonly Color DiscFill = new Color32(5, 16, 22, 240);
-        public static readonly Color TextShadow = new Color(0f, 0.06f, 0.09f, 0.8f);
-        public static readonly Color TextGlow = new Color(0.43f, 0.88f, 1f, 0.28f);
-        /// Dark text on a cyan fill.
-        public static readonly Color OnCyan = new Color32(4, 28, 40, 255);
+        /// EDITH's blue, as pale as it can go and still read as blue: outlines, picked chips, buttons.
+        public static readonly Color Accent = new Color32(191, 233, 255, 255);
+        /// Body text: frost, a white with a trace of EDITH's blue.
+        public static readonly Color Ice = new Color32(234, 248, 255, 255);
+        public static readonly Color Muted = new Color32(196, 214, 226, 255);
+        public static readonly Color PanelFill = Tint(0.5f);
+        public static readonly Color ChipFill = Tint(0.35f);
+        /// The outlined boxes inside a panel.
+        public static readonly Color InnerFill = Tint(0.25f);
+        public static readonly Color DiscFill = new Color32(8, 10, 24, 235);
+        public static readonly Color TextShadow = new Color(0f, 0.02f, 0.06f, 0.8f);
+        public static readonly Color TextGlow = new Color(0.75f, 0.91f, 1f, 0.2f);
+        /// Ink, from EDITH's pixel outline: text on an accent fill.
+        public static readonly Color OnAccent = new Color32(13, 10, 79, 255);
+
+        /// The glass's light, near-neutral tint at `alpha`.
+        public static Color Tint(float alpha) => new Color(0.05f, 0.06f, 0.1f, alpha);
 
         /// Corner radius and glow spread, in pixels, of the baked rounded shapes. A shape drawn at radius r units
         /// scales every pixel by r / ShapeRadius.
@@ -164,7 +170,7 @@ namespace Edith.UI
             scaler.dynamicPixelsPerUnit = TextSharpness;
         }
 
-        /// A text label with a soft shadow and a faint cyan glow so it stays readable over any room.
+        /// A text label with a soft shadow and a faint ice-blue glow so it stays readable over any room.
         public static Text Label(Transform parent, string name, Font font, int size, Color color, TextAnchor anchor,
             Material material, bool shadow = true)
         {
@@ -207,7 +213,7 @@ namespace Edith.UI
         }
     }
 
-    /// A liquid-glass shape: a halo, a translucent teal body, a lit inner rim and a thin cyan outline. Its sprites
+    /// A liquid-glass shape: a halo, a lightly tinted body, a lit inner rim and a thin ice-blue outline. Its sprites
     /// are shared, so a panel, a chip and a circle (a square with radius half its side) are all the same four images.
     public sealed class Glass
     {
@@ -240,7 +246,7 @@ namespace Edith.UI
             var rim = Layer(rect, "Rim", Theme.Inner, size, unitsPerPixel, material);
             var outline = Layer(rect, "Border", Theme.Edge, size, unitsPerPixel, material);
             var glass = new Glass(rect, halo, glow, body, rim, outline);
-            glass.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.16f), Theme.Cyan, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.32f));
+            glass.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.16f), Theme.Accent, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.32f));
             return glass;
         }
 

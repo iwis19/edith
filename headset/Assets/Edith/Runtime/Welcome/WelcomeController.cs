@@ -285,8 +285,8 @@ namespace Edith.Welcome
             {
                 var has = code != null && i < code.Length;
                 digits[i].text = has ? code[i].ToString() : "";
-                boxes[i].SetLook(has ? Theme.ChipFill : new Color(0.04f, 0.2f, 0.22f, 0.2f), new Color(1f, 1f, 1f, 0.1f),
-                    has ? Theme.Cyan : new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f), Color.clear);
+                boxes[i].SetLook(has ? Theme.ChipFill : Theme.Tint(0.2f), new Color(1f, 1f, 1f, 0.1f),
+                    has ? Theme.Accent : new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f), Color.clear);
             }
             link.text = state != null && state.PhoneUrl != null ? PairingText.TypedAddress(state.PhoneUrl) : "...";
             if (state == null) status.text = "This build has no EDITH server.";
@@ -297,7 +297,7 @@ namespace Edith.Welcome
                 status.text = "Waiting for your phone... code good for " + Mathf.FloorToInt(left / 60f) + ":" + Mathf.FloorToInt(left % 60f).ToString("00");
             }
             var beat = 0.5f + 0.5f * Mathf.Sin(Time.time * 4f);
-            spinner.SetLook(new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, Mathf.Lerp(0.25f, 0.9f, beat)), Color.clear, Theme.Ice, Color.clear);
+            spinner.SetLook(new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, Mathf.Lerp(0.25f, 0.9f, beat)), Color.clear, Theme.Ice, Color.clear);
         }
 
         /// Redraws the picks: which chips and voice are chosen.
@@ -307,16 +307,16 @@ namespace Edith.Welcome
             foreach (var chip in chips)
             {
                 var on = flow.IsPicked(chip.Name);
-                chip.Glass.SetLook(on ? Theme.Cyan : Theme.ChipFill, on ? Color.clear : new Color(1f, 1f, 1f, 0.1f),
-                    on ? Theme.Cyan : new Color(1f, 1f, 1f, 0.45f), on ? new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f) : Color.clear);
-                chip.Label.color = on ? Theme.OnCyan : Theme.Ice;
+                chip.Glass.SetLook(on ? Theme.Accent : Theme.ChipFill, on ? Color.clear : new Color(1f, 1f, 1f, 0.1f),
+                    on ? Theme.Accent : new Color(1f, 1f, 1f, 0.45f), on ? new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f) : Color.clear);
+                chip.Label.color = on ? Theme.OnAccent : Theme.Ice;
             }
             foreach (var voice in voices)
             {
                 var on = flow.Voice == voice.Style;
-                voice.Glass.SetLook(on ? new Color(0.05f, 0.3f, 0.3f, 0.6f) : Theme.ChipFill, new Color(1f, 1f, 1f, on ? 0.18f : 0.08f),
-                    on ? Theme.Cyan : new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f),
-                    on ? new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.4f) : Color.clear);
+                voice.Glass.SetLook(on ? Theme.Tint(0.55f) : Theme.ChipFill, new Color(1f, 1f, 1f, on ? 0.18f : 0.08f),
+                    on ? Theme.Accent : new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f),
+                    on ? new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f) : Color.clear);
             }
         }
 
@@ -353,7 +353,7 @@ namespace Edith.Welcome
 
         void BuildCharacter()
         {
-            var name = Label(character, "Name", semibold, 15, Theme.Cyan, TextAnchor.MiddleLeft, 70f, 122f, 200f, 20f);
+            var name = Label(character, "Name", semibold, 15, Theme.Accent, TextAnchor.MiddleLeft, 70f, 122f, 200f, 20f);
             name.text = "EDITH";
             speechText = Label(character, "Speech", regular, 29, Theme.Ice, TextAnchor.UpperLeft, 70f, 148f, 390f, 130f);
             speechText.supportRichText = true;
@@ -366,11 +366,11 @@ namespace Edith.Welcome
             const float left = 500f, top = 60f, width = 720f, innerLeft = 525f, innerWidth = 670f;
             const float chipHeight = 43f, rowStep = 54f, chipsLeft = 546f, chipsRight = 1176f;
             var card = Panel(stepOne, "Interests", left, top, width, 505f, 44f);
-            card.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Cyan, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.3f));
+            card.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Accent, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.3f));
             var first = Panel(stepOne, "Pick", innerLeft, 83f, innerWidth, 187f, 28f);
-            first.SetLook(new Color(0.03f, 0.15f, 0.15f, 0.3f), new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f), Color.clear);
+            first.SetLook(Theme.InnerFill, new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f), Color.clear);
             Label(stepOne, "Title", semibold, 29, Theme.Ice, TextAnchor.MiddleLeft, 546f, 104f, 400f, 40f).text = "What are you into?";
-            counterOne = Label(stepOne, "Counter", semibold, 14, Theme.Cyan, TextAnchor.MiddleRight, 1000f, 108f, 175f, 24f);
+            counterOne = Label(stepOne, "Counter", semibold, 14, Theme.Accent, TextAnchor.MiddleRight, 1000f, 108f, 175f, 24f);
 
             var measure = Label(stepOne, "Measure", regular, 21, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, 10f, 10f);
             measure.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -401,7 +401,7 @@ namespace Edith.Welcome
             var voiceCards = voiceTop + 64f;
             var voiceBottom = voiceCards + VoiceHeight + 20f;
             var second = Panel(stepOne, "Voice", innerLeft, voiceTop, innerWidth, voiceBottom - voiceTop, 28f);
-            second.SetLook(new Color(0.03f, 0.15f, 0.15f, 0.3f), new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f), Color.clear);
+            second.SetLook(Theme.InnerFill, new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f), Color.clear);
             Label(stepOne, "VoiceTitle", semibold, 27, Theme.Ice, TextAnchor.MiddleLeft, 546f, voiceTop + 19f, 400f, 38f).text = "How should I sound?";
             AddVoice(VoiceStyle.Enthusiastic, "Enthusiastic", 545f, voiceCards);
             AddVoice(VoiceStyle.Calm, "Calm", 759f, voiceCards);
@@ -410,8 +410,8 @@ namespace Edith.Welcome
             var nextTop = voiceBottom + 17f;
             Label(stepOne, "Hint", regular, 16, Theme.Ice, TextAnchor.MiddleLeft, 530f, nextTop + 14f, 420f, 24f).text = "Pinch to pick, or say them out loud";
             var next = Panel(stepOne, "Next", 1100f, nextTop, 96f, 52f, 26f);
-            next.SetLook(Theme.Cyan, Color.clear, Theme.Cyan, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.45f));
-            var nextLabel = Label(next.Rect, "Label", semibold, 21, Theme.OnCyan, TextAnchor.MiddleCenter, 0f, 0f, 96f, 52f, centred: true);
+            next.SetLook(Theme.Accent, Color.clear, Theme.Accent, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.45f));
+            var nextLabel = Label(next.Rect, "Label", semibold, 21, Theme.OnAccent, TextAnchor.MiddleCenter, 0f, 0f, 96f, 52f, centred: true);
             nextLabel.text = "Next";
             AddTarget(next.Rect, WelcomeStep.Interests, NextTapped);
             Reframe(card, left, top, width, nextTop + 52f + 19f - top);
@@ -426,7 +426,7 @@ namespace Edith.Welcome
             var glass = Panel(stepOne, "Voice " + title, x, y, w, h, 22f);
             Label(glass.Rect, "Title", semibold, 21, Theme.Ice, TextAnchor.MiddleLeft, 16f, 18f, 130f, 28f, centred: false, within: new Vector2(w, h)).text = title;
             var play = Glass.Build(glass.Rect, "Play", new Vector2(34f, 34f), 17f, material);
-            play.SetLook(new Color(0.04f, 0.2f, 0.22f, 0.4f), Color.clear, Theme.Ice, Color.clear);
+            play.SetLook(Theme.Tint(0.4f), Color.clear, Theme.Ice, Color.clear);
             play.Rect.anchoredPosition = new Vector2(w * 0.5f - 32f, 0f);
             // Jost has no play glyph, so the triangle is drawn. Nudged right so it looks centred in the circle.
             var triangle = Theme.Pixels(play.Rect, "Triangle", PlayTriangle, material);
@@ -446,13 +446,13 @@ namespace Edith.Welcome
         void BuildPairing()
         {
             var card = Panel(stepTwo, "Pairing", 500f, 93f, 720f, 455f, 44f);
-            card.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Cyan, new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.3f));
+            card.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Accent, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.3f));
             var inner = Panel(stepTwo, "Code", 525f, 115f, 670f, 350f, 28f);
-            inner.SetLook(new Color(0.03f, 0.15f, 0.15f, 0.3f), new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Cyan.r, Theme.Cyan.g, Theme.Cyan.b, 0.5f), Color.clear);
+            inner.SetLook(Theme.InnerFill, new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f), Color.clear);
             Label(stepTwo, "Title", semibold, 27, Theme.Ice, TextAnchor.MiddleLeft, 551f, 138f, 400f, 38f).text = "Pair your phone";
-            counterTwo = Label(stepTwo, "Counter", semibold, 14, Theme.Cyan, TextAnchor.MiddleRight, 1000f, 146f, 175f, 24f);
+            counterTwo = Label(stepTwo, "Counter", semibold, 14, Theme.Accent, TextAnchor.MiddleRight, 1000f, 146f, 175f, 24f);
             Label(stepTwo, "Step A", regular, 16, Theme.Muted, TextAnchor.MiddleLeft, 551f, 200f, 600f, 24f).text = "1 · On the phone running your hotspot, open";
-            link = Label(stepTwo, "Link", semibold, 21, Theme.Cyan, TextAnchor.MiddleLeft, 575f, 234f, 600f, 30f);
+            link = Label(stepTwo, "Link", semibold, 21, Theme.Accent, TextAnchor.MiddleLeft, 575f, 234f, 600f, 30f);
             Label(stepTwo, "Step B", regular, 16, Theme.Muted, TextAnchor.MiddleLeft, 551f, 280f, 600f, 24f).text = "2 · Type this code and tap Share location";
             for (var i = 0; i < 4; i++)
             {
@@ -462,7 +462,7 @@ namespace Edith.Welcome
             spinner = Panel(stepTwo, "Spinner", 524f, 498f, 22f, 22f, 11f);
             status = Label(stepTwo, "Status", regular, 17, Theme.Ice, TextAnchor.MiddleLeft, 556f, 496f, 480f, 26f);
             var skip = Panel(stepTwo, "Skip", 1062f, 483f, 134f, 50f, 25f);
-            skip.SetLook(new Color(0.04f, 0.2f, 0.22f, 0.3f), Color.clear, Theme.Cyan, Color.clear);
+            skip.SetLook(Theme.Tint(0.3f), Color.clear, Theme.Accent, Color.clear);
             Label(skip.Rect, "Label", semibold, 17, Theme.Ice, TextAnchor.MiddleCenter, 0f, 0f, 134f, 50f, centred: true).text = "Skip for now";
             AddTarget(skip.Rect, WelcomeStep.Pair, SkipTapped);
         }
