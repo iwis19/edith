@@ -9,7 +9,7 @@ namespace Edith.Tests
 {
     public class OrbPlacementTests
     {
-        static readonly float HomeRow = AnswerOrb.OrbMetres + AnswerOrb.GapMetres + AnswerOrb.HomeCaptionMetres;
+        static readonly float HomeRow = AnswerOrb.OrbMetres + AnswerOrb.GapMetres + AnswerOrb.CaptionMetres;
 
         GameObject eye, parent;
         SnapshotRoom room;
