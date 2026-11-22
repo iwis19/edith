@@ -19,17 +19,24 @@ namespace Edith.Ask
         [Serializable] sealed class Wire { public string name, hook; }
 
         /// The POST /ask/session body: `{}` without a hint, and `{"navigate":true}` for a session the directions
-        /// gesture opened, which never carries a hint. A `voice` the person picked in the welcome is added to either.
-        public static string RequestBody(AskHint? hint, bool navigate = false, string voice = null)
+        /// gesture opened, which never carries a hint. A `voice` the person picked in the welcome is added to either,
+        /// and so are their `interests` when there are any.
+        public static string RequestBody(AskHint? hint, bool navigate = false, string voice = null, string[] interests = null)
         {
             var body = navigate ? "{\"navigate\":true}"
                 : hint is { } h
                     ? JsonUtility.ToJson(new Body { hint = new Wire { name = h.Name, hook = h.Hook ?? "" } })
                     : "{}";
-            if (string.IsNullOrEmpty(voice)) return body;
             // The voice is one of Gemini's plain voice names, so it needs no escaping.
-            var field = "\"voice\":\"" + voice + "\"";
-            return body == "{}" ? "{" + field + "}" : body.Substring(0, body.Length - 1) + "," + field + "}";
+            if (!string.IsNullOrEmpty(voice)) body = Append(body, "\"voice\":\"" + voice + "\"");
+            if (interests != null && interests.Length > 0)
+                body = Append(body, "\"interests\":[" + string.Join(",", System.Array.ConvertAll(interests, Quote)) + "]");
+            return body;
         }
+
+        static string Append(string body, string field) =>
+            body == "{}" ? "{" + field + "}" : body.Substring(0, body.Length - 1) + "," + field + "}";
+
+        static string Quote(string text) => "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     }
 }

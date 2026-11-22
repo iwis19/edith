@@ -36,8 +36,9 @@ namespace Edith.Welcome
         /// backend's own default.
         public static string Voice => PlayerPrefs.HasKey(VoiceKey) ? VoiceName((VoiceStyle)PlayerPrefs.GetInt(VoiceKey)) : null;
 
-        /// The interests the person picked, comma-separated, or empty.
-        public static string Interests => PlayerPrefs.GetString(InterestsKey, "").Replace(Separator.ToString(), ", ");
+        /// The interests the person picked, in the order they picked them, or an empty array.
+        public static string[] Interests =>
+            PlayerPrefs.GetString(InterestsKey, "").Split(new[] { Separator }, System.StringSplitOptions.RemoveEmptyEntries);
 
         /// Remembers the picks the person made on the first step.
         public static void Save(WelcomeFlow flow)

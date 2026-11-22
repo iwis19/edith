@@ -14,6 +14,16 @@ namespace Edith.Tests
             public int look_id;
             public string source;
             public string captured_at;
+            public string[] interests;
+        }
+
+        [Test]
+        public void The_meta_carries_the_interests_in_order_or_an_empty_list()
+        {
+            var at = new DateTime(2026, 11, 21, 15, 4, 5, DateTimeKind.Utc);
+            var picked = JsonUtility.FromJson<Meta>(LookMeta.Json(1, LookSource.Pinch, at, new[] { "Food", "Design" }));
+            CollectionAssert.AreEqual(new[] { "Food", "Design" }, picked.interests);
+            Assert.IsEmpty(JsonUtility.FromJson<Meta>(LookMeta.Json(1, LookSource.Pinch, at)).interests);
         }
 
         [Test]

@@ -346,6 +346,24 @@ namespace Edith.Tests
             Assert.AreEqual("{\"hint\":{\"name\":\"the \\\"Peace\\\" Tower\",\"hook\":\"Climb it.\"}}",
                 AskHint.RequestBody(new AskHint("the \"Peace\" Tower", "Climb it.")));
             Assert.AreEqual("{\"hint\":{\"name\":\"a mug\",\"hook\":\"\"}}", AskHint.RequestBody(new AskHint("a mug", null)));
+            Assert.AreEqual("{}", AskHint.RequestBody(null, false, null, new string[0]));
+        }
+
+        [Test]
+        public void The_session_request_lists_the_interests_after_the_other_fields()
+        {
+            var picks = new[] { "Art", "Cars" };
+            Assert.AreEqual("{\"interests\":[\"Art\",\"Cars\"]}", AskHint.RequestBody(null, false, null, picks));
+            Assert.AreEqual("{\"voice\":\"Puck\",\"interests\":[\"Art\",\"Cars\"]}", AskHint.RequestBody(null, false, "Puck", picks));
+            Assert.AreEqual("{\"navigate\":true,\"interests\":[\"Art\"]}", AskHint.RequestBody(null, true, null, new[] { "Art" }));
+            Assert.AreEqual("{\"hint\":{\"name\":\"a mug\",\"hook\":\"\"},\"interests\":[\"Art\"]}",
+                AskHint.RequestBody(new AskHint("a mug", null), false, null, new[] { "Art" }));
+        }
+
+        [Test]
+        public void The_interests_are_escaped_in_the_session_request()
+        {
+            Assert.AreEqual("{\"interests\":[\"a \\\"b\\\" \\\\ c\"]}", AskHint.RequestBody(null, false, null, new[] { "a \"b\" \\ c" }));
         }
 
         [Test]

@@ -62,7 +62,15 @@ namespace Edith.Tests
         public void The_meta_field_carries_a_utc_time_and_the_session()
         {
             var at = new DateTime(2026, 11, 21, 10, 0, 5, 250, DateTimeKind.Utc);
-            Assert.AreEqual("{\"captured_at\":\"2026-11-21T10:00:05.250Z\",\"session\":\"abc\"}", ScanClient.Meta(at, "abc"));
+            Assert.AreEqual("{\"captured_at\":\"2026-11-21T10:00:05.250Z\",\"session\":\"abc\",\"interests\":[]}", ScanClient.Meta(at, "abc"));
+        }
+
+        [Test]
+        public void The_meta_field_carries_the_interests()
+        {
+            var at = new DateTime(2026, 11, 21, 10, 0, 5, 250, DateTimeKind.Utc);
+            Assert.AreEqual("{\"captured_at\":\"2026-11-21T10:00:05.250Z\",\"session\":\"abc\",\"interests\":[\"Art\",\"Cars\"]}",
+                ScanClient.Meta(at, "abc", new[] { "Art", "Cars" }));
         }
     }
 
