@@ -9,7 +9,8 @@ using UnityEngine.UI;
 namespace Edith.Navigation
 {
     /// The blue arrow that points the way to the place EDITH found. It floats low in front of the person, follows the
-    /// head lazily, and turns to point along the compass bearing the backend measures from the phone's newest position.
+    /// head lazily, and turns to point at the next point of the walking route the backend follows, or straight along the
+    /// compass bearing to the target when it has no route, both measured from the phone's newest position.
     /// The headset has no compass, so north comes from NorthCalibration, fed by the phone's compass and GPS course
     /// paired with the head's yaw at the moment each reading was taken. Until north is known, and while the phone is
     /// silent, only the label shows. On arrival it says so, then stops the directions.
@@ -247,10 +248,12 @@ namespace Edith.Navigation
                 if (!s.HasFix || s.fix_age_s > StalePhoneSeconds)
                     label.text = $"{s.name}\nWaiting for your phone's position";
                 else if (!north.Ready)
-                    label.text = $"{s.name} · {NavMath.DistanceText(s.distance_m)}\nHold your phone flat, pointing where you face";
+                    label.text = $"{s.name} · {NavMath.DistanceText(s.WalkMetres)}\nHold your phone flat, pointing where you face";
                 else
                 {
-                    label.text = $"{s.name}\n{NavMath.DistanceText(s.distance_m)}";
+                    label.text = $"{s.name}\n{NavMath.DistanceText(s.WalkMetres)}";
+                    if (s.HasRoute && NavMath.ManeuverText(s.maneuver, s.maneuver_distance_m) is { Length: > 0 } turn)
+                        label.text += "\n" + turn;
                     wantArrow = true;
                 }
             }
@@ -282,7 +285,7 @@ namespace Edith.Navigation
 
             if (wantArrow)
             {
-                var target = NavMath.ArrowYaw(north.NorthYaw, s.bearing_deg);
+                var target = NavMath.ArrowYaw(north.NorthYaw, s.ArrowBearing);
                 shownYaw = placed ? Mathf.LerpAngle(shownYaw, target, 1f - Mathf.Exp(-TurnRate * dt)) : target;
             }
             placed = true;

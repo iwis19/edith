@@ -36,6 +36,7 @@ from .navigate import (
 )
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
 from .resolve import HttpResolver, PlaceLocator
+from .route import HttpRouter
 
 log = logging.getLogger("edith")
 if not log.handlers:
@@ -157,7 +158,7 @@ def create_app(
     locations = locations or Locations(resolver)
     geocoder = geocoder or resolver
     pairings = pairings or Pairings()
-    navigations = navigations or Navigations()
+    navigations = navigations or Navigations(router=HttpRouter(httpx.AsyncClient()))
     finder = finder or HttpPlaceFinder(httpx.AsyncClient())
     store = store or make_store(settings.database_url, settings.db_pool_max)
     agent = agent or make_card_agent(settings, locations.whereabouts, store)
@@ -327,11 +328,13 @@ def create_app(
         if not places:
             raise ApiError(404, "no_place", "Nothing like that was found within about five kilometres.")
         navigations.set(profile_id, places[0])
-        return NavigateReply(target=status(places[0], latest), others=others(places))
+        return NavigateReply(target=status(places[0], latest, navigations.guidance(profile_id, fix)), others=others(places))
 
     @app.get("/navigate", response_model_exclude_none=True)
     async def navigate_status(profile_id: UUID = Depends(profile)) -> NavStatus:
-        return status(navigations.target(profile_id), locations.latest(profile_id, SEARCH_FIX_S))
+        latest = locations.latest(profile_id, SEARCH_FIX_S)
+        guidance = navigations.guidance(profile_id, latest[0]) if latest else None
+        return status(navigations.target(profile_id), latest, guidance)
 
     @app.delete("/navigate")
     async def navigate_stop(profile_id: UUID = Depends(profile)) -> dict:

@@ -81,6 +81,26 @@ namespace Edith.Tests
             Assert.That(NavStatus.Parse("{\"active\":false,\"arrived\":false}").HasFix, Is.False);
         }
 
+        [TestCase("left", 40f, "Turn left in 40 m")]
+        [TestCase("slight_right", 8f, "Bear right now")]
+        [TestCase("arrive", 1250f, "Arrive in 1.3 km")]
+        [TestCase("straight", 40f, "")]
+        public void AManeuverReadsAsATurnAndItsDistance(string kind, float metres, string expected) =>
+            Assert.That(NavMath.ManeuverText(kind, metres), Is.EqualTo(expected));
+
+        [Test]
+        public void AStatusWithARouteArrowsAtTheWaypointAndCountsTheWalk()
+        {
+            var routed = NavStatus.Parse("{\"active\":true,\"distance_m\":290,\"bearing_deg\":41.5,\"fix_age_s\":1.2," +
+                                         "\"waypoint_distance_m\":15,\"waypoint_bearing_deg\":9.0,\"maneuver\":\"left\"," +
+                                         "\"maneuver_distance_m\":40,\"route_remaining_m\":575}");
+            Assert.That(routed.HasRoute, Is.True);
+            Assert.That((routed.ArrowBearing, routed.WalkMetres), Is.EqualTo((9f, 575f)));
+            var straight = NavStatus.Parse("{\"active\":true,\"distance_m\":290,\"bearing_deg\":41.5,\"fix_age_s\":1.2}");
+            Assert.That(straight.HasRoute, Is.False);
+            Assert.That((straight.ArrowBearing, straight.WalkMetres), Is.EqualTo((41.5f, 290f)));
+        }
+
         [Test]
         public void AToolCallIsReadWithItsArguments()
         {
