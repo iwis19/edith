@@ -151,6 +151,9 @@
   "use strict";
   // While the headset is giving directions, the position and compass go every two seconds so the arrow keeps up.
   var SEND_EVERY_MS = 10000, NAV_SEND_EVERY_MS = 2000, SEND_AFTER_METRES = 25, HEADING_FRESH_MS = 3000;
+  // The headset learns north from the compass at any time, so a reading counts only while the phone lies within
+  // this many degrees of flat, as when held pointing the way the person faces, never in a pocket.
+  var FLAT_DEGREES = 30;
   var navigating = false, heading = null, headingAccuracy = null, headingAt = 0, compassOn = false, compassAsked = false;
   var compassMissing = false;
   var $ = function (id) { return document.getElementById(id); };
@@ -313,10 +316,12 @@
       headingAccuracy = null;
     }
     if (h === null) return;
+    if (!compassOn) { compassOn = true; showCompass("on"); showCompassButton(); }
+    if (typeof e.beta === "number" && typeof e.gamma === "number" &&
+        (Math.abs(e.beta) > FLAT_DEGREES || Math.abs(e.gamma) > FLAT_DEGREES)) return;
     var turn = screen.orientation && typeof screen.orientation.angle === "number" ? screen.orientation.angle : (window.orientation || 0);
     heading = Math.round((((h + turn) % 360) + 360) % 360 * 10) / 10;
     headingAt = Date.now();
-    if (!compassOn) { compassOn = true; showCompass("on"); showCompassButton(); }
   }
 
   function listenCompass() {

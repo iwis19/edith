@@ -433,7 +433,13 @@ class Navigations:
 
 def status(place: Place | None, latest: tuple[LocationFix, float] | None, guidance: Guidance | None = None) -> NavStatus:
     if place is None:
-        return NavStatus(active=False)
+        # The newest reading still goes back, so the headset can learn north before directions start.
+        if latest is None:
+            return NavStatus(active=False)
+        fix, age = latest
+        return NavStatus(
+            active=False, fix_age_s=round(age, 2), accuracy_m=fix.accuracy_m, heading_deg=fix.heading_deg,
+            heading_accuracy_deg=fix.heading_accuracy_deg, course_deg=fix.course_deg, speed_mps=fix.speed_mps)
     if latest is None:
         return NavStatus(active=True, name=place.name, kind=place.kind)
     fix, age = latest

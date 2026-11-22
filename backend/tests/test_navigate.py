@@ -199,7 +199,16 @@ async def test_nothing_found_and_a_failed_search_are_told_apart(nav):
     failed = await nav.post("/navigate", json={"category": "subway"}, headers=HEADERS)
     assert failed.status_code == 502
     # Missing fields are left out, not null.
+    idle = (await nav.get("/navigate", headers=HEADERS)).json()
+    assert idle["active"] is False and "name" not in idle and "distance_m" not in idle and "heading_deg" not in idle
+
+
+async def test_with_no_target_the_newest_compass_reading_still_goes_to_the_headset(nav):
     assert (await nav.get("/navigate", headers=HEADERS)).json() == {"active": False, "arrived": False}
+    await nav.post("/location", json=body(heading_deg=30.0, heading_accuracy_deg=12.0), headers=nav.phone)
+    idle = (await nav.get("/navigate", headers=HEADERS)).json()
+    assert idle["active"] is False and "name" not in idle and "bearing_deg" not in idle
+    assert idle["heading_deg"] == 30.0 and idle["heading_accuracy_deg"] == 12.0 and idle["fix_age_s"] >= 0
 
 
 async def test_the_other_matches_are_offered_without_coordinates(nav):

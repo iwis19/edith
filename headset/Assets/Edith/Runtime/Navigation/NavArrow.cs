@@ -12,8 +12,9 @@ namespace Edith.Navigation
     /// head lazily, and turns to point at the next point of the walking route the backend follows, or straight along the
     /// compass bearing to the target when it has no route, both measured from the phone's newest position.
     /// The headset has no compass, so north comes from NorthCalibration, fed by the phone's compass and GPS course
-    /// paired with the head's yaw at the moment each reading was taken. Until north is known, and while the phone is
-    /// silent, only the label shows. On arrival it says so, then stops the directions.
+    /// paired with the head's yaw at the moment each reading was taken. It learns from every poll, directions or not,
+    /// so north is usually known by the time directions start. Until north is known, and while the phone is silent,
+    /// only the label shows. On arrival it says so, then stops the directions.
     public sealed class NavArrow : MonoBehaviour
     {
         [SerializeField] Transform eye;
@@ -200,7 +201,8 @@ namespace Edith.Navigation
             if (next.active && status is not { active: true }) Debug.Log($"[EDITH nav] guiding to {next.name}");
             if (!next.active && status is { active: true }) Debug.Log("[EDITH nav] directions ended");
             status = next;
-            if (!next.active || !next.HasFix) return;
+            // An idle reply still carries the newest phone reading, so north is learned before directions start.
+            if (next.fix_age_s < 0f) return;
 
             // The backend received the fix fix_age_s before it answered, and it answered about half a round trip ago.
             var fixAt = sentAt + (now - sentAt) * 0.5f - next.fix_age_s;
