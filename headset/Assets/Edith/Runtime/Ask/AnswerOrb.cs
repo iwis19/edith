@@ -26,7 +26,6 @@ namespace Edith.Ask
         public const float CaptionMetres = 0.26f;
         static readonly Color Quiet = Theme.Muted;
         static readonly Color Bright = Theme.Ice;
-        const int ListeningFontSize = 34;
         const float HeadShare = 0.64f;
         const float PulseRate = 3f;
 
@@ -114,12 +113,12 @@ namespace Edith.Ask
             orb.caption = text;
 
             // Where the answer will appear, to the right of EDITH.
-            orb.listeningLabel = Theme.Label(rect, "Listening", regular, ListeningFontSize, Bright, TextAnchor.MiddleLeft, material);
+            orb.listeningLabel = Theme.Label(rect, "Listening", regular, FontSize, Bright, TextAnchor.MiddleLeft, material);
             orb.listeningLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
             var labelRect = orb.listeningLabel.rectTransform;
             labelRect.anchorMin = labelRect.anchorMax = new Vector2(1f, 0.5f);
             labelRect.pivot = new Vector2(0f, 0.5f);
-            labelRect.sizeDelta = new Vector2(diameter * 2f, ListeningFontSize * 1.4f);
+            labelRect.sizeDelta = new Vector2(diameter * 2f, FontSize * 1.4f);
             labelRect.anchoredPosition = new Vector2(GapMetres * UnitsPerMetre, 0f);
             orb.listeningLabel.text = "Listening";
             orb.listeningLabel.enabled = false;
