@@ -371,7 +371,7 @@ namespace Edith.Welcome
             switch (flow.Step)
             {
                 case WelcomeStep.Interests:
-                    return "Hi, I'm EDITH! Tell me what you love and I'll find the fun in whatever you look at.";
+                    return "Hi, I'm EDITH!";
                 default:
                     return "";
             }
