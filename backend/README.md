@@ -315,6 +315,12 @@ The database is a Tiger Cloud service (managed Postgres) with pgvector.
 
    Each file in `edith_backend/migrations/` runs once, in name order, and is recorded in `schema_migrations`. Rerunning applies only new files.
 
+### Trails
+
+While someone navigates, each phone fix is recorded in `trail_points` (profile, adventure, time, latitude and longitude rounded to 4 decimals, accuracy). `GET /trails/unexplored` lists the nearest roughly 200 m grid cells around the phone that the profile has never walked, and `POST /navigate` with `"new_area": true` prefers a match in such a cell.
+
+Trails have their own migrations in `edith_backend/migrations_trails/`, recorded in `trail_schema_migrations`, and run by the same command. Set `TRAILS_DATABASE_URL` to keep them in a separate database, such as a second Tiger Cloud service. Without it trails use `DATABASE_URL`, and with neither they are not kept. With the `timescaledb` extension available, `trail_points` becomes a hypertable and the walked cells come from the continuous aggregate `trail_cells_daily`; on plain Postgres the same cells are read from `trail_points`. The Timescale test needs `TEST_TIMESCALE_URL` (for example a `timescale/timescaledb:latest-pg17` container).
+
 ## Test
 
 ```

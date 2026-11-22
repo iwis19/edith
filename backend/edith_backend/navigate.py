@@ -8,9 +8,9 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, get_args
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 from pydantic import BaseModel, Field
@@ -102,6 +102,8 @@ class NavigateRequest(BaseModel):
     """What Gemini's find_place call asks for: a kind of place, a name, or both."""
     category: Category = "any"
     name: str | None = Field(None, max_length=100)
+    # Prefer a match in an area the person has never walked, when their trail is known.
+    new_area: bool = False
 
 
 class NavStatus(BaseModel):
@@ -135,6 +137,8 @@ class NavStatus(BaseModel):
 
 class NavigateReply(BaseModel):
     target: NavStatus
+    # Whether the target lies in an area the person has never walked; only set when new_area was asked for.
+    new_area: bool | None = None
     # The other nearest matches, nearest first, without coordinates, so EDITH can mention them.
     others: list[dict]
 
@@ -325,6 +329,7 @@ class _Target:
     route: Route | None = None
     next_route_at: float = 0.0
     fetching: asyncio.Task | None = None
+    adventure_id: UUID = field(default_factory=uuid4)
 
 
 class Navigations:
@@ -359,6 +364,11 @@ class Navigations:
 
     def active(self, profile_id: UUID) -> bool:
         return self.target(profile_id) is not None
+
+    def adventure(self, profile_id: UUID) -> UUID | None:
+        """The id of the navigation under way, which names its trail."""
+        found = self._found(profile_id)
+        return found.adventure_id if found else None
 
     def guidance(self, profile_id: UUID, fix: LocationFix) -> Guidance | None:
         """Where the route says to head from `fix`, or None when there is no route that fits it. The first call, and a

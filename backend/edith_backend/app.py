@@ -31,12 +31,15 @@ from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
 from .maps import MapError, TileMap
 from .navigate import (
-    NAVIGATE_TIMEOUT_S, SEARCH_FIX_S, HttpPlaceFinder, NavigateReply, NavigateRequest, Navigations, NavStatus, PlaceFinder, SearchFailed,
+    NAVIGATE_TIMEOUT_S, SEARCH_FIX_S, SEARCH_RADII_M, HttpPlaceFinder, NavigateReply, NavigateRequest, Navigations, NavStatus, PlaceFinder, SearchFailed,
     others, status,
 )
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
 from .resolve import HttpResolver, PlaceLocator
 from .route import HttpRouter
+from .trails import (
+    DEFAULT_RADIUS_M, MAX_RADIUS_M, TrailStore, cell_of, make_trail_store, prefer_unwalked, unexplored_areas,
+)
 
 log = logging.getLogger("edith")
 if not log.handlers:
@@ -146,6 +149,7 @@ def create_app(
     tile_map: TileMap | None = None,
     navigations: Navigations | None = None,
     finder: PlaceFinder | None = None,
+    trails: TrailStore | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if settings.public_server and not settings.device_token:
@@ -161,6 +165,9 @@ def create_app(
     navigations = navigations or Navigations(router=HttpRouter(httpx.AsyncClient()))
     finder = finder or HttpPlaceFinder(httpx.AsyncClient())
     store = store or make_store(settings.database_url, settings.db_pool_max)
+    # Its own pool, so a trails database that is down never takes connections from Look or Collect.
+    trails = trails or make_trail_store(settings.trails_database_url or settings.database_url)
+    trail_writes: set[asyncio.Task] = set()
     agent = agent or make_card_agent(settings, locations.whereabouts, store)
     ask = ask or make_live_ask(settings)
     scanner = scanner or make_scan_agent(settings, store, locations.whereabouts)
@@ -172,6 +179,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await store.open()
+        await trails.open()
         # A sleeping database can take seconds to wake, so startup does not wait for the places. Looks before the load
         # finishes go without the places from before the restart. Only the model agent remembers places.
         restore = getattr(agent, "restore_places", None)
@@ -183,6 +191,7 @@ def create_app(
             restoring.cancel()
         if _recording:
             await asyncio.wait(_recording, timeout=10)
+        await trails.close()
         await store.close()
 
     app = FastAPI(title="EDITH backend", version=VERSION, lifespan=lifespan)
@@ -299,7 +308,12 @@ def create_app(
         if profile_id is None:
             raise ApiError(401, "bad_phone_token", "The phone token is missing, wrong or expired. Pair again.")
         summary = locations.update(profile_id, fix)
-        summary.navigating = navigations.active(profile_id)
+        adventure = navigations.adventure(profile_id)
+        summary.navigating = adventure is not None
+        if adventure:
+            task = asyncio.create_task(trails.record(profile_id, adventure, fix))
+            trail_writes.add(task)
+            task.add_done_callback(trail_writes.discard)
         return summary
 
     @app.get("/location")
@@ -327,14 +341,34 @@ def create_app(
             raise ApiError(502, "search_failed", "The map services did not answer.")
         if not places:
             raise ApiError(404, "no_place", "Nothing like that was found within about five kilometres.")
+        new_area = None
+        if request.new_area:
+            walked = await trails.walked_cells(profile_id, fix.lat, fix.lon, SEARCH_RADII_M[-1])
+            if walked is not None:
+                places, new_area = prefer_unwalked(places, walked, cell_of(fix.lat, fix.lon))
         navigations.set(profile_id, places[0])
-        return NavigateReply(target=status(places[0], latest, navigations.guidance(profile_id, fix)), others=others(places))
+        return NavigateReply(target=status(places[0], latest, navigations.guidance(profile_id, fix)),
+                             others=others(places), new_area=new_area)
 
     @app.get("/navigate", response_model_exclude_none=True)
     async def navigate_status(profile_id: UUID = Depends(profile)) -> NavStatus:
         latest = locations.latest(profile_id, SEARCH_FIX_S)
         guidance = navigations.guidance(profile_id, latest[0]) if latest else None
         return status(navigations.target(profile_id), latest, guidance)
+
+    @app.get("/trails/unexplored")
+    async def trails_unexplored(radius_m: float = DEFAULT_RADIUS_M, profile_id: UUID = Depends(profile)) -> dict:
+        """The nearest areas around the phone's position that this profile has never walked, about 200 m square."""
+        latest = locations.latest(profile_id, SEARCH_FIX_S)
+        if latest is None:
+            raise ApiError(409, "no_location", "The phone has not sent a recent position.")
+        radius = min(max(radius_m, 300.0), MAX_RADIUS_M)
+        fix, _ = latest
+        walked = await trails.walked_cells(profile_id, fix.lat, fix.lon, radius)
+        if walked is None:
+            raise ApiError(503, "no_trails", "Walked areas are not available right now.")
+        areas = unexplored_areas(fix.lat, fix.lon, radius, walked)
+        return {"walked_nearby": len(walked), "areas": [vars(a) for a in areas]}
 
     @app.delete("/navigate")
     async def navigate_stop(profile_id: UUID = Depends(profile)) -> dict:
