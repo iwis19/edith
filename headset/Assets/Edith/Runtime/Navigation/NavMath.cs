@@ -110,6 +110,15 @@ namespace Edith.Navigation
         public static float CompassWeightFor(float headingAccuracy) =>
             headingAccuracy > WorstCompassDegrees ? 0f : CompassWeight;
 
+        /// How bright chevron `index` (0 at the back of the arrow) is at `time`: a pulse that passes from the back to
+        /// the tip once every `period` seconds, each chevron `lag` seconds after the one behind it, never below `dim`.
+        public static float ChevronPulse(float time, int index, float period, float lag, float dim)
+        {
+            var phase = Mathf.Repeat((time - index * lag) / period, 1f);
+            var wave = 0.5f - 0.5f * Mathf.Cos(phase * 2f * Mathf.PI);
+            return Mathf.Lerp(dim, 1f, wave);
+        }
+
         /// "Turn left in 40 m", "Arrive in 60 m"; empty for a turn kind the arrow does not know.
         public static string ManeuverText(string kind, float metres)
         {

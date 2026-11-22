@@ -33,8 +33,13 @@ namespace Edith.Navigation
         const int LabelFontSize = 34;
         const float NoticeSeconds = 2.5f;
 
-        static readonly Color Blue = new Color(0.16f, 0.52f, 1f, 1f);
-        static readonly Color Rim = new Color(0.86f, 0.94f, 1f, 1f);
+        /// The chevrons from the back of the arrow to its tip: deep blue to ice, so the tip reads first.
+        static readonly Color[] ChevronColours =
+        {
+            new Color32(41, 133, 255, 255), new Color32(111, 184, 255, 255), new Color32(207, 240, 255, 255),
+        };
+        /// One pulse runs from the back chevron to the tip in PulseSeconds, each chevron PulseLag behind the next.
+        const float PulseSeconds = 1.2f, PulseLag = 0.2f, DimAlpha = 0.25f;
         static readonly Color LabelColor = new Color(0.95f, 0.97f, 1f, 1f);
         static volatile bool poked;
 
@@ -46,6 +51,7 @@ namespace Edith.Navigation
         CanvasGroup arrowGroup, labelGroup;
         Text label;
         Texture2D arrowTexture;
+        RawImage[] chevrons;
         Vector3 anchor;
         bool placed;
         float shownYaw;
@@ -82,13 +88,23 @@ namespace Edith.Navigation
 
         void Awake()
         {
-            arrowTexture = ArrowTexture();
+            arrowTexture = ChevronTexture();
             arrowRoot = MakeCanvas("NavArrow", ArrowMetres, ArrowMetres, out arrowGroup);
-            var image = new GameObject("Arrow", typeof(RectTransform), typeof(RawImage)).GetComponent<RawImage>();
-            image.texture = arrowTexture;
-            image.material = material;
-            image.raycastTarget = false;
-            Fill(image.rectTransform, arrowRoot);
+            chevrons = new RawImage[ChevronColours.Length];
+            for (var i = 0; i < chevrons.Length; i++)
+            {
+                var image = new GameObject($"Chevron {i}", typeof(RectTransform), typeof(RawImage)).GetComponent<RawImage>();
+                image.texture = arrowTexture;
+                image.material = material;
+                image.color = ChevronColours[i];
+                image.raycastTarget = false;
+                var rect = image.rectTransform;
+                rect.SetParent(arrowRoot, false);
+                rect.anchorMin = new Vector2(0f, (float)i / chevrons.Length);
+                rect.anchorMax = new Vector2(1f, (float)(i + 1) / chevrons.Length);
+                rect.sizeDelta = Vector2.zero;
+                chevrons[i] = image;
+            }
 
             labelRoot = MakeCanvas("NavLabel", 0.42f, 0.09f, out labelGroup);
             label = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(UnityEngine.UI.Shadow))
@@ -292,6 +308,12 @@ namespace Edith.Navigation
             var bob = Mathf.Sin(now * 2f) * 0.006f;
             arrowRoot.SetPositionAndRotation(anchor + Vector3.up * bob,
                 Quaternion.Euler(0f, shownYaw, 0f) * Quaternion.Euler(TiltDegrees, 0f, 0f));
+            for (var i = 0; i < chevrons.Length; i++)
+            {
+                var colour = ChevronColours[i];
+                colour.a = NavMath.ChevronPulse(now, i, PulseSeconds, PulseLag, DimAlpha);
+                chevrons[i].color = colour;
+            }
             var labelAt = anchor + Vector3.down * LabelBelowMetres;
             labelRoot.SetPositionAndRotation(labelAt, Quaternion.LookRotation(labelAt - eye.position, Vector3.up));
         }
@@ -345,48 +367,38 @@ namespace Edith.Navigation
             child.sizeDelta = Vector2.zero;
         }
 
-        /// A blue arrow pointing up the texture, with a pale rim, antialiased by 4x4 supersampling.
-        static Texture2D ArrowTexture()
+        /// One white chevron pointing up the texture, an outline with round ends, antialiased by its distance to the
+        /// two strokes. The chevrons are tinted by their RawImage colour.
+        static Texture2D ChevronTexture()
         {
-            const int size = 128, samples = 4;
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            const int width = 128, height = 64;
+            const float halfStroke = 5.5f;
+            var left = new Vector2(12f, 12f);
+            var tip = new Vector2(64f, 52f);
+            var right = new Vector2(116f, 12f);
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
             {
-                name = "EDITH nav arrow", wrapMode = TextureWrapMode.Clamp,
+                name = "EDITH nav chevron", wrapMode = TextureWrapMode.Clamp,
             };
-            var pixels = new Color32[size * size];
-            for (var py = 0; py < size; py++)
-            for (var px = 0; px < size; px++)
+            var pixels = new Color32[width * height];
+            for (var py = 0; py < height; py++)
+            for (var px = 0; px < width; px++)
             {
-                float inside = 0f, core = 0f;
-                for (var sy = 0; sy < samples; sy++)
-                for (var sx = 0; sx < samples; sx++)
-                {
-                    var u = (px + (sx + 0.5f) / samples) / size;
-                    var v = (py + (sy + 0.5f) / samples) / size;
-                    if (InArrow(u, v, 0f)) inside++;
-                    if (InArrow(u, v, 0.035f)) core++;
-                }
-                inside /= samples * samples;
-                core /= samples * samples;
-                var colour = Color.Lerp(Rim, Blue, core / Mathf.Max(inside, 1e-4f));
-                colour.a = inside;
-                pixels[py * size + px] = colour;
+                var at = new Vector2(px + 0.5f, py + 0.5f);
+                var distance = Mathf.Min(ToSegment(at, left, tip), ToSegment(at, tip, right));
+                var alpha = Mathf.Clamp01(halfStroke + 0.5f - distance);
+                pixels[py * width + px] = new Color(1f, 1f, 1f, alpha);
             }
             texture.SetPixels32(pixels);
             texture.Apply(false, true);
             return texture;
         }
 
-        /// Whether (u, v) lies in the arrow shrunk by `inset`: a shaft below a triangular head whose tip is at the top.
-        static bool InArrow(float u, float v, float inset)
+        static float ToSegment(Vector2 point, Vector2 a, Vector2 b)
         {
-            const float shaftHalf = 0.11f, shaftBottom = 0.06f, headBase = 0.5f, headHalf = 0.4f, tip = 0.95f;
-            var x = Mathf.Abs(u - 0.5f);
-            if (v >= shaftBottom + inset && v <= headBase + inset && x <= shaftHalf - inset) return true;
-            if (v < headBase + inset || v > tip - inset * 2.2f) return false;
-            // The head narrows linearly from headHalf at its base to nothing at the tip.
-            var half = headHalf * (tip - v) / (tip - headBase) - inset * 1.4f;
-            return x <= half;
+            var along = b - a;
+            var t = Mathf.Clamp01(Vector2.Dot(point - a, along) / along.sqrMagnitude);
+            return Vector2.Distance(point, a + along * t);
         }
     }
 }
