@@ -13,7 +13,7 @@ namespace Edith.Navigation
     public sealed class NavStatus
     {
         public bool active, arrived;
-        public string name = "", kind = "", compass = "";
+        public string name = "", kind = "", compass = "", address = "";
         public float distance_m = -1f, bearing_deg = -1f, fix_age_s = -1f, accuracy_m = -1f;
         public float heading_deg = -1f, heading_accuracy_deg = -1f, course_deg = -1f, speed_mps = -1f;
         /// Present while the backend follows a walking route: the next route point to head for, the next turn

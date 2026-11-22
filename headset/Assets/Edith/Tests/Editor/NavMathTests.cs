@@ -64,9 +64,9 @@ namespace Edith.Tests
             Assert.That(history.TryAt(2f, 0.3f, out _), Is.False);
         }
 
-        [TestCase(240f, "240 m · 3 min walk")]
-        [TestCase(36f, "40 m · 1 min walk")]
-        [TestCase(1440f, "1.4 km · 18 min walk")]
+        [TestCase(240f, "3 min · 240 m")]
+        [TestCase(36f, "1 min · 40 m")]
+        [TestCase(1440f, "18 min · 1.4 km")]
         public void DistanceReadsInMetresThenKilometres(float metres, string expected) =>
             Assert.That(NavMath.DistanceText(metres), Is.EqualTo(expected));
 
@@ -92,12 +92,18 @@ namespace Edith.Tests
             Assert.That(NavMath.ChevronPulse(0f, 0, 1.2f, 0.2f, 0.25f), Is.EqualTo(0.25f).Within(1e-4f));
         }
 
-        [TestCase("left", 40f, "Turn left in 40 m")]
-        [TestCase("slight_right", 8f, "Bear right now")]
-        [TestCase("arrive", 1250f, "Arrive in 1.3 km")]
+        [TestCase("left", 40f, "Left in 40 m")]
+        [TestCase("slight_right", 8f, "Slight right now")]
+        [TestCase("arrive", 1250f, "There in 1.3 km")]
         [TestCase("straight", 40f, "")]
         public void AManeuverReadsAsATurnAndItsDistance(string kind, float metres, string expected) =>
             Assert.That(NavMath.ManeuverText(kind, metres), Is.EqualTo(expected));
+
+        [TestCase("left", 40f, 240f, "Left in 40 m · 3 min")]
+        [TestCase("", 0f, 1440f, "18 min · 1.4 km")]
+        [TestCase("straight", 40f, 240f, "3 min · 240 m")]
+        public void TheGuideLineIsTheNextTurnAndTheWalkLeft(string kind, float turnMetres, float walkMetres, string expected) =>
+            Assert.That(NavMath.GuideText(kind, turnMetres, walkMetres), Is.EqualTo(expected));
 
         [Test]
         public void AStatusWithARouteArrowsAtTheWaypointAndCountsTheWalk()

@@ -23,6 +23,7 @@ from .route import ROUTE_TIMEOUT_S, Guidance, Route, RouteFailed, Router, bearin
 log = logging.getLogger("edith.navigate")
 
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 # An Overpass mirror that has not answered in this long gets company from the next mirror.
 OVERPASS_HEDGE_S = 1.5
 # Searched in turn until one finds something: a short walk first, then a long one. A 5 km Overpass query does not
@@ -36,6 +37,8 @@ SEARCH_MARGIN_S = 0.5
 WIDE_MIN_S = 1.5
 # The same search from within about 100 m reuses its places for this long, with distances from the new fix.
 SEARCH_CACHE_S = 30 * 60
+# A target's address looked up after the search gives up after this long; the card simply shows none.
+ADDRESS_TIMEOUT_S = 6.0
 SEARCH_CACHE_MAX = 256
 # A name search often finds a stop named after a building; those count only when transit was asked for.
 TRANSIT = ("bus", "transit", "train", "subway")
@@ -114,6 +117,8 @@ class Place(BaseModel):
     lat: float
     lon: float
     distance_m: int
+    # The street address, "1151 Richmond St", when the map has one.
+    address: str | None = None
 
 
 class NavigateRequest(BaseModel):
@@ -129,6 +134,7 @@ class NavStatus(BaseModel):
     active: bool
     name: str | None = None
     kind: str | None = None
+    address: str | None = None
     distance_m: int | None = None
     # Straight from the newest fix to the target, in degrees clockwise from true north. Arrival is judged on this.
     bearing_deg: float | None = None
@@ -226,7 +232,7 @@ def overpass_places(reply: dict, lat: float, lon: float) -> list[Place]:
         name = name or _unnamed(tags) or ""
         if not name:
             continue
-        places.append(Place(name=name, kind=_kind(tags), lat=plat, lon=plon,
+        places.append(Place(name=name, kind=_kind(tags), lat=plat, lon=plon, address=street_address(tags),
                             distance_m=round(distance_m(lat, lon, plat, plon))))
     return sorted(places, key=lambda p: p.distance_m)
 
@@ -242,8 +248,21 @@ def nominatim_places(reply: list, lat: float, lon: float) -> list[Place]:
         if not name:
             continue
         kind = (item.get("type") or item.get("category") or "place").replace("_", " ")
-        places.append(Place(name=name, kind=kind, lat=plat, lon=plon, distance_m=round(distance_m(lat, lon, plat, plon))))
+        places.append(Place(name=name, kind=kind, lat=plat, lon=plon, address=street_address(item.get("address")),
+                            distance_m=round(distance_m(lat, lon, plat, plon))))
     return sorted(places, key=lambda p: p.distance_m)
+
+
+def street_address(fields: dict | None) -> str | None:
+    """The house number and street from OpenStreetMap address tags (addr:housenumber, addr:street) or a Nominatim
+    address (house_number, road), or None without a street."""
+    if not isinstance(fields, dict):
+        return None
+    street = fields.get("addr:street") or fields.get("road")
+    if not street:
+        return None
+    number = fields.get("addr:housenumber") or fields.get("house_number")
+    return clean_name(f"{number} {street}" if number else street)
 
 
 def matches_name(place: Place, name: str) -> bool:
@@ -393,6 +412,22 @@ class HttpPlaceFinder:
         assert last is not None
         raise last
 
+    async def address(self, lat: float, lon: float) -> str | None:
+        """The street address at a place, from Nominatim's reverse lookup at building zoom."""
+        async with self._nominatim_lock:
+            if self._nominatim_last is not None and (wait := self._nominatim_last + NOMINATIM_GAP_S - self._clock()) > 0:
+                await self._sleep(wait)
+            try:
+                response = await self._http.get(
+                    NOMINATIM_REVERSE_URL, timeout=SERVICE_TIMEOUT_S, headers={"User-Agent": USER_AGENT},
+                    params={"lat": round(lat, 5), "lon": round(lon, 5), "format": "jsonv2", "zoom": 18,
+                            "addressdetails": 1, "accept-language": "en"})
+                response.raise_for_status()
+                reply = response.json()
+                return street_address(reply.get("address")) if isinstance(reply, dict) else None
+            finally:
+                self._nominatim_last = self._clock()
+
     async def _nominatim(self, lat: float, lon: float, name: str) -> list[Place]:
         # About 5 km each way, and only results inside it.
         box = f"{lon - 0.06},{lat + 0.045},{lon + 0.06},{lat - 0.045}"
@@ -403,7 +438,7 @@ class HttpPlaceFinder:
                 response = await self._http.get(
                     NOMINATIM_SEARCH_URL, timeout=SERVICE_TIMEOUT_S, headers={"User-Agent": USER_AGENT},
                     params={"q": name, "format": "jsonv2", "viewbox": box, "bounded": 1, "limit": 10,
-                            "accept-language": "en"})
+                            "addressdetails": 1, "accept-language": "en"})
                 response.raise_for_status()
                 return nominatim_places(response.json(), lat, lon)
             finally:
@@ -438,6 +473,27 @@ class Navigations:
     def set(self, profile_id: UUID, place: Place) -> None:
         self._targets[profile_id] = _Target(place, self._clock())
         log.info("navigating to %r (%s)", place.name, place.kind)
+
+    def fill_address(self, profile_id: UUID, finder: object) -> None:
+        """Looks up the target's street address in the background when the search gave none, so the reply to the
+        search is not held up; the next poll carries it."""
+        found = self._found(profile_id)
+        lookup = getattr(finder, "address", None)
+        if found is None or found.place.address or lookup is None:
+            return
+
+        async def fill() -> None:
+            try:
+                address = await asyncio.wait_for(lookup(found.place.lat, found.place.lon), ADDRESS_TIMEOUT_S)
+            except (httpx.HTTPError, ValueError, TimeoutError) as exc:
+                log.info("no address for %r: %s", found.place.name, type(exc).__name__)
+                return
+            if address and self._targets.get(profile_id) is found:
+                found.place = found.place.model_copy(update={"address": address})
+
+        task = asyncio.create_task(fill())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     def clear(self, profile_id: UUID) -> bool:
         return self._targets.pop(profile_id, None) is not None
@@ -507,12 +563,13 @@ def status(place: Place | None, latest: tuple[LocationFix, float] | None, guidan
             active=False, fix_age_s=round(age, 2), accuracy_m=fix.accuracy_m, heading_deg=fix.heading_deg,
             heading_accuracy_deg=fix.heading_accuracy_deg, course_deg=fix.course_deg, speed_mps=fix.speed_mps)
     if latest is None:
-        return NavStatus(active=True, name=place.name, kind=place.kind)
+        return NavStatus(active=True, name=place.name, kind=place.kind, address=place.address)
     fix, age = latest
     distance = distance_m(fix.lat, fix.lon, place.lat, place.lon)
     bearing = bearing_deg(fix.lat, fix.lon, place.lat, place.lon)
     reply = NavStatus(
-        active=True, name=place.name, kind=place.kind, distance_m=round(distance), bearing_deg=round(bearing, 1),
+        active=True, name=place.name, kind=place.kind, address=place.address, distance_m=round(distance),
+        bearing_deg=round(bearing, 1),
         compass=compass_word(bearing), arrived=arrived(distance, fix.accuracy_m), fix_age_s=round(age, 2),
         accuracy_m=fix.accuracy_m, heading_deg=fix.heading_deg, heading_accuracy_deg=fix.heading_accuracy_deg,
         course_deg=fix.course_deg, speed_mps=fix.speed_mps)

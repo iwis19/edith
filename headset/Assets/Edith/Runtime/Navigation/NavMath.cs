@@ -124,26 +124,29 @@ namespace Edith.Navigation
         {
             var phrase = kind switch
             {
-                "left" => "Turn left", "right" => "Turn right", "slight_left" => "Bear left",
-                "slight_right" => "Bear right", "sharp_left" => "Sharp left", "sharp_right" => "Sharp right",
-                "uturn" => "Turn around", "arrive" => "Arrive", _ => "",
+                "left" => "Left", "right" => "Right", "slight_left" => "Slight left",
+                "slight_right" => "Slight right", "sharp_left" => "Sharp left", "sharp_right" => "Sharp right",
+                "uturn" => "Turn around", "arrive" => "There", _ => "",
             };
             if (phrase.Length == 0) return "";
             if (metres < 15f) return phrase + " now";
-            var distance = metres >= 1000f
-                ? (metres / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " km"
-                : (Mathf.Round(metres / 10f) * 10f).ToString("0", CultureInfo.InvariantCulture) + " m";
-            return $"{phrase} in {distance}";
+            return $"{phrase} in {Metres(metres)}";
         }
 
-        /// "240 m · 3 min walk", "1.4 km · 18 min walk".
-        public static string DistanceText(float metres)
-        {
-            var minutes = Mathf.Max(1, Mathf.RoundToInt(metres / WalkMetresPerMinute));
-            var distance = metres >= 1000f
-                ? (metres / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " km"
-                : (Mathf.Round(metres / 10f) * 10f).ToString("0", CultureInfo.InvariantCulture) + " m";
-            return $"{distance} · {minutes} min walk";
-        }
+        /// "3 min · 240 m", "18 min · 1.4 km".
+        public static string DistanceText(float metres) => $"{Minutes(metres)} · {Metres(metres)}";
+
+        /// The one line under the place's name: the next turn and the walk left, "Left in 40 m · 3 min", or without a
+        /// turn the walk left with its distance.
+        public static string GuideText(string maneuver, float maneuverMetres, float walkMetres) =>
+            ManeuverText(maneuver, maneuverMetres) is { Length: > 0 } turn
+                ? $"{turn} · {Minutes(walkMetres)}"
+                : DistanceText(walkMetres);
+
+        static string Minutes(float metres) => $"{Mathf.Max(1, Mathf.RoundToInt(metres / WalkMetresPerMinute))} min";
+
+        static string Metres(float metres) => metres >= 1000f
+            ? (metres / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " km"
+            : (Mathf.Round(metres / 10f) * 10f).ToString("0", CultureInfo.InvariantCulture) + " m";
     }
 }

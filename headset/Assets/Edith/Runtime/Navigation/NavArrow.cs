@@ -22,7 +22,7 @@ namespace Edith.Navigation
         [SerializeField] Material material;
 
         const float UnitsPerMetre = 1000f;
-        const float AheadMetres = 0.55f, BelowMetres = 0.19f, LabelBelowMetres = 0.065f;
+        const float AheadMetres = 0.55f, BelowMetres = 0.19f, LabelBelowMetres = 0.055f;
         /// The arrow and label are laid out in metres as seen from 0.85 m and shrunk by this much, so held nearer
         /// they look the same size.
         const float Shrink = AheadMetres / 0.85f;
@@ -34,7 +34,6 @@ namespace Edith.Navigation
         const float StalePhoneSeconds = 20f;
         const float ArrivedLingerSeconds = 5f;
         const float YawRecordSeconds = 0.05f;
-        const int LabelFontSize = 34;
         const float NoticeSeconds = 2.5f;
 
         /// The chevrons from the back of the arrow to its tip: deep blue to ice, so the tip reads first.
@@ -44,7 +43,6 @@ namespace Edith.Navigation
         };
         /// One pulse runs from the back chevron to the tip in PulseSeconds, each chevron PulseLag behind the next.
         const float PulseSeconds = 1.2f, PulseLag = 0.2f, DimAlpha = 0.25f;
-        static readonly Color LabelColor = new Color(0.95f, 0.97f, 1f, 1f);
         static volatile bool poked;
 
         readonly YawHistory yaws = new YawHistory();
@@ -53,7 +51,7 @@ namespace Edith.Navigation
         readonly object gate = new object();
         Transform arrowRoot, labelRoot;
         CanvasGroup arrowGroup, labelGroup;
-        Text label;
+        NavCard card;
         Texture2D arrowTexture;
         RawImage[] chevrons;
         Vector3 anchor;
@@ -110,21 +108,9 @@ namespace Edith.Navigation
                 chevrons[i] = image;
             }
 
-            labelRoot = MakeCanvas("NavLabel", 0.42f, 0.09f, out labelGroup);
-            label = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(UnityEngine.UI.Shadow))
-                .GetComponent<Text>();
-            label.font = Edith.UI.Theme.Regular(font);
-            label.fontSize = LabelFontSize;
-            label.alignment = TextAnchor.UpperCenter;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Overflow;
-            label.color = LabelColor;
-            label.material = material;
-            label.raycastTarget = false;
-            var shadow = label.GetComponent<UnityEngine.UI.Shadow>();
-            shadow.effectColor = new Color(0f, 0f, 0f, 0.85f);
-            shadow.effectDistance = new Vector2(1.5f, -1.5f);
-            Fill(label.rectTransform, labelRoot);
+            labelRoot = MakeCanvas("NavLabel", 0.34f, 0.15f, out labelGroup);
+            Edith.UI.Theme.Sharpen(labelRoot.gameObject);
+            card = new NavCard((RectTransform)labelRoot, font, material);
             arrowGroup.alpha = labelGroup.alpha = 0f;
         }
 
@@ -244,7 +230,7 @@ namespace Edith.Navigation
             }
             else if (now < noticeUntil)
             {
-                label.text = notice;
+                card.Show(notice, null, null);
                 wantLabel = true;
             }
             else if (s == null)
@@ -258,7 +244,7 @@ namespace Edith.Navigation
                     arrivedStatus = s;
                     Debug.Log($"[EDITH nav] arrived at {s.name}");
                 }
-                label.text = $"You're at {s.name}";
+                card.Show(s.name, s.address, "You're here");
                 wantLabel = true;
                 if (now - arrivedAt >= ArrivedLingerSeconds) Stop();
             }
@@ -267,14 +253,12 @@ namespace Edith.Navigation
                 arrivedAt = -1f;
                 wantLabel = true;
                 if (!s.HasFix || s.fix_age_s > StalePhoneSeconds)
-                    label.text = $"{s.name}\nWaiting for your phone's position";
+                    card.Show(s.name, s.address, "Waiting for your phone");
                 else if (!north.Ready)
-                    label.text = $"{s.name} · {NavMath.DistanceText(s.WalkMetres)}\nHold your phone flat, pointing where you face";
+                    card.Show(s.name, s.address, "Hold your phone flat, facing ahead");
                 else
                 {
-                    label.text = $"{s.name}\n{NavMath.DistanceText(s.WalkMetres)}";
-                    if (s.HasRoute && NavMath.ManeuverText(s.maneuver, s.maneuver_distance_m) is { Length: > 0 } turn)
-                        label.text += "\n" + turn;
+                    card.Show(s.name, s.address, NavMath.GuideText(s.HasRoute ? s.maneuver : "", s.maneuver_distance_m, s.WalkMetres));
                     wantArrow = true;
                 }
             }
@@ -362,14 +346,6 @@ namespace Edith.Navigation
             group.interactable = false;
             group.blocksRaycasts = false;
             return rect;
-        }
-
-        static void Fill(RectTransform child, Transform parent)
-        {
-            child.SetParent(parent, false);
-            child.anchorMin = Vector2.zero;
-            child.anchorMax = Vector2.one;
-            child.sizeDelta = Vector2.zero;
         }
 
         /// One white chevron pointing up the texture, an outline with round ends, antialiased by its distance to the
