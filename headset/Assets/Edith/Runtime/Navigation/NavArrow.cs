@@ -93,7 +93,7 @@ namespace Edith.Navigation
             labelRoot = MakeCanvas("NavLabel", 0.42f, 0.09f, out labelGroup);
             label = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(UnityEngine.UI.Shadow))
                 .GetComponent<Text>();
-            label.font = font;
+            label.font = Edith.UI.Theme.Regular(font);
             label.fontSize = LabelFontSize;
             label.alignment = TextAnchor.UpperCenter;
             label.horizontalOverflow = HorizontalWrapMode.Wrap;
