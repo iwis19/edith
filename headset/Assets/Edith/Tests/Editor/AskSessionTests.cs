@@ -172,6 +172,56 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_tool_that_runs_past_the_hearing_limit_keeps_the_question_open()
+        {
+            session.Tap(0f);
+            session.Ready(1f);
+            session.ToolCalled(3f);
+            session.TurnComplete(3f);
+            session.Tick(3f + AskSession.HearSeconds + 5f, 0);
+            Assert.AreEqual(AskPhase.Listening, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+            session.ToolAnswered(20f);
+            session.Tick(20f + AskSession.ToolSpeakSeconds + 0.1f, 0);
+            Assert.AreEqual(AskPhase.Fading, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+        }
+
+        [Test]
+        public void Every_tool_called_must_answer_before_the_question_can_end()
+        {
+            session.Tap(0f);
+            session.Ready(1f);
+            session.ToolCalled(2f);
+            session.ToolCalled(2f);
+            session.ToolAnswered(3f);
+            session.Tick(3f + AskSession.HearSeconds + 1f, 0);
+            Assert.AreEqual(AskPhase.Listening, session.Phase);
+            session.ToolAnswered(20f);
+            session.Tick(20f + AskSession.ToolSpeakSeconds + 0.1f, 0);
+            Assert.AreEqual(AskPhase.Fading, session.Phase);
+        }
+
+        [Test]
+        public void A_tool_called_while_answering_waits_for_its_result_to_be_said()
+        {
+            session.Tap(0f);
+            session.Ready(1f);
+            session.AnswerAudio(2f);
+            session.ToolCalled(2.5f);
+            session.TurnComplete(3f);
+            session.Tick(4f, 0);
+            Assert.AreEqual(AskPhase.Answering, session.Phase, "the result is not back yet");
+            session.ToolAnswered(10f);
+            session.Tick(10.5f, 0);
+            Assert.AreEqual(AskPhase.Answering, session.Phase, "the turn that ended before the result is not the answer");
+            session.TurnComplete(12f);
+            session.Tick(12.5f, 0);
+            Assert.AreEqual(AskPhase.Fading, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+        }
+
+        [Test]
         public void A_closed_socket_drops_a_waiting_question_but_lets_an_answer_play_out()
         {
             session.Tap(0f);

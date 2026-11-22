@@ -7,7 +7,6 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Edith.Navigation;
 using UnityEngine;
 
 namespace Edith.Ask
@@ -15,10 +14,8 @@ namespace Edith.Ask
     public enum LiveEventKind
     {
         Ready, Audio, InputText, OutputText, Sources, TurnComplete, Interrupted, Closed, Failed,
-        /// Gemini asked for a tool; it speaks once the answer is back. Text is the tool's name.
+        /// Gemini asked for a tool, in Call; it speaks once the answer is back.
         ToolCalled,
-        /// A navigation tool call was answered; Text is the tool's name.
-        Navigation,
     }
 
     public readonly struct LiveEvent
@@ -28,12 +25,16 @@ namespace Edith.Ask
         public readonly string Text;
         /// Why, for Failed.
         public readonly AskProblem Problem;
+        /// The function to run, for ToolCalled.
+        public readonly ToolCall Call;
 
-        public LiveEvent(LiveEventKind kind, string text = null, AskProblem problem = AskProblem.None)
+        public LiveEvent(LiveEventKind kind, string text = null, AskProblem problem = AskProblem.None,
+            ToolCall call = default)
         {
             Kind = kind;
             Text = text;
             Problem = problem;
+            Call = call;
         }
     }
 
@@ -66,7 +67,6 @@ namespace Edith.Ask
         readonly ConcurrentBag<float[]> chunks = new ConcurrentBag<float[]>();
         readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
         bool droppedAudio;
-        string backendUrl, deviceToken, profileId;
 
         LiveLink(PcmRing speech, int chunkSamples)
         {
@@ -78,10 +78,7 @@ namespace Edith.Ask
         public static LiveLink Open(string backendUrl, string deviceToken, string profileId, AskHint? hint, PcmRing speech,
             int chunkSamples, bool navigate = false, string voice = null)
         {
-            var link = new LiveLink(speech, chunkSamples)
-            {
-                backendUrl = backendUrl, deviceToken = deviceToken, profileId = profileId,
-            };
+            var link = new LiveLink(speech, chunkSamples);
             var token = link.cancel.Token;
             var requestBody = AskHint.RequestBody(hint, navigate, voice);
             Task.Run(() => link.Run(backendUrl, deviceToken, profileId, requestBody, token));
@@ -113,6 +110,10 @@ namespace Edith.Ask
             waiting.Release();
         }
 
+        /// Answers a function call Gemini made, so it can speak the result.
+        public void SendToolResponse(string id, string name, string responseJson) =>
+            EnqueueText(LiveRequest.ToolResponse(id, name, responseJson));
+
         public void SendImage(byte[] jpeg) => EnqueueText(LiveRequest.Image(jpeg));
 
         /// Tells Gemini the microphone has stopped.
@@ -120,6 +121,9 @@ namespace Edith.Ask
 
         /// Closes the session. Events still queued are dropped.
         public void Dispose() => cancel.Cancel();
+
+        /// Cancelled once this session ends, so work done for it can stop.
+        public CancellationToken Closing => cancel.Token;
 
         void EnqueueText(string json)
         {
@@ -254,9 +258,8 @@ namespace Edith.Ask
             }
             foreach (var call in message.ToolCalls)
             {
-                var asked = call;
-                Post(new LiveEvent(LiveEventKind.ToolCalled, call.Name));
-                _ = Task.Run(() => AnswerTool(asked));
+                Debug.Log($"[EDITH ask] Gemini called {call.Name} ({call.Category} {call.PlaceName})".TrimEnd());
+                Post(new LiveEvent(LiveEventKind.ToolCalled, call: call));
             }
             if (message.TurnComplete)
             {
@@ -264,37 +267,6 @@ namespace Edith.Ask
                 Post(new LiveEvent(LiveEventKind.TurnComplete));
             }
             if (message.GoAway) Debug.Log("[EDITH ask] Gemini will close the session soon");
-        }
-
-        /// Asks the backend what a navigation tool call needs, hands Gemini the answer so it can speak, and tells the
-        /// main thread so the arrow appears at once instead of at its next poll.
-        async Task AnswerTool(ToolCall call)
-        {
-            var token = cancel.Token;
-            Debug.Log($"[EDITH ask] Gemini called {call.Name} ({call.Category} {call.PlaceName})".TrimEnd());
-            string reply;
-            try
-            {
-                reply = call.Name switch
-                {
-                    NavClient.FindPlaceTool => await NavClient.FindAsync(backendUrl, deviceToken, profileId, call.Category,
-                        call.PlaceName, token).ConfigureAwait(false),
-                    NavClient.StopTool => await NavClient.StopAsync(backendUrl, deviceToken, profileId, token)
-                        .ConfigureAwait(false),
-                    _ => NavClient.Problem("That tool does not exist."),
-                };
-            }
-            catch (Exception) when (token.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception e)
-            {
-                Debug.Log($"[EDITH ask] {call.Name} failed: {e.GetBaseException().Message}");
-                reply = NavClient.Problem("The map search did not answer.");
-            }
-            EnqueueText(LiveRequest.ToolResponse(call.Id, call.Name, reply));
-            Post(new LiveEvent(LiveEventKind.Navigation, call.Name));
         }
 
         async Task SendLoop(ClientWebSocket socket, CancellationToken token)

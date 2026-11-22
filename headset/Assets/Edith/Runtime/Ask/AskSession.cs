@@ -26,9 +26,9 @@ namespace Edith.Ask
         float phaseAt;
         float fadeAt;
         bool turnComplete;
-        // Gemini called a tool and speaks only once the tool's answer is back, so a turn that ends before any audio is
-        // not a question it missed.
-        bool toolPending;
+        // Tools Gemini called whose answers are not back yet. It speaks only once they are, so the question stays open
+        // however quiet the session is, and a turn that ends before any audio is not a question it missed.
+        int toolsPending;
         bool toolAnswered;
 
         public AskPhase Phase { get; private set; }
@@ -49,7 +49,6 @@ namespace Edith.Ask
             if (Busy) return false;
             tappedAt = now;
             turnComplete = false;
-            toolPending = false;
             toolAnswered = false;
             Problem = AskProblem.None;
             Enter(AskPhase.Connecting, now);
@@ -63,35 +62,38 @@ namespace Edith.Ask
 
         public void AnswerAudio(float now)
         {
-            if (Phase != AskPhase.Listening) return;
-            toolPending = false;
-            Enter(AskPhase.Answering, now);
+            if (Phase == AskPhase.Listening) Enter(AskPhase.Answering, now);
         }
 
-        /// Gemini asked for a tool while listening. The hearing clock restarts so the tool has time to answer.
+        /// Gemini asked for a tool. The question stays open until ToolAnswered, and the hearing clock restarts.
         public void ToolCalled(float now)
         {
-            if (Phase != AskPhase.Listening) return;
-            toolPending = true;
-            phaseAt = now;
+            if (!Busy) return;
+            toolsPending++;
+            if (Phase == AskPhase.Listening) phaseAt = now;
         }
 
-        /// The tool's answer went back to Gemini. Gemini says it next, and then the card goes quickly.
+        /// The tool's answer went back to Gemini. Gemini says it next, and then the card goes quickly. A turn that
+        /// ended while the tool ran is not the end of the answer.
         public void ToolAnswered(float now)
         {
+            if (toolsPending == 0) return;
             toolAnswered = true;
-            if (Phase == AskPhase.Listening) phaseAt = now;
+            if (--toolsPending > 0) return;
+            if (Phase == AskPhase.Answering) turnComplete = false;
+            phaseAt = now;
         }
 
         public void TurnComplete(float now)
         {
             if (Phase == AskPhase.Answering) turnComplete = true;
-            else if (Phase == AskPhase.Listening && !toolPending) Fail(AskProblem.NotHeard, now);
+            else if (Phase == AskPhase.Listening && toolsPending == 0) Fail(AskProblem.NotHeard, now);
         }
 
         /// The server closed the session. An answer already playing plays out.
         public void Closed(float now)
         {
+            toolsPending = 0;
             if (Phase == AskPhase.Answering) turnComplete = true;
             else Fail(AskProblem.Dropped, now);
         }
@@ -120,13 +122,15 @@ namespace Edith.Ask
                 case AskPhase.Connecting when inPhase > ConnectSeconds:
                     Fail(AskProblem.TimedOut, now);
                     break;
+                case AskPhase.Listening when toolsPending > 0:
+                    break;
                 case AskPhase.Listening when toolAnswered && inPhase > ToolSpeakSeconds:
                     Fade(now, ToolLingerSeconds);
                     break;
                 case AskPhase.Listening when inPhase > HearSeconds:
                     Fail(AskProblem.NotHeard, now);
                     break;
-                case AskPhase.Answering when (turnComplete && speechLeft <= 0) || inPhase > AnswerSeconds:
+                case AskPhase.Answering when (turnComplete && speechLeft <= 0 && toolsPending == 0) || inPhase > AnswerSeconds:
                     Fade(now, toolAnswered ? ToolLingerSeconds : AnswerLingerSeconds);
                     break;
                 case AskPhase.Fading when now >= fadeAt:
@@ -161,6 +165,7 @@ namespace Edith.Ask
         {
             Phase = phase;
             phaseAt = now;
+            if (!Busy) toolsPending = 0;
         }
     }
 }

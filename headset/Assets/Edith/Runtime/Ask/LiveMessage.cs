@@ -5,9 +5,12 @@ using UnityEngine;
 
 namespace Edith.Ask
 {
-    /// A function call Gemini asks the headset to make: find_place or stop_navigation, with their arguments.
+    /// A function call Gemini asks the headset to make: find_place or stop_navigation with their arguments, or one of
+    /// the hand actions, which take none.
     public readonly struct ToolCall
     {
+        public const string Scan = "scan", CollectSnapshot = "collect_snapshot", ClearSnapshots = "clear_snapshots";
+
         public readonly string Id, Name, Category, PlaceName;
 
         public ToolCall(string id, string name, string category, string placeName)
