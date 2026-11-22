@@ -1,16 +1,20 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel
+from pydantic import AwareDatetime, BaseModel, Field, StringConstraints
 
 Rarity = Literal["common", "uncommon", "rare", "epic", "legendary", "mythic"]
+# The interests picked in the headset's Welcome. They reach the prompts, so the size is bounded.
+Interests = Annotated[list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]],
+                      Field(max_length=12)]
 
 
 class LookMeta(BaseModel):
     look_id: int
     source: Literal["pinch", "scan"]
     captured_at: datetime
+    interests: Interests = []
 
 
 class CollectMeta(BaseModel):
@@ -22,6 +26,7 @@ class ScanMeta(BaseModel):
     captured_at: datetime
     # Made by the headset once per launch. Hooks are remembered for one session at a time.
     session: UUID
+    interests: Interests = []
 
 
 class ScanPick(BaseModel):

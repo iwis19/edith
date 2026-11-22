@@ -245,7 +245,7 @@ def create_app(
             raise ApiError(503, "scan_unavailable", "Scan needs GEMINI_API_KEY on the backend.")
         try:
             async with asyncio.timeout(settings.scan_timeout_s):
-                picks = await scanner.scan(data, profile_id, parsed.session)
+                picks = await scanner.scan(data, profile_id, parsed.session, parsed.interests)
         except TimeoutError:
             log.warning("scan timed out after %.1f s", settings.scan_timeout_s)
             raise ApiError(504, "scan_timeout", "The scan took too long.")

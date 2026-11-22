@@ -72,6 +72,9 @@ async def test_the_profile_header_must_be_a_uuid(client, headers):
         ({"image": ("crop.jpg", make_jpeg(), "image/jpeg")}, 422, "invalid_meta"),
         (look_files(meta="{not json"), 422, "invalid_meta"),
         (look_files(meta=meta_json(source="lasso")), 422, "invalid_meta"),
+        (look_files(meta=meta_json(interests=["art"] * 13)), 422, "invalid_meta"),
+        (look_files(meta=meta_json(interests=["x" * 41])), 422, "invalid_meta"),
+        (look_files(meta=meta_json(interests=[" "])), 422, "invalid_meta"),
         (look_files(image=make_jpeg(0, 0)), 422, "invalid_image"),
         ({"meta": (None, meta_json())}, 422, "missing_image"),
         (look_files(image=b"\x89PNG\r\n\x1a\n"), 422, "invalid_image"),
@@ -153,3 +156,9 @@ async def test_a_look_that_fails_before_its_details_records_no_kind_or_place(set
     await asyncio.sleep(0)
     [record] = store.records
     assert (record.kind, record.place) == (None, None)
+
+
+async def test_a_look_meta_with_or_without_interests_is_accepted(client):
+    for meta in (meta_json(), meta_json(interests=[]), meta_json(interests=["Art", "Cars"])):
+        response = await client.post("/look", files=look_files(meta=meta), headers=HEADERS)
+        assert response.status_code == 200
