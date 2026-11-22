@@ -124,19 +124,20 @@ namespace Edith.Navigation
         {
             var phrase = kind switch
             {
-                "left" => "Left", "right" => "Right", "slight_left" => "Slight left",
-                "slight_right" => "Slight right", "sharp_left" => "Sharp left", "sharp_right" => "Sharp right",
-                "uturn" => "Turn around", "arrive" => "There", _ => "",
+                "left" => "Turn left", "right" => "Turn right", "slight_left" => "Keep left",
+                "slight_right" => "Keep right", "sharp_left" => "Turn sharp left", "sharp_right" => "Turn sharp right",
+                "uturn" => "Turn around", "arrive" => "Arrive", _ => "",
             };
             if (phrase.Length == 0) return "";
-            if (metres < 15f) return phrase + " now";
+            // Within 15 m the turn is here, so it reads as a plain instruction with no distance.
+            if (metres < 15f) return phrase;
             return $"{phrase} in {Metres(metres)}";
         }
 
         /// "3 min · 240 m", "18 min · 1.4 km".
         public static string DistanceText(float metres) => $"{Minutes(metres)} · {Metres(metres)}";
 
-        /// The one line under the place's name: the next turn and the walk left, "Left in 40 m · 3 min", or without a
+        /// The one line under the place's name: the next turn and the walk left, "Turn left in 40 m · 3 min", or without a
         /// turn the walk left with its distance.
         public static string GuideText(string maneuver, float maneuverMetres, float walkMetres) =>
             ManeuverText(maneuver, maneuverMetres) is { Length: > 0 } turn
