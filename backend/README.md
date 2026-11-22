@@ -177,6 +177,16 @@ The response is `{"url", "setup", "model"}`:
 - `setup`: the JSON text the headset sends as its first message. It sets the model, spoken English, the voice, transcription of both sides (so the card can show the spoken answer) and EDITH's persona. With `LIVE_SEARCH=true` it adds the `googleSearch` tool and a persona line that limits searching to questions that need current or factual web information. The headset reads the sources from `serverContent.groundingMetadata.groundingChunks[].web` and shows up to three site names under the answer.
 - `model`: the Live model ID.
 
+The setup declares its function tools in one `functionDeclarations` entry. With `{"navigate": true}` (the directions gesture) it starts with `find_place` and `stop_navigation`, which the headset answers through `/navigate`. Every session ends it with `scan`, `collect_snapshot` and `clear_snapshots`, which take no arguments and run on the headset alone, as the gestures would: `scan` runs the palms-out scan, `collect_snapshot` collects the snapshot nearest the line of sight as the fist pull does, and `clear_snapshots` removes every snapshot in the room. The persona tells the model to call them when the person asks to scan or what is around them, to save or collect the snapshot they are looking at, or to clear their snapshots, and to answer in a sentence afterwards. The headset answers each call with a `toolResponse` (`{"functionResponses": [{"id": <the call's id>, "name": <the call's name>, "response": <the result>}]}`):
+
+| Tool | Result | Error codes |
+| --- | --- | --- |
+| `scan` | `{"pins": [{"name": "...", "hook": "..."}]}` | `scan_busy`, `nothing_found`, `scan_failed`, `scan_timeout` |
+| `collect_snapshot` | `{"collected": "<the snapshot's name>"}` | `nothing_in_view`, `still_looking` |
+| `clear_snapshots` | `{"cleared": <count>}` | none |
+
+An error comes back as `{"error": {"code": "...", "message": "..."}}`, and a call to any other name answers `unknown_function`.
+
 | Status | `error.code` | Meaning |
 | --- | --- | --- |
 | 503 | `ask_unavailable` | `GEMINI_API_KEY` is not set |
