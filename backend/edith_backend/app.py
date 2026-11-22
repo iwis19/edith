@@ -347,6 +347,7 @@ def create_app(
             if walked is not None:
                 places, new_area = prefer_unwalked(places, walked, cell_of(fix.lat, fix.lon))
         navigations.set(profile_id, places[0])
+        navigations.fill_address(profile_id, finder)
         return NavigateReply(target=status(places[0], latest, navigations.guidance(profile_id, fix)),
                              others=others(places), new_area=new_area)
 

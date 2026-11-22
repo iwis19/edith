@@ -10,7 +10,7 @@ from edith_backend.app import create_app
 from edith_backend.location import LocationFix, Locations
 from edith_backend.navigate import (
     TARGET_LIFE_S, HttpPlaceFinder, NavigateRequest, Navigations, Place, SearchFailed, arrived, bearing_deg,
-    compass_word, matches_name, nominatim_places, overpass_places, overpass_query,
+    compass_word, matches_name, nominatim_places, overpass_places, overpass_query, status,
 )
 from edith_backend.pairing import Pairings
 
@@ -313,3 +313,26 @@ async def test_a_slow_overpass_mirror_is_overtaken_by_the_next_one(monkeypatch):
     assert [p.name for p in found] == ["Weldon Library"]
     assert asyncio.get_running_loop().time() - started < 1
     assert hosts[:2] == ["overpass-api.de", "overpass.openstreetmap.fr"]
+
+
+def test_a_place_carries_its_street_address_from_the_map_tags():
+    places = overpass_places({"elements": [
+        {"type": "node", "lat": 43.01, "lon": -81.27,
+         "tags": {"name": "Tim Hortons", "amenity": "cafe", "addr:housenumber": "1151", "addr:street": "Richmond Street"}},
+        {"type": "node", "lat": 43.02, "lon": -81.27, "tags": {"name": "Starbucks", "amenity": "cafe"}}]}, *HERE)
+    assert [(p.name, p.address) for p in places] == [("Tim Hortons", "1151 Richmond Street"), ("Starbucks", None)]
+
+
+async def test_a_target_without_an_address_gets_one_looked_up_in_the_background():
+    class Addresser:
+        async def address(self, lat, lon):
+            return "1151 Richmond Street"
+
+    clock = Clock()
+    navigations = Navigations(clock)
+    navigations.set(uuid.UUID(PROFILE), CAFE)
+    navigations.fill_address(uuid.UUID(PROFILE), Addresser())
+    await navigations.settle()
+    assert navigations.target(uuid.UUID(PROFILE)).address == "1151 Richmond Street"
+    fix = LocationFix(lat=HERE[0], lon=HERE[1], accuracy_m=5, taken_at=datetime.now(UTC))
+    assert status(navigations.target(uuid.UUID(PROFILE)), (fix, 1.0)).address == "1151 Richmond Street"
