@@ -39,14 +39,15 @@ namespace Edith.Look
                 unset.Fail("not_configured");
                 return unset;
             }
-            return Send(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, lookId, source, jpeg, capturedAtUtc, LookTimeouts.Default);
+            return Send(settings.Url, settings.DeviceToken, BackendSettings.ProfileId, lookId, source, jpeg, capturedAtUtc, LookTimeouts.Default,
+                Edith.Welcome.WelcomeStore.Interests);
         }
 
         public static LookClient Send(string url, string deviceToken, string profileId, int lookId, LookSource source, byte[] jpeg,
-            DateTime capturedAtUtc, LookTimeouts timeouts)
+            DateTime capturedAtUtc, LookTimeouts timeouts, string[] interests = null)
         {
             var client = new LookClient(lookId);
-            var meta = LookMeta.Json(lookId, source, capturedAtUtc);
+            var meta = LookMeta.Json(lookId, source, capturedAtUtc, interests);
             Task.Run(() => client.Run(url, deviceToken, profileId, jpeg, meta, timeouts));
             return client;
         }

@@ -16,6 +16,7 @@ namespace Edith.Look
             public int look_id;
             public string source;
             public string captured_at;
+            public string[] interests;
         }
 
         [Serializable]
@@ -25,11 +26,12 @@ namespace Edith.Look
             public string collected_at;
         }
 
-        public static string Json(int lookId, LookSource source, DateTime capturedAt) => JsonUtility.ToJson(new Wire
+        public static string Json(int lookId, LookSource source, DateTime capturedAt, string[] interests = null) => JsonUtility.ToJson(new Wire
         {
             look_id = lookId,
             source = source == LookSource.Scan ? "scan" : "pinch",
             captured_at = Utc(capturedAt),
+            interests = interests ?? new string[0],
         });
 
         /// `collectedAt` is the headset's local time. Its UTC offset goes with it, because the backend files the

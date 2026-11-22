@@ -76,11 +76,11 @@ namespace Edith.Ask
 
         /// Starts minting and connecting at once and returns without waiting.
         public static LiveLink Open(string backendUrl, string deviceToken, string profileId, AskHint? hint, PcmRing speech,
-            int chunkSamples, bool navigate = false, string voice = null)
+            int chunkSamples, bool navigate = false, string voice = null, string[] interests = null)
         {
             var link = new LiveLink(speech, chunkSamples);
             var token = link.cancel.Token;
-            var requestBody = AskHint.RequestBody(hint, navigate, voice);
+            var requestBody = AskHint.RequestBody(hint, navigate, voice, interests);
             Task.Run(() => link.Run(backendUrl, deviceToken, profileId, requestBody, token));
             return link;
         }
