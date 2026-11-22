@@ -89,6 +89,7 @@ namespace Edith.Diagnostics
                 case PairPhase.Requesting: return "requesting a code";
                 case PairPhase.Showing: return "code on screen";
                 case PairPhase.Connected: return "phone connected";
+                case PairPhase.Waiting: return "waiting for the phone";
                 default: return "paired";
             }
         }

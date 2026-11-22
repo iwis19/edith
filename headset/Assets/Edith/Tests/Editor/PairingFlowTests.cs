@@ -69,14 +69,37 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void ARememberedPairingWithNoPhonePositionAtLaunchShowsACodeAtOnce()
+        public void ARememberedPairingWithNoPhonePositionAtLaunchWaitsForThePhone()
         {
             var flow = new PairingFlow(true, 0f);
             flow.Next(0f);
             flow.OnLocation(false, 0.3f);
+            Assert.AreEqual(PairPhase.Waiting, flow.Phase);
             Assert.IsTrue(flow.Locked);
             Assert.IsTrue(flow.Visible);
-            Assert.AreEqual(PairCall.RequestCode, flow.Next(0.3f));
+            Assert.AreEqual(PairCall.None, flow.Next(0.3f));
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(0.3f + PairingFlow.PollSeconds));
+            flow.OnLocation(true, 4f);
+            Assert.AreEqual(PairPhase.Paired, flow.Phase);
+            Assert.IsFalse(flow.Locked);
+        }
+
+        [Test]
+        public void AWaitThatRunsOutAsksForANewCode()
+        {
+            var flow = new PairingFlow(true, 0f);
+            flow.Next(0f);
+            flow.OnLocation(false, 0f);
+            var now = 0f;
+            while (now + PairingFlow.PollSeconds < PairingFlow.WaitSeconds)
+            {
+                now += PairingFlow.PollSeconds;
+                Assert.AreEqual(PairCall.CheckLocation, flow.Next(now));
+                flow.OnLocation(false, now);
+                Assert.AreEqual(PairPhase.Waiting, flow.Phase);
+            }
+            Assert.AreEqual(PairCall.RequestCode, flow.Next(PairingFlow.WaitSeconds));
+            Assert.IsTrue(flow.Visible);
         }
 
         [Test]
@@ -182,17 +205,17 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void APairedHeadsetWatchesThePhonePositionEveryThirtySeconds()
+        public void APairedHeadsetWatchesThePhonePositionEveryTenSeconds()
         {
             var flow = PairedAt(0.1f);
             Assert.IsFalse(flow.Visible);
-            Assert.AreEqual(PairCall.None, flow.Next(30f));
-            Assert.AreEqual(PairCall.CheckLocation, flow.Next(30.1f));
+            Assert.AreEqual(PairCall.None, flow.Next(10f));
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(10.1f));
             Assert.IsFalse(flow.Locked);
         }
 
         [Test]
-        public void ALostPhonePositionLocksAgainAndAsksForANewCode()
+        public void ALostPhonePositionLocksAgainAndWaitsForThePhone()
         {
             var flow = PairedAt(0f);
             var now = PairingFlow.WatchSeconds;
@@ -205,9 +228,40 @@ namespace Edith.Tests
             }
             Assert.AreEqual(PairCall.CheckLocation, flow.Next(now));
             flow.OnLocation(false, now);
+            Assert.AreEqual(PairPhase.Waiting, flow.Phase);
             Assert.IsTrue(flow.Locked);
             Assert.IsTrue(flow.Visible);
-            Assert.AreEqual(PairCall.RequestCode, flow.Next(now));
+            Assert.AreEqual(now, PairingFlow.WatchSeconds * PairingFlow.LostAfterMisses);
+        }
+
+        [Test]
+        public void AFeatureFindingNoPositionLocksAtOnce()
+        {
+            var flow = PairedAt(0f);
+            flow.PositionMissing(2f);
+            Assert.AreEqual(PairPhase.Waiting, flow.Phase);
+            Assert.IsTrue(flow.Locked);
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(2f + PairingFlow.PollSeconds));
+            flow.OnLocation(true, 6f);
+            Assert.IsFalse(flow.Locked);
+        }
+
+        [Test]
+        public void AFeatureReportArrivingMidCheckStillLocks()
+        {
+            var flow = PairedAt(0f);
+            Assert.AreEqual(PairCall.CheckLocation, flow.Next(PairingFlow.WatchSeconds));
+            flow.PositionMissing(PairingFlow.WatchSeconds + 0.1f);
+            flow.OnLocation(false, PairingFlow.WatchSeconds + 0.2f);
+            Assert.AreEqual(PairPhase.Waiting, flow.Phase);
+        }
+
+        [Test]
+        public void AFeatureReportDoesNothingWhileUnpaired()
+        {
+            var flow = ShowingCode(out var now);
+            flow.PositionMissing(now);
+            Assert.AreEqual(PairPhase.Showing, flow.Phase);
         }
 
         [Test]

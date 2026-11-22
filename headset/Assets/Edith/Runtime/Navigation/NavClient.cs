@@ -70,6 +70,7 @@ namespace Edith.Navigation
                 .ConfigureAwait(false);
             if (status >= 200 && status < 300) return reply;
             Debug.Log($"[EDITH nav] /navigate answered {status}: {Clip(reply)}");
+            if (status == 409) Edith.Pairing.PhonePairing.ReportPositionMissing();
             return Problem(status switch
             {
                 404 => "Nothing like that was found within about five kilometres.",
