@@ -306,6 +306,7 @@ namespace Edith.Ask
                     session.ToolCalled(now);
                     return;
                 case LiveEventKind.Navigation:
+                    session.ToolAnswered(now);
                     Edith.Navigation.NavArrow.Poke();
                     return;
                 case LiveEventKind.Interrupted:

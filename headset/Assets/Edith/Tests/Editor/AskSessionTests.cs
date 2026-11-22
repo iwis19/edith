@@ -145,6 +145,33 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void After_a_tool_answer_the_card_goes_soon_after_it_is_said()
+        {
+            session.Tap(0f);
+            session.Ready(1f);
+            session.ToolCalled(3f);
+            session.ToolAnswered(4f);
+            session.AnswerAudio(5f);
+            session.TurnComplete(8f);
+            session.Tick(8f, 0);
+            session.Tick(8f + AskSession.ToolLingerSeconds, 0);
+            Assert.AreEqual(AskPhase.Idle, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+        }
+
+        [Test]
+        public void A_tool_answer_Gemini_never_speaks_lets_the_card_go_quietly()
+        {
+            session.Tap(0f);
+            session.Ready(1f);
+            session.ToolCalled(3f);
+            session.ToolAnswered(4f);
+            session.Tick(4f + AskSession.ToolSpeakSeconds + 0.1f, 0);
+            Assert.AreEqual(AskPhase.Fading, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+        }
+
+        [Test]
         public void A_closed_socket_drops_a_waiting_question_but_lets_an_answer_play_out()
         {
             session.Tap(0f);
