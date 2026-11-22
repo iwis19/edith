@@ -401,17 +401,22 @@ namespace Edith.Scan
             ClearPins();
         }
 
-        // Measures a few of the captured frame's sight lines against the depth the headset has now. Lines the head
-        // has turned away from, or that meet a hand, give nothing and are tried again on a later pass.
+        // Measures a few of the captured frame's sight lines against the depth the headset has now, while the camera
+        // is still where it was at capture. Lines that meet a hand give nothing and are tried again on a later pass.
         void RememberDepth()
         {
+            if (!ScanGeometry.HeldStill(depthPose, cameraAccess.GetCameraPose(), tuning)) return;
             var facing = depthPose.rotation * Vector3.forward;
             for (var i = 0; i < DepthRaysPerFrame; i++)
             {
                 var cell = depthCursor;
                 depthCursor = (depthCursor + 1) % depth.Count;
                 var ray = cameraAccess.ViewportPointToRay(depth.Viewport(cell), depthPose);
-                if (!environmentRaycast.Raycast(ray, out var hit, tuning.maxPinMeters)) continue;
+                if (!environmentRaycast.Raycast(ray, out var hit, tuning.maxPinMeters))
+                {
+                    if (hit.status == EnvironmentRaycastHitStatus.NoHit) depth.RecordNothing(cell);
+                    continue;
+                }
                 var along = hit.point - ray.origin;
                 if (along.magnitude >= tuning.minPinMeters) depth.Record(cell, Vector3.Dot(along, facing));
             }
@@ -422,13 +427,17 @@ namespace Edith.Scan
             ClearPins();
             var facing = camera.rotation * Vector3.forward;
             Ray Through(float x, float y) => cameraAccess.ViewportPointToRay(new Vector2(x, y), camera);
-            if (depth != null) Debug.Log($"[EDITH scan] {id} depth remembered for {depth.Known} of {depth.Count} cells");
+            var now = cameraAccess.GetCameraPose();
+            var held = ScanGeometry.HeldStill(camera, now, tuning);
+            if (depth != null)
+                Debug.Log($"[EDITH scan] {id} depth remembered for {depth.Known} of {depth.Count} cells, head moved " +
+                    $"{Quaternion.Angle(camera.rotation, now.rotation):F1} deg and {(now.position - camera.position).magnitude:F2} m since capture");
             foreach (var pick in picks)
             {
                 var ray = Through(pick.ViewportPoint.x, pick.ViewportPoint.y);
                 var answer = Probe(ray, out var hitMeters);
-                var (meters, source) = ScanGeometry.PinDistance(
-                    answer, hitMeters, depth?.At(pick.ViewportPoint), Vector3.Dot(ray.direction, facing), tuning);
+                var (meters, source) = ScanGeometry.PinDistance(answer, hitMeters, held, depth?.At(pick.ViewportPoint),
+                    depth != null && depth.NothingAt(pick.ViewportPoint), Vector3.Dot(ray.direction, facing), tuning);
                 var onObject = ray.GetPoint(meters);
                 var box = pick.ViewportBox;
                 var quad = ScanGeometry.QuadOnPlane(Through(box.xMin, box.yMin), Through(box.xMax, box.yMin),

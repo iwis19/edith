@@ -19,19 +19,28 @@ namespace Edith.Scan
 
     public static class ScanGeometry
     {
-        /// How far along its sight line a pin sits, and why. `hitMeters` is the distance of a Hit. `remembered` is the
-        /// depth kept for the line while the reply was awaited, measured along the camera's forward axis, and
-        /// `cosToFacing` is the cosine between the line and that axis.
-        public static (float meters, PinSource source) PinDistance(
-            DepthAnswer answer, float hitMeters, float? remembered, float cosToFacing, ScanTuning tuning)
+        /// How far along its sight line a pin sits, and why. `answer` and `hitMeters` are what depth says along the
+        /// line now; `held` is whether the camera is still where it was at capture (see HeldStill), and without it
+        /// that reading is ignored. `remembered` is the depth kept for the line while the reply was awaited, measured
+        /// along the camera's forward axis, `rememberedNothing` whether the line then met nothing within reach, and
+        /// `cosToFacing` the cosine between the line and that axis.
+        public static (float meters, PinSource source) PinDistance(DepthAnswer answer, float hitMeters, bool held,
+            float? remembered, bool rememberedNothing, float cosToFacing, ScanTuning tuning)
         {
+            if (!held) answer = DepthAnswer.None;
             // The reply often lands while the hands are still up from the pose, and depth then meets a hand.
             var onHand = answer == DepthAnswer.Hit && hitMeters < tuning.minPinMeters;
             if (answer == DepthAnswer.Hit && !onHand) return (hitMeters, PinSource.Measured);
             if (remembered is { } forward && cosToFacing > 1e-3f) return (forward / cosToFacing, PinSource.Remembered);
-            if (answer == DepthAnswer.Nothing) return (tuning.farPinMeters, PinSource.Far);
+            if (answer == DepthAnswer.Nothing || rememberedNothing) return (tuning.farPinMeters, PinSource.Far);
             return (tuning.assumedPinMeters, PinSource.Assumed);
         }
+
+        /// Whether a camera at `now` is close enough to where it was at `capture` for depth to measure the captured
+        /// frame's sight lines.
+        public static bool HeldStill(Pose capture, Pose now, ScanTuning tuning) =>
+            Quaternion.Angle(capture.rotation, now.rotation) <= tuning.depthPoseDegrees
+            && (now.position - capture.position).magnitude <= tuning.depthPoseMeters;
 
         /// The index of the point at the smallest angle from `line`, among those within `maxDegrees` of it, or -1 when
         /// there is none.

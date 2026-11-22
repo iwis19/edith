@@ -44,6 +44,12 @@ namespace Edith.Scan
         public float assumedPinMeters = 1.5f;
         /// Depth nearer than this is a hand still raised from the pose, not the object.
         public float minPinMeters = 0.35f;
+        /// Depth along a captured frame's sight lines is read only while the camera is within this angle and distance
+        /// of where it was at capture. Depth covers only what the headset sees now: once the head has turned or
+        /// moved, a sight line's near part can fall out of view or behind something, and the first surface depth
+        /// still sees along it is something farther away.
+        public float depthPoseDegrees = 5f;
+        public float depthPoseMeters = 0.1f;
         /// A pick whose sight line meets nothing within maxPinMeters is beyond depth's reach, such as a building
         /// down the street. Its pin only shows the way: it sits this far out, where it barely slides as the user
         /// walks, and fades once they come within farFadeMeters of it, where the guessed spot would be visibly wrong.

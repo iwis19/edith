@@ -99,6 +99,18 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_cell_that_met_nothing_reads_as_nothing_until_it_gets_a_depth()
+        {
+            var grid = new ScanDepthGrid(4, 4);
+            Assert.IsFalse(grid.NothingAt(grid.Viewport(6)));
+            grid.RecordNothing(6);
+            Assert.IsTrue(grid.NothingAt(grid.Viewport(6)));
+            Assert.IsNull(grid.At(grid.Viewport(6)));
+            grid.Record(6, 2f);
+            Assert.IsFalse(grid.NothingAt(grid.Viewport(6)));
+        }
+
+        [Test]
         public void Points_on_the_edge_of_the_frame_fall_in_the_edge_cells()
         {
             var grid = new ScanDepthGrid(4, 4);
@@ -116,14 +128,14 @@ namespace Edith.Tests
         [Test]
         public void A_depth_hit_places_the_pin_where_it_was_measured()
         {
-            Assert.AreEqual((2.4f, PinSource.Measured), ScanGeometry.PinDistance(DepthAnswer.Hit, 2.4f, 3f, 1f, Tuning));
+            Assert.AreEqual((2.4f, PinSource.Measured), ScanGeometry.PinDistance(DepthAnswer.Hit, 2.4f, true, 3f, false, 1f, Tuning));
         }
 
         [Test]
         public void A_hit_on_a_raised_hand_falls_back_to_the_remembered_depth_along_the_line()
         {
             var cos = Mathf.Cos(30f * Mathf.Deg2Rad);
-            var (meters, source) = ScanGeometry.PinDistance(DepthAnswer.Hit, 0.2f, 2f, cos, Tuning);
+            var (meters, source) = ScanGeometry.PinDistance(DepthAnswer.Hit, 0.2f, true, 2f, false, cos, Tuning);
             Assert.AreEqual(PinSource.Remembered, source);
             Assert.AreEqual(2f / cos, meters, 1e-4f);
         }
@@ -131,25 +143,56 @@ namespace Edith.Tests
         [Test]
         public void A_hit_on_a_raised_hand_with_nothing_remembered_is_assumed_not_far()
         {
-            Assert.AreEqual((Tuning.assumedPinMeters, PinSource.Assumed), ScanGeometry.PinDistance(DepthAnswer.Hit, 0.2f, null, 1f, Tuning));
+            Assert.AreEqual((Tuning.assumedPinMeters, PinSource.Assumed), ScanGeometry.PinDistance(DepthAnswer.Hit, 0.2f, true, null, false, 1f, Tuning));
         }
 
         [Test]
         public void A_line_that_meets_nothing_gets_a_far_pin()
         {
-            Assert.AreEqual((Tuning.farPinMeters, PinSource.Far), ScanGeometry.PinDistance(DepthAnswer.Nothing, 0f, null, 1f, Tuning));
+            Assert.AreEqual((Tuning.farPinMeters, PinSource.Far), ScanGeometry.PinDistance(DepthAnswer.Nothing, 0f, true, null, false, 1f, Tuning));
         }
 
         [Test]
         public void A_line_that_meets_nothing_now_still_uses_what_was_remembered()
         {
-            Assert.AreEqual((1.8f, PinSource.Remembered), ScanGeometry.PinDistance(DepthAnswer.Nothing, 0f, 1.8f, 1f, Tuning));
+            Assert.AreEqual((1.8f, PinSource.Remembered), ScanGeometry.PinDistance(DepthAnswer.Nothing, 0f, true, 1.8f, false, 1f, Tuning));
+        }
+
+        [Test]
+        public void A_hit_read_after_the_head_moved_gives_way_to_the_depth_remembered_at_capture()
+        {
+            // Turned away, depth no longer sees a glasses case 0.6 m out and meets the bag 2.4 m behind it instead.
+            Assert.AreEqual((0.6f, PinSource.Remembered),
+                ScanGeometry.PinDistance(DepthAnswer.Hit, 2.4f, false, 0.6f, false, 1f, Tuning));
+        }
+
+        [Test]
+        public void A_hit_read_after_the_head_moved_with_nothing_remembered_is_assumed()
+        {
+            Assert.AreEqual((Tuning.assumedPinMeters, PinSource.Assumed),
+                ScanGeometry.PinDistance(DepthAnswer.Hit, 2.4f, false, null, false, 1f, Tuning));
+        }
+
+        [Test]
+        public void A_line_remembered_meeting_nothing_gets_a_far_pin_after_the_head_moved()
+        {
+            Assert.AreEqual((Tuning.farPinMeters, PinSource.Far),
+                ScanGeometry.PinDistance(DepthAnswer.Hit, 1.2f, false, null, true, 1f, Tuning));
+        }
+
+        [Test]
+        public void The_camera_holds_still_within_the_angle_and_distance()
+        {
+            var capture = new Pose(Vector3.zero, Quaternion.identity);
+            Assert.IsTrue(ScanGeometry.HeldStill(capture, new Pose(new Vector3(0.05f, 0f, 0f), Quaternion.Euler(0f, 4f, 0f)), Tuning));
+            Assert.IsFalse(ScanGeometry.HeldStill(capture, new Pose(Vector3.zero, Quaternion.Euler(0f, 6f, 0f)), Tuning));
+            Assert.IsFalse(ScanGeometry.HeldStill(capture, new Pose(new Vector3(0f, 0f, 0.15f), Quaternion.identity), Tuning));
         }
 
         [Test]
         public void No_depth_at_all_assumes_a_distance()
         {
-            Assert.AreEqual((Tuning.assumedPinMeters, PinSource.Assumed), ScanGeometry.PinDistance(DepthAnswer.None, 0f, null, 1f, Tuning));
+            Assert.AreEqual((Tuning.assumedPinMeters, PinSource.Assumed), ScanGeometry.PinDistance(DepthAnswer.None, 0f, true, null, false, 1f, Tuning));
         }
 
         [Test]

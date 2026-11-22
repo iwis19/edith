@@ -2,13 +2,15 @@ using UnityEngine;
 
 namespace Edith.Scan
 {
-    /// How far the room is along the sight lines of one camera frame, gathered while its reply is awaited. Depth only
-    /// covers what the headset faces at that moment, so a pin placed when the reply lands would lose its distance if
-    /// the head had turned away by then. Each cell keeps the farthest depth it was given: a hand still raised from the
-    /// pose reads nearer than the surface behind it, and gives way once it drops.
+    /// How far the room is along the sight lines of one camera frame, gathered while its reply is awaited and the
+    /// head is still where it was at capture. Depth only covers what the headset faces at that moment, so a pin placed
+    /// when the reply lands would lose its distance, or take a farther surface's, if the head had moved by then. Each
+    /// cell keeps the farthest depth it was given: a hand still raised from the pose reads nearer than the surface
+    /// behind it, and gives way once it drops.
     public sealed class ScanDepthGrid
     {
         readonly float[] meters;
+        readonly bool[] nothing;
 
         public readonly int Columns, Rows;
 
@@ -17,6 +19,7 @@ namespace Edith.Scan
             Columns = columns;
             Rows = rows;
             meters = new float[columns * rows];
+            nothing = new bool[columns * rows];
         }
 
         public int Count => meters.Length;
@@ -42,13 +45,28 @@ namespace Edith.Scan
             if (depth > meters[cell]) meters[cell] = depth;
         }
 
+        /// The cell's sight line met nothing within reach.
+        public void RecordNothing(int cell) => nothing[cell] = true;
+
         /// The depth of the cell `viewport` falls in, or null when it has none yet.
         public float? At(Vector2 viewport)
         {
+            var depth = meters[CellAt(viewport)];
+            return depth > 0f ? depth : (float?)null;
+        }
+
+        /// Whether the cell `viewport` falls in met nothing within reach and was never given a depth.
+        public bool NothingAt(Vector2 viewport)
+        {
+            var cell = CellAt(viewport);
+            return nothing[cell] && meters[cell] <= 0f;
+        }
+
+        int CellAt(Vector2 viewport)
+        {
             var column = Mathf.Clamp(Mathf.FloorToInt(viewport.x * Columns), 0, Columns - 1);
             var row = Mathf.Clamp(Mathf.FloorToInt(viewport.y * Rows), 0, Rows - 1);
-            var depth = meters[row * Columns + column];
-            return depth > 0f ? depth : (float?)null;
+            return row * Columns + column;
         }
     }
 }
