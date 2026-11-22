@@ -37,9 +37,10 @@ namespace Edith.Welcome
         // wide, held 0.75 m out, which fills about 35 degrees of view: readable without moving the eyes.
         const float UnitsPerMetre = 2500f;
         const float Ahead = 0.75f, FadeSeconds = 0.35f;
+        // How far below eye level the canvas is centred, as the Scrapbook's cards are.
+        const float BelowDegrees = 8f;
         const float ScreenWidth = 1280f, ScreenHeight = 820f;
-        // The pairing pane, in design units, and where it is held: 0.45 m out on the line of sight, a tenth wider than
-        // PhonePairing's 15 cm panel.
+        // The pairing pane, in design units, and how far out it is held, a tenth wider than PhonePairing's 15 cm panel.
         static readonly Rect PairPane = new Rect(500f, 93f, 720f, 455f);
         const float PairWidthMetres = 0.165f, PairAhead = 0.45f;
         const float TapMargin = 10f;
@@ -289,7 +290,7 @@ namespace Edith.Welcome
         }
 
         /// Step one shows EDITH beside the picks, step two only its pane, scaled like PhonePairing's panel. Either way
-        /// the screen is shifted so what shows is centred on the canvas, and the canvas is put dead ahead.
+        /// the screen is shifted so what shows is centred on the canvas, and the canvas is put in front.
         void Arrange(bool pairOnly)
         {
             character.gameObject.SetActive(!pairOnly);
@@ -325,12 +326,14 @@ namespace Edith.Welcome
             return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
         }
 
-        /// The canvas centred on the line of sight, upright to the head as the Ask orb is, so it rolls with the head
-        /// instead of looking tilted.
+        /// The canvas straight ahead on the head's level heading, a little below eye level, upright and facing the eye.
+        /// Head pitch and roll are ignored, so a canvas placed while the head is tipped does not tilt at the person.
         Pose Front(Pose eyePose)
         {
+            var level = DeckLayout.Frame(eyePose);
             var ahead = shownStep == WelcomeStep.Pair ? PairAhead : Ahead;
-            return new Pose(eyePose.position + eyePose.rotation * Vector3.forward * ahead, eyePose.rotation);
+            var centre = level.position + level.rotation * (Quaternion.Euler(BelowDegrees, 0f, 0f) * Vector3.forward * ahead);
+            return new Pose(centre, Quaternion.LookRotation(centre - eyePose.position, Vector3.up));
         }
 
         void Leave()
@@ -371,7 +374,7 @@ namespace Edith.Welcome
             switch (flow.Step)
             {
                 case WelcomeStep.Interests:
-                    return "Hi, I'm EDITH!";
+                    return "Hi, I'm EDITH! Tell me what you love and I'll find the fun in whatever you look at.";
                 default:
                     return "";
             }
