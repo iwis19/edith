@@ -8,13 +8,15 @@ using UnityEngine.UI;
 
 namespace Edith.Navigation
 {
-    /// The blue arrow that points the way to the place EDITH found. It floats low in front of the person, follows the
-    /// head lazily, and turns to point at the next point of the walking route the backend follows, or straight along the
-    /// compass bearing to the target when it has no route, both measured from the phone's newest position.
+    /// The chevron that points the way to the place EDITH found. It floats low in front of the person, facing them,
+    /// and turns in the plane of the view like a compass needle: up for straight ahead, sideways for a turn, down for
+    /// behind. It points at the next point of the walking route the backend follows, or straight along the compass
+    /// bearing to the target when it has no route, both measured from the phone's newest position.
     /// The headset has no compass, so north comes from NorthCalibration, fed by the phone's compass and GPS course
-    /// paired with the head's yaw at the moment each reading was taken. It learns from every poll, directions or not,
-    /// so north is usually known by the time directions start. Until north is known, and while the phone is silent,
-    /// only the label shows. On arrival it says so, then stops the directions.
+    /// paired with the head's yaw at the moment each reading was taken, and only by readings taken while the head
+    /// held still. North found by the compass alone is found afresh when directions start, since the phone may have
+    /// been lying anywhere. Until north is known, and while the phone is silent, only the card shows. On arrival it
+    /// says so, then stops the directions.
     public sealed class NavArrow : MonoBehaviour
     {
         [SerializeField] Transform eye;
@@ -26,23 +28,19 @@ namespace Edith.Navigation
         /// The arrow and label are laid out in metres as seen from 0.85 m and shrunk by this much, so held nearer
         /// they look the same size.
         const float Shrink = AheadMetres / 0.85f;
-        const float ArrowMetres = 0.14f;
-        /// How far the arrow tips up from lying flat, so it reads from a standing eye height.
-        const float TiltDegrees = 62f;
+        const float ChevronWidthMetres = 0.1f, ChevronHeightMetres = 0.05f;
         const float FollowRate = 4f, TurnRate = 6f, FadeSeconds = 0.35f;
-        const float ActivePollSeconds = 1f, IdlePollSeconds = 4f;
+        const float ActivePollSeconds = 0.7f, IdlePollSeconds = 4f;
+        /// A compass reading counts when the head kept within CompassSteadyDegrees from this long before it to this
+        /// long after, which also covers the reading being a little older than it is taken to be.
+        const float CompassBeforeSeconds = 1.5f, CompassAfterSeconds = 0.5f, CompassSteadyDegrees = 10f;
+        /// A course is the walk over the last couple of seconds, so the head must have faced one way through them.
+        const float CourseBeforeSeconds = 2.5f, CourseSteadyDegrees = 25f;
         const float StalePhoneSeconds = 20f;
         const float ArrivedLingerSeconds = 5f;
         const float YawRecordSeconds = 0.05f;
         const float NoticeSeconds = 2.5f;
 
-        /// The chevrons from the back of the arrow to its tip: deep blue to ice, so the tip reads first.
-        static readonly Color[] ChevronColours =
-        {
-            new Color32(41, 133, 255, 255), new Color32(111, 184, 255, 255), new Color32(207, 240, 255, 255),
-        };
-        /// One pulse runs from the back chevron to the tip in PulseSeconds, each chevron PulseLag behind the next.
-        const float PulseSeconds = 1.2f, PulseLag = 0.2f, DimAlpha = 0.25f;
         static volatile bool poked;
 
         readonly YawHistory yaws = new YawHistory();
@@ -53,7 +51,6 @@ namespace Edith.Navigation
         CanvasGroup arrowGroup, labelGroup;
         NavCard card;
         Texture2D arrowTexture;
-        RawImage[] chevrons;
         Vector3 anchor;
         bool placed;
         float shownYaw;
@@ -91,22 +88,16 @@ namespace Edith.Navigation
         void Awake()
         {
             arrowTexture = ChevronTexture();
-            arrowRoot = MakeCanvas("NavArrow", ArrowMetres, ArrowMetres, out arrowGroup);
-            chevrons = new RawImage[ChevronColours.Length];
-            for (var i = 0; i < chevrons.Length; i++)
-            {
-                var image = new GameObject($"Chevron {i}", typeof(RectTransform), typeof(RawImage)).GetComponent<RawImage>();
-                image.texture = arrowTexture;
-                image.material = material;
-                image.color = ChevronColours[i];
-                image.raycastTarget = false;
-                var rect = image.rectTransform;
-                rect.SetParent(arrowRoot, false);
-                rect.anchorMin = new Vector2(0f, (float)i / chevrons.Length);
-                rect.anchorMax = new Vector2(1f, (float)(i + 1) / chevrons.Length);
-                rect.sizeDelta = Vector2.zero;
-                chevrons[i] = image;
-            }
+            arrowRoot = MakeCanvas("NavArrow", ChevronWidthMetres, ChevronHeightMetres, out arrowGroup);
+            var chevron = new GameObject("Chevron", typeof(RectTransform), typeof(RawImage)).GetComponent<RawImage>();
+            chevron.texture = arrowTexture;
+            chevron.material = material;
+            chevron.color = Edith.UI.Theme.Accent;
+            chevron.raycastTarget = false;
+            chevron.rectTransform.SetParent(arrowRoot, false);
+            chevron.rectTransform.anchorMin = Vector2.zero;
+            chevron.rectTransform.anchorMax = Vector2.one;
+            chevron.rectTransform.sizeDelta = Vector2.zero;
 
             labelRoot = MakeCanvas("NavLabel", 0.34f, 0.15f, out labelGroup);
             Edith.UI.Theme.Sharpen(labelRoot.gameObject);
@@ -203,7 +194,16 @@ namespace Edith.Navigation
             }
             if (next == null || sentAt < ignoreBefore) return;
             var now = Time.realtimeSinceStartup;
-            if (next.active && status is not { active: true }) Debug.Log($"[EDITH nav] guiding to {next.name}");
+            if (next.active && status is not { active: true })
+            {
+                Debug.Log($"[EDITH nav] guiding to {next.name}");
+                // A compass-only north may date from a phone lying anywhere; one found by walking stands.
+                if (north.Ready && !north.Walked)
+                {
+                    north.Reset();
+                    Debug.Log("[EDITH nav] finding north again for the new directions");
+                }
+            }
             if (!next.active && status is { active: true }) Debug.Log("[EDITH nav] directions ended");
             status = next;
             // An idle reply still carries the newest phone reading, so north is learned before directions start.
@@ -213,10 +213,16 @@ namespace Edith.Navigation
             var fixAt = sentAt + (now - sentAt) * 0.5f - next.fix_age_s;
             if (Mathf.Abs(fixAt - lastSampledAt) < 0.5f || !yaws.TryAt(fixAt, 0.3f, out var headYaw)) return;
             lastSampledAt = fixAt;
-            if (next.course_deg >= 0f && next.speed_mps >= NavMath.CourseMinSpeed)
-                north.Add(NavMath.NorthFrom(headYaw, next.course_deg), NavMath.CourseWeight);
-            if (next.heading_deg >= 0f)
-                north.Add(NavMath.NorthFrom(headYaw, next.heading_deg), NavMath.CompassWeightFor(next.heading_accuracy_deg));
+            var wasReady = north.Ready;
+            var was = north.NorthYaw;
+            if (next.course_deg >= 0f && next.speed_mps >= NavMath.CourseMinSpeed
+                && yaws.Steady(fixAt - CourseBeforeSeconds, fixAt, CourseSteadyDegrees))
+                north.AddCourse(NavMath.NorthFrom(headYaw, next.course_deg));
+            if (next.heading_deg >= 0f && NavMath.CompassUsable(next.heading_accuracy_deg)
+                && yaws.Steady(fixAt - CompassBeforeSeconds, fixAt + CompassAfterSeconds, CompassSteadyDegrees))
+                north.AddCompass(NavMath.NorthFrom(headYaw, next.heading_deg));
+            if (north.Ready && (!wasReady || Mathf.Abs(NavMath.Wrap(north.NorthYaw - was)) >= 1f))
+                Debug.Log($"[EDITH nav] north {(wasReady ? "moved" : "locked")} at {north.NorthYaw:F0} degrees{(north.Walked ? ", from walking" : ", from the compass")}");
         }
 
         void Show(float now)
@@ -294,15 +300,11 @@ namespace Edith.Navigation
                 shownYaw = placed ? Mathf.LerpAngle(shownYaw, target, 1f - Mathf.Exp(-TurnRate * dt)) : target;
             }
             placed = true;
-            var bob = Mathf.Sin(now * 2f) * 0.006f * Shrink;
-            arrowRoot.SetPositionAndRotation(anchor + Vector3.up * bob,
-                Quaternion.Euler(0f, shownYaw, 0f) * Quaternion.Euler(TiltDegrees, 0f, 0f));
-            for (var i = 0; i < chevrons.Length; i++)
-            {
-                var colour = ChevronColours[i];
-                colour.a = NavMath.ChevronPulse(now, i, PulseSeconds, PulseLag, DimAlpha);
-                chevrons[i].color = colour;
-            }
+            // The way to go is fixed in the room and the head's yaw is read live, so the chevron turns the instant
+            // the head does. A canvas facing the eye turns anticlockwise for a positive roll, hence the minus.
+            var facing = Quaternion.LookRotation(anchor - eye.position, Vector3.up);
+            arrowRoot.SetPositionAndRotation(anchor,
+                facing * Quaternion.Euler(0f, 0f, -NavMath.ChevronTurn(shownYaw, eye.eulerAngles.y)));
             var labelAt = anchor + Vector3.down * LabelBelowMetres;
             labelRoot.SetPositionAndRotation(labelAt, Quaternion.LookRotation(labelAt - eye.position, Vector3.up));
         }
@@ -348,12 +350,12 @@ namespace Edith.Navigation
             return rect;
         }
 
-        /// One white chevron pointing up the texture, an outline with round ends, antialiased by its distance to the
-        /// two strokes. The chevrons are tinted by their RawImage colour.
+        /// One white chevron pointing up the texture, two strokes with round ends, antialiased by its distance to
+        /// them and tinted by its RawImage colour.
         static Texture2D ChevronTexture()
         {
             const int width = 128, height = 64;
-            const float halfStroke = 5.5f;
+            const float halfStroke = 7.5f;
             var left = new Vector2(12f, 12f);
             var tip = new Vector2(64f, 52f);
             var right = new Vector2(116f, 12f);

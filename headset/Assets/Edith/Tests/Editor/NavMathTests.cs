@@ -25,32 +25,95 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void CalibrationTakesTheFirstGuessAndAveragesAcrossTheWrap()
+        public void NorthLocksOnceThreeCompassGuessesAgreeAndAveragesAcrossTheWrap()
         {
             var north = new NorthCalibration();
+            north.AddCompass(175f);
+            north.AddCompass(-178f);
             Assert.That(north.Ready, Is.False);
-            north.Add(170f, NavMath.CompassWeight);
-            Assert.That(north.NorthYaw, Is.EqualTo(170f).Within(0.01f));
-            Assert.That(north.Ready, Is.False);
-            for (var i = 0; i < 6; i++) north.Add(-170f, 0.5f);
+            north.AddCompass(-175f);
             Assert.That(north.Ready, Is.True);
-            // Between 170 and -170 by the short way round, closer to the many later guesses.
-            Assert.That(NavMath.Wrap(north.NorthYaw), Is.GreaterThan(170f).Or.LessThan(-160f));
-            Assert.That(NavMath.Wrap(north.NorthYaw + 170f), Is.InRange(-5f, 5f));
+            Assert.That(north.Walked, Is.False);
+            Assert.That(NavMath.Wrap(north.NorthYaw - 180f), Is.InRange(-4f, 4f));
+        }
+
+        [Test]
+        public void ACompassGuessThatDisagreesStartsTheRunAgain()
+        {
+            var north = new NorthCalibration();
+            north.AddCompass(10f);
+            north.AddCompass(12f);
+            north.AddCompass(60f);
+            north.AddCompass(62f);
+            Assert.That(north.Ready, Is.False);
+            north.AddCompass(61f);
+            Assert.That(north.NorthYaw, Is.EqualTo(61f).Within(0.01f));
+        }
+
+        [Test]
+        public void TurningTheHeadAwayFromThePhoneCannotMoveALockedNorth()
+        {
+            var north = new NorthCalibration();
+            for (var i = 0; i < 3; i++) north.AddCompass(20f);
+            // The head turns 90 degrees and then right round while the phone stays put.
+            for (var i = 0; i < 40; i++) north.AddCompass(110f);
+            for (var i = 0; i < 40; i++) north.AddCompass(-160f);
+            Assert.That(north.NorthYaw, Is.EqualTo(20f).Within(0.01f));
+        }
+
+        [Test]
+        public void WalkingNudgesANearNorthAndReplacesAWrongOne()
+        {
+            var north = new NorthCalibration();
+            for (var i = 0; i < 3; i++) north.AddCompass(20f);
+            north.AddCourse(30f);
+            north.AddCourse(30f);
+            Assert.That(north.NorthYaw, Is.EqualTo(20f).Within(0.01f));
+            north.AddCourse(30f);
+            Assert.That(north.NorthYaw, Is.EqualTo(23f).Within(0.01f));
+            Assert.That(north.Walked, Is.True);
+            for (var i = 0; i < 3; i++) north.AddCourse(140f);
+            Assert.That(north.NorthYaw, Is.EqualTo(140f).Within(0.01f));
             north.Reset();
-            Assert.That(north.Strength, Is.EqualTo(0f));
+            Assert.That(north.Ready || north.Walked, Is.False);
+        }
+
+        [Test]
+        public void WalkingAloneLocksNorth()
+        {
+            var north = new NorthCalibration();
+            north.AddCourse(-50f);
+            north.AddCourse(-45f);
+            north.AddCourse(-40f);
+            Assert.That(north.Ready && north.Walked, Is.True);
+            Assert.That(north.NorthYaw, Is.EqualTo(-45f).Within(0.01f));
         }
 
         [Test]
         public void APoorCompassDoesNotCount()
         {
-            Assert.That(NavMath.CompassWeightFor(-1f), Is.EqualTo(NavMath.CompassWeight));
-            Assert.That(NavMath.CompassWeightFor(15f), Is.EqualTo(NavMath.CompassWeight));
-            Assert.That(NavMath.CompassWeightFor(60f), Is.EqualTo(0f));
-            var north = new NorthCalibration();
-            north.Add(45f, 0f);
-            Assert.That(north.Strength, Is.EqualTo(0f));
+            Assert.That(NavMath.CompassUsable(-1f), Is.True);
+            Assert.That(NavMath.CompassUsable(15f), Is.True);
+            Assert.That(NavMath.CompassUsable(60f), Is.False);
         }
+
+        [Test]
+        public void TheHeadIsSteadyOnlyWhileItKeepsToOneDirection()
+        {
+            var history = new YawHistory();
+            for (var i = 0; i < 20; i++) history.Record(i * 0.1f, 358f + i * 0.2f);
+            for (var i = 20; i < 40; i++) history.Record(i * 0.1f, 2f + (i - 20) * 3f);
+            Assert.That(history.Steady(0f, 1.9f, 10f), Is.True);
+            Assert.That(history.Steady(1f, 3f, 10f), Is.False);
+            Assert.That(history.Steady(10f, 12f, 10f), Is.False);
+        }
+
+        [TestCase(40f, 40f, 0f)]
+        [TestCase(40f, -50f, 90f)]
+        [TestCase(-170f, 10f, 180f)]
+        [TestCase(10f, 40f, -30f)]
+        public void TheChevronTurnsByTheWayToGoSeenFromTheHead(float arrowYaw, float headYaw, float expected) =>
+            Assert.That(NavMath.ChevronTurn(arrowYaw, headYaw), Is.EqualTo(expected).Within(0.01f));
 
         [Test]
         public void YawHistoryFindsTheNearestRecordedMoment()
@@ -79,17 +142,6 @@ namespace Edith.Tests
             Assert.That(status.course_deg, Is.EqualTo(-1f));
             Assert.That(status.heading_deg, Is.EqualTo(30f));
             Assert.That(NavStatus.Parse("{\"active\":false,\"arrived\":false}").HasFix, Is.False);
-        }
-
-        [Test]
-        public void TheChevronPulseRunsFromTheBackToTheTip()
-        {
-            // The back chevron peaks half a period in, and each chevron towards the tip peaks a lag later.
-            Assert.That(NavMath.ChevronPulse(0.6f, 0, 1.2f, 0.2f, 0.25f), Is.EqualTo(1f).Within(1e-4f));
-            Assert.That(NavMath.ChevronPulse(0.8f, 1, 1.2f, 0.2f, 0.25f), Is.EqualTo(1f).Within(1e-4f));
-            Assert.That(NavMath.ChevronPulse(1.0f, 2, 1.2f, 0.2f, 0.25f), Is.EqualTo(1f).Within(1e-4f));
-            // At its dimmest a chevron still shows.
-            Assert.That(NavMath.ChevronPulse(0f, 0, 1.2f, 0.2f, 0.25f), Is.EqualTo(0.25f).Within(1e-4f));
         }
 
         [TestCase("left", 40f, "Turn left in 40 m")]

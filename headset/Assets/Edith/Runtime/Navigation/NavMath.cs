@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
 
@@ -41,43 +42,98 @@ namespace Edith.Navigation
             }
             return best <= tolerance;
         }
+
+        /// Whether the head kept within `degrees` of one direction from `from` to `to`, with yaws recorded in between.
+        public bool Steady(float from, float to, float degrees)
+        {
+            var any = false;
+            var first = 0f;
+            float low = 0f, high = 0f;
+            for (var i = 0; i < count; i++)
+            {
+                if (times[i] < from || times[i] > to) continue;
+                if (!any)
+                {
+                    any = true;
+                    first = yaws[i];
+                    continue;
+                }
+                var off = NavMath.Wrap(yaws[i] - first);
+                low = Math.Min(low, off);
+                high = Math.Max(high, off);
+            }
+            return any && high - low <= degrees;
+        }
     }
 
     /// Where true north lies in the headset's world. The Quest has no compass, so each phone reading gives one guess:
-    /// the head's yaw when the reading was taken minus the phone's heading, which holds while the phone points the way
-    /// the person faces. The guesses are averaged as unit vectors with exponential forgetting, so a bad one is diluted
-    /// and a drifting world settles back.
+    /// the head's yaw when the reading was taken minus the phone's direction. A compass guess holds only while the
+    /// phone points the way the head faces, so the compass is used just to find north: once Agreeing guesses in a row
+    /// agree, north is locked and the compass is ignored, and turning the head away from the phone cannot move it.
+    /// A walking course does not depend on how the phone is held, so a run of agreeing course guesses locks north
+    /// too, and afterwards nudges it, or replaces it when it was plainly wrong.
     public sealed class NorthCalibration
     {
-        /// Below this certainty the arrow stays hidden rather than point a wrong way.
-        public const float ReadyStrength = 0.3f;
+        public const int Agreeing = 3;
+        /// Guesses in a run lie within this many degrees of each other.
+        public const float CompassSpread = 15f, CourseSpread = 25f;
+        /// A run of course guesses further than this from the locked north replaces it; a nearer one moves it by
+        /// CourseBlend of the difference.
+        public const float SnapDegrees = 30f, CourseBlend = 0.3f;
 
-        float x, y;
+        readonly List<float> compass = new List<float>(), course = new List<float>();
 
-        /// From 0 (no guesses) towards 1 (many agreeing guesses).
-        public float Strength { get; private set; }
+        public bool Ready { get; private set; }
 
-        public bool Ready => Strength >= ReadyStrength;
+        /// North was set or confirmed by walking, which no way of holding the phone can fool.
+        public bool Walked { get; private set; }
 
         /// The Unity yaw that points to true north.
-        public float NorthYaw => Mathf.Atan2(x, y) * Mathf.Rad2Deg;
+        public float NorthYaw { get; private set; }
 
-        /// Adds a guess of NorthYaw with `weight` between 0 and 1. The first guess is taken whole.
-        public void Add(float northYaw, float weight)
+        /// A guess from the phone's compass. Ignored once north is locked.
+        public void AddCompass(float northYaw)
         {
-            weight = Mathf.Clamp01(weight);
-            if (weight <= 0f) return;
-            var r = northYaw * Mathf.Deg2Rad;
-            var a = Strength <= 0f ? 1f : weight;
-            x += a * (Mathf.Sin(r) - x);
-            y += a * (Mathf.Cos(r) - y);
-            Strength += weight * (1f - Strength);
+            if (Ready || !Agree(compass, northYaw, CompassSpread, out var mean)) return;
+            NorthYaw = mean;
+            Ready = true;
+        }
+
+        /// A guess from the GPS course while walking.
+        public void AddCourse(float northYaw)
+        {
+            if (!Agree(course, northYaw, CourseSpread, out var mean)) return;
+            var off = NavMath.Wrap(mean - NorthYaw);
+            NorthYaw = !Ready || Mathf.Abs(off) > SnapDegrees ? mean : NavMath.Wrap(NorthYaw + off * CourseBlend);
+            Ready = Walked = true;
         }
 
         public void Reset()
         {
-            x = y = 0f;
-            Strength = 0f;
+            compass.Clear();
+            course.Clear();
+            Ready = Walked = false;
+            NorthYaw = 0f;
+        }
+
+        /// Adds `guess` to the run in `recent`, starting the run again when it disagrees with any guess in it, and
+        /// gives the run's mean once it is Agreeing long.
+        static bool Agree(List<float> recent, float guess, float spread, out float mean)
+        {
+            mean = 0f;
+            foreach (var kept in recent)
+            {
+                if (Mathf.Abs(NavMath.Wrap(kept - guess)) <= spread) continue;
+                recent.Clear();
+                break;
+            }
+            recent.Add(guess);
+            if (recent.Count > Agreeing) recent.RemoveAt(0);
+            if (recent.Count < Agreeing) return false;
+            var off = 0f;
+            foreach (var kept in recent) off += NavMath.Wrap(kept - guess);
+            mean = NavMath.Wrap(guess + off / recent.Count);
+            return true;
         }
     }
 
@@ -86,10 +142,9 @@ namespace Edith.Navigation
         /// Walking pace, for the minutes shown under the arrow.
         public const float WalkMetresPerMinute = 80f;
         /// A GPS course is trusted only at walking pace or faster; standing still it points anywhere.
-        public const float CourseMinSpeed = 0.8f;
+        public const float CourseMinSpeed = 1f;
         /// A compass that reports a worse error than this is ignored.
         public const float WorstCompassDegrees = 40f;
-        public const float CourseWeight = 0.35f, CompassWeight = 0.15f;
 
         /// `degrees` in (-180, 180].
         public static float Wrap(float degrees)
@@ -106,18 +161,12 @@ namespace Edith.Navigation
         /// The guess of north from a phone direction (a heading or a course) taken while the head pointed at `headYaw`.
         public static float NorthFrom(float headYaw, float phoneDegrees) => Wrap(headYaw - phoneDegrees);
 
-        /// How much a reading counts towards north: a moving course most, a confident compass less, a poor one not.
-        public static float CompassWeightFor(float headingAccuracy) =>
-            headingAccuracy > WorstCompassDegrees ? 0f : CompassWeight;
+        /// Whether a compass reading counts: one that reports no error, or an error within WorstCompassDegrees.
+        public static bool CompassUsable(float headingAccuracy) => headingAccuracy <= WorstCompassDegrees;
 
-        /// How bright chevron `index` (0 at the back of the arrow) is at `time`: a pulse that passes from the back to
-        /// the tip once every `period` seconds, each chevron `lag` seconds after the one behind it, never below `dim`.
-        public static float ChevronPulse(float time, int index, float period, float lag, float dim)
-        {
-            var phase = Mathf.Repeat((time - index * lag) / period, 1f);
-            var wave = 0.5f - 0.5f * Mathf.Cos(phase * 2f * Mathf.PI);
-            return Mathf.Lerp(dim, 1f, wave);
-        }
+        /// How far the chevron turns clockwise from pointing up the view, for a way to go along `arrowYaw` seen by a
+        /// head facing `headYaw`: 0 straight ahead, 90 to the right, 180 behind.
+        public static float ChevronTurn(float arrowYaw, float headYaw) => Wrap(arrowYaw - headYaw);
 
         /// "Turn left in 40 m", "Arrive in 60 m"; empty for a turn kind the arrow does not know.
         public static string ManeuverText(string kind, float metres)

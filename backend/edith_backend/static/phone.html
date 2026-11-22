@@ -149,8 +149,8 @@
 <script>
 (function () {
   "use strict";
-  // While the headset is giving directions, the position and compass go every two seconds so the arrow keeps up.
-  var SEND_EVERY_MS = 10000, NAV_SEND_EVERY_MS = 2000, SEND_AFTER_METRES = 25, HEADING_FRESH_MS = 3000;
+  // While the headset is giving directions, the position and compass go every second so the arrow keeps up.
+  var SEND_EVERY_MS = 10000, NAV_SEND_EVERY_MS = 1000, SEND_AFTER_METRES = 25, HEADING_FRESH_MS = 1000;
   // The headset learns north from the compass at any time, so a reading counts only while the phone lies within
   // this many degrees of flat, as when held pointing the way the person faces, never in a pocket.
   var FLAT_DEGREES = 30;

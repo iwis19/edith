@@ -20,7 +20,7 @@ VALHALLA_URL = "https://valhalla1.openstreetmap.de/route"
 OFF_ROUTE_M = 30.0
 # The arrow points at the first route vertex at least this far ahead of the person, so it does not swing about when the
 # next vertex is a few metres away.
-LOOKAHEAD_M = 12.0
+LOOKAHEAD_M = 30.0
 # Turns this close behind the person's position along the route are counted as taken.
 TURN_PASSED_M = 3.0
 ROUTE_TIMEOUT_S = 4.0
