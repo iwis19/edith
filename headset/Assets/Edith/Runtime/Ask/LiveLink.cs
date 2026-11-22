@@ -15,6 +15,8 @@ namespace Edith.Ask
     public enum LiveEventKind
     {
         Ready, Audio, InputText, OutputText, Sources, TurnComplete, Interrupted, Closed, Failed,
+        /// Gemini asked for a tool; it speaks once the answer is back. Text is the tool's name.
+        ToolCalled,
         /// A navigation tool call was answered; Text is the tool's name.
         Navigation,
     }
@@ -250,15 +252,16 @@ namespace Edith.Ask
                 speech.Drop();
                 Post(new LiveEvent(LiveEventKind.Interrupted));
             }
+            foreach (var call in message.ToolCalls)
+            {
+                var asked = call;
+                Post(new LiveEvent(LiveEventKind.ToolCalled, call.Name));
+                _ = Task.Run(() => AnswerTool(asked));
+            }
             if (message.TurnComplete)
             {
                 speech.Finish();
                 Post(new LiveEvent(LiveEventKind.TurnComplete));
-            }
-            foreach (var call in message.ToolCalls)
-            {
-                var asked = call;
-                _ = Task.Run(() => AnswerTool(asked));
             }
             if (message.GoAway) Debug.Log("[EDITH ask] Gemini will close the session soon");
         }

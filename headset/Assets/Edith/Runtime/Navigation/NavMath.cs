@@ -110,6 +110,23 @@ namespace Edith.Navigation
         public static float CompassWeightFor(float headingAccuracy) =>
             headingAccuracy > WorstCompassDegrees ? 0f : CompassWeight;
 
+        /// "Turn left in 40 m", "Arrive in 60 m"; empty for a turn kind the arrow does not know.
+        public static string ManeuverText(string kind, float metres)
+        {
+            var phrase = kind switch
+            {
+                "left" => "Turn left", "right" => "Turn right", "slight_left" => "Bear left",
+                "slight_right" => "Bear right", "sharp_left" => "Sharp left", "sharp_right" => "Sharp right",
+                "uturn" => "Turn around", "arrive" => "Arrive", _ => "",
+            };
+            if (phrase.Length == 0) return "";
+            if (metres < 15f) return phrase + " now";
+            var distance = metres >= 1000f
+                ? (metres / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " km"
+                : (Mathf.Round(metres / 10f) * 10f).ToString("0", CultureInfo.InvariantCulture) + " m";
+            return $"{phrase} in {distance}";
+        }
+
         /// "240 m · 3 min walk", "1.4 km · 18 min walk".
         public static string DistanceText(float metres)
         {

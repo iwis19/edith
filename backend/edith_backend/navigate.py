@@ -6,22 +6,24 @@ compass bearing from the newest fix to that target, with the phone's heading so 
 leave the backend rounded to 4 decimals (about 11 m), as in resolve.py, and are never logged."""
 import asyncio
 import logging
-import math
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, get_args
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 from pydantic import BaseModel, Field
 
 from .location import LocationFix, distance_m
 from .resolve import NOMINATIM_GAP_S, OVERPASS_URLS, SERVICE_TIMEOUT_S, USER_AGENT, clean_name, normalise
+from .route import ROUTE_TIMEOUT_S, Guidance, Route, RouteFailed, Router, bearing_deg, guide
 
 log = logging.getLogger("edith.navigate")
 
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
+# An Overpass mirror that has not answered in this long gets company from the next mirror.
+OVERPASS_HEDGE_S = 1.5
 # Searched in turn until one finds something: a short walk first, then a long one.
 SEARCH_RADII_M = (1500, 5000)
 MAX_CHOICES = 3
@@ -102,6 +104,8 @@ class NavigateRequest(BaseModel):
     """What Gemini's find_place call asks for: a kind of place, a name, or both."""
     category: Category = "any"
     name: str | None = Field(None, max_length=100)
+    # Prefer a match in an area the person has never walked, when their trail is known.
+    new_area: bool = False
 
 
 class NavStatus(BaseModel):
@@ -110,11 +114,20 @@ class NavStatus(BaseModel):
     name: str | None = None
     kind: str | None = None
     distance_m: int | None = None
-    # From the newest fix to the target, in degrees clockwise from true north.
+    # Straight from the newest fix to the target, in degrees clockwise from true north. Arrival is judged on this.
     bearing_deg: float | None = None
     # "north-east" and the like, for speech.
     compass: str | None = None
     arrived: bool = False
+    # While a walking route is being followed: where to head now, the next route vertex a little way ahead, as
+    # metres and degrees clockwise from true north from the newest fix. Without it the arrow uses the straight bearing.
+    waypoint_distance_m: int | None = None
+    waypoint_bearing_deg: float | None = None
+    # The next turn on the route ("left", "slight_right", "uturn", "arrive" and so on) and the metres to it, and the
+    # metres of walking left along the route.
+    maneuver: str | None = None
+    maneuver_distance_m: int | None = None
+    route_remaining_m: int | None = None
     # Seconds since the backend received the newest fix, and what came with it.
     fix_age_s: float | None = None
     accuracy_m: float | None = None
@@ -126,6 +139,8 @@ class NavStatus(BaseModel):
 
 class NavigateReply(BaseModel):
     target: NavStatus
+    # Whether the target lies in an area the person has never walked; only set when new_area was asked for.
+    new_area: bool | None = None
     # The other nearest matches, nearest first, without coordinates, so EDITH can mention them.
     others: list[dict]
 
@@ -140,15 +155,6 @@ class SearchFailed(Exception):
 
 class PlaceFinder(Protocol):
     async def find(self, lat: float, lon: float, request: NavigateRequest) -> list[Place]: ...
-
-
-def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """The initial great-circle bearing from the first point to the second, clockwise from true north, in [0, 360)."""
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dl = math.radians(lon2 - lon1)
-    x = math.sin(dl) * math.cos(p2)
-    y = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
-    return (math.degrees(math.atan2(x, y)) + 360.0) % 360.0
 
 
 _COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
@@ -254,45 +260,70 @@ class HttpPlaceFinder:
     async def find(self, lat: float, lon: float, request: NavigateRequest) -> list[Place]:
         lat, lon = round(lat, 4), round(lon, 4)
         name = (request.name or "").strip()
-        # Raised only when no service answered at all: an empty answer is NoPlace, not a failure.
-        answered = False
-        if request.category != "any":
-            for radius in SEARCH_RADII_M:
+        # A named place is searched by name at the same time as by kind, so a miss in the kind search costs no extra
+        # wait. The kind search still wins when it finds the name, since its places carry their real kind.
+        by_name = asyncio.create_task(self._nominatim(lat, lon, name)) if name else None
+        try:
+            # Raised only when no service answered at all: an empty answer is NoPlace, not a failure.
+            answered = False
+            if request.category != "any":
+                for radius in SEARCH_RADII_M:
+                    try:
+                        found = await self._overpass(lat, lon, radius, request.category)
+                    except (httpx.HTTPError, ValueError) as exc:
+                        log.info("overpass search failed: %s", type(exc).__name__)
+                        break
+                    answered = True
+                    if name:
+                        found = [p for p in found if matches_name(p, name)]
+                    if found:
+                        return dedupe(found)[:MAX_CHOICES]
+            if by_name:
                 try:
-                    found = await self._overpass(lat, lon, radius, request.category)
+                    found = await by_name
+                    answered = True
+                    if found:
+                        return dedupe(found)[:MAX_CHOICES]
                 except (httpx.HTTPError, ValueError) as exc:
-                    log.info("overpass search failed: %s", type(exc).__name__)
-                    break
-                answered = True
-                if name:
-                    found = [p for p in found if matches_name(p, name)]
-                if found:
-                    return dedupe(found)[:MAX_CHOICES]
-        if name:
-            try:
-                found = await self._nominatim(lat, lon, name)
-                answered = True
-                if found:
-                    return dedupe(found)[:MAX_CHOICES]
-            except (httpx.HTTPError, ValueError) as exc:
-                log.info("nominatim search failed: %s", type(exc).__name__)
-        if not answered:
-            raise SearchFailed
-        return []
+                    log.info("nominatim search failed: %s", type(exc).__name__)
+            if not answered:
+                raise SearchFailed
+            return []
+        finally:
+            if by_name and not by_name.done():
+                by_name.cancel()
 
     async def _overpass(self, lat: float, lon: float, radius: int, category: str) -> list[Place]:
+        """Asks the first mirror, and each next one too whenever the ones asked so far are slow or fail. The first
+        good answer wins and the rest are dropped."""
+        query = overpass_query(lat, lon, radius, category)
+
+        async def ask(url: str) -> list[Place]:
+            response = await self._http.post(url, data={"data": query}, timeout=SERVICE_TIMEOUT_S,
+                                             headers={"User-Agent": USER_AGENT})
+            response.raise_for_status()
+            reply = response.json()
+            if isinstance(reply, dict) and reply.get("remark"):
+                raise ValueError("Overpass reported a runtime error.")
+            return overpass_places(reply, lat, lon)
+
+        mirrors = iter(OVERPASS_URLS)
+        pending = {asyncio.create_task(ask(next(mirrors)))}
         last: Exception | None = None
-        for url in OVERPASS_URLS:
-            try:
-                response = await self._http.post(url, data={"data": overpass_query(lat, lon, radius, category)},
-                                                 timeout=SERVICE_TIMEOUT_S, headers={"User-Agent": USER_AGENT})
-                response.raise_for_status()
-                reply = response.json()
-                if isinstance(reply, dict) and reply.get("remark"):
-                    raise ValueError("Overpass reported a runtime error.")
-                return overpass_places(reply, lat, lon)
-            except (httpx.HTTPError, ValueError) as exc:
-                last = exc
+        try:
+            while pending:
+                done, pending = await asyncio.wait(pending, timeout=OVERPASS_HEDGE_S,
+                                                   return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    try:
+                        return task.result()
+                    except (httpx.HTTPError, ValueError) as exc:
+                        last = exc
+                if (url := next(mirrors, None)) is not None:
+                    pending.add(asyncio.create_task(ask(url)))
+        finally:
+            for task in pending:
+                task.cancel()
         assert last is not None
         raise last
 
@@ -313,18 +344,30 @@ class HttpPlaceFinder:
                 self._nominatim_last = self._clock()
 
 
+# A route asked for and failed is not asked for again for this long, and a route that arrived not again for the shorter
+# gap, so a poll every second does not hammer the routing server.
+ROUTE_RETRY_S, REROUTE_GAP_S = 10.0, 5.0
+
+
 @dataclass
 class _Target:
     place: Place
     set_at: float
+    route: Route | None = None
+    next_route_at: float = 0.0
+    fetching: asyncio.Task | None = None
+    adventure_id: UUID = field(default_factory=uuid4)
 
 
 class Navigations:
-    """Each profile's navigation target, in memory like the positions it is measured from."""
+    """Each profile's navigation target and the walking route to it, in memory like the positions it is measured from.
+    Without a router the arrow keeps the straight bearing."""
 
-    def __init__(self, clock: Callable[[], float] = time.time) -> None:
+    def __init__(self, clock: Callable[[], float] = time.time, router: Router | None = None) -> None:
         self._clock = clock
+        self._router = router
         self._targets: dict[UUID, _Target] = {}
+        self._tasks: set[asyncio.Task] = set()
 
     def set(self, profile_id: UUID, place: Place) -> None:
         self._targets[profile_id] = _Target(place, self._clock())
@@ -333,20 +376,62 @@ class Navigations:
     def clear(self, profile_id: UUID) -> bool:
         return self._targets.pop(profile_id, None) is not None
 
-    def target(self, profile_id: UUID) -> Place | None:
+    def _found(self, profile_id: UUID) -> _Target | None:
         found = self._targets.get(profile_id)
         if found is None:
             return None
         if self._clock() - found.set_at > TARGET_LIFE_S:
             del self._targets[profile_id]
             return None
-        return found.place
+        return found
+
+    def target(self, profile_id: UUID) -> Place | None:
+        found = self._found(profile_id)
+        return found.place if found else None
 
     def active(self, profile_id: UUID) -> bool:
         return self.target(profile_id) is not None
 
+    def adventure(self, profile_id: UUID) -> UUID | None:
+        """The id of the navigation under way, which names its trail."""
+        found = self._found(profile_id)
+        return found.adventure_id if found else None
 
-def status(place: Place | None, latest: tuple[LocationFix, float] | None) -> NavStatus:
+    def guidance(self, profile_id: UUID, fix: LocationFix) -> Guidance | None:
+        """Where the route says to head from `fix`, or None when there is no route that fits it. The first call, and a
+        call more than OFF_ROUTE_M from the route, start fetching a route in the background, so a poll never waits on
+        the routing server."""
+        found = self._found(profile_id)
+        if found is None:
+            return None
+        guided = guide(found.route, fix.lat, fix.lon) if found.route else None
+        if self._router and (guided is None or guided.off_route) and found.fetching is None                 and self._clock() >= found.next_route_at:
+            task = asyncio.create_task(self._fetch(found, fix.lat, fix.lon))
+            found.fetching = task
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
+        return None if guided is None or guided.off_route else guided
+
+    async def _fetch(self, found: _Target, lat: float, lon: float) -> None:
+        assert self._router is not None
+        try:
+            found.route = await asyncio.wait_for(self._router.route(lat, lon, found.place.lat, found.place.lon),
+                                                 ROUTE_TIMEOUT_S)
+            found.next_route_at = self._clock() + REROUTE_GAP_S
+        except (RouteFailed, TimeoutError):
+            found.route = None
+            found.next_route_at = self._clock() + ROUTE_RETRY_S
+        finally:
+            found.fetching = None
+
+    async def settle(self) -> None:
+        """Waits for the routes being fetched; tests use it."""
+        while self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+            await asyncio.sleep(0)
+
+
+def status(place: Place | None, latest: tuple[LocationFix, float] | None, guidance: Guidance | None = None) -> NavStatus:
     if place is None:
         return NavStatus(active=False)
     if latest is None:
@@ -354,11 +439,18 @@ def status(place: Place | None, latest: tuple[LocationFix, float] | None) -> Nav
     fix, age = latest
     distance = distance_m(fix.lat, fix.lon, place.lat, place.lon)
     bearing = bearing_deg(fix.lat, fix.lon, place.lat, place.lon)
-    return NavStatus(
+    reply = NavStatus(
         active=True, name=place.name, kind=place.kind, distance_m=round(distance), bearing_deg=round(bearing, 1),
         compass=compass_word(bearing), arrived=arrived(distance, fix.accuracy_m), fix_age_s=round(age, 2),
         accuracy_m=fix.accuracy_m, heading_deg=fix.heading_deg, heading_accuracy_deg=fix.heading_accuracy_deg,
         course_deg=fix.course_deg, speed_mps=fix.speed_mps)
+    if guidance:
+        reply.waypoint_distance_m = round(guidance.waypoint_distance_m)
+        reply.waypoint_bearing_deg = round(guidance.waypoint_bearing_deg, 1)
+        reply.maneuver = guidance.turn
+        reply.maneuver_distance_m = round(guidance.turn_distance_m)
+        reply.route_remaining_m = round(guidance.remaining_m)
+    return reply
 
 
 def others(places: list[Place]) -> list[dict]:

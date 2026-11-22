@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
     database_url: str | None = None
+    # Where navigation trails are kept, for a Tiger Cloud service beside the main database. Without it trails use
+    # database_url.
+    trails_database_url: str | None = None
     # Shared with the headset build. When set, every endpoint but /health answers only requests carrying it in
     # X-Edith-Token, so nobody else can spend the API keys.
     device_token: SecretStr | None = None

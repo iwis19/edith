@@ -17,11 +17,19 @@ namespace Edith.Ask
         public const float AnswerSeconds = 60f;
         public const float AnswerLingerSeconds = 8f;
         public const float ProblemLingerSeconds = 4f;
+        /// After a tool answered, the arrow carries the answer, so the card goes soon after Edith has said it.
+        public const float ToolLingerSeconds = 1f;
+        /// How long Gemini may stay silent after a tool answered before the card just goes.
+        public const float ToolSpeakSeconds = 6f;
 
         float tappedAt;
         float phaseAt;
         float fadeAt;
         bool turnComplete;
+        // Gemini called a tool and speaks only once the tool's answer is back, so a turn that ends before any audio is
+        // not a question it missed.
+        bool toolPending;
+        bool toolAnswered;
 
         public AskPhase Phase { get; private set; }
         /// Why the last question got no answer; None while one is under way or after an answer.
@@ -41,6 +49,8 @@ namespace Edith.Ask
             if (Busy) return false;
             tappedAt = now;
             turnComplete = false;
+            toolPending = false;
+            toolAnswered = false;
             Problem = AskProblem.None;
             Enter(AskPhase.Connecting, now);
             return true;
@@ -53,13 +63,30 @@ namespace Edith.Ask
 
         public void AnswerAudio(float now)
         {
-            if (Phase == AskPhase.Listening) Enter(AskPhase.Answering, now);
+            if (Phase != AskPhase.Listening) return;
+            toolPending = false;
+            Enter(AskPhase.Answering, now);
+        }
+
+        /// Gemini asked for a tool while listening. The hearing clock restarts so the tool has time to answer.
+        public void ToolCalled(float now)
+        {
+            if (Phase != AskPhase.Listening) return;
+            toolPending = true;
+            phaseAt = now;
+        }
+
+        /// The tool's answer went back to Gemini. Gemini says it next, and then the card goes quickly.
+        public void ToolAnswered(float now)
+        {
+            toolAnswered = true;
+            if (Phase == AskPhase.Listening) phaseAt = now;
         }
 
         public void TurnComplete(float now)
         {
             if (Phase == AskPhase.Answering) turnComplete = true;
-            else if (Phase == AskPhase.Listening) Fail(AskProblem.NotHeard, now);
+            else if (Phase == AskPhase.Listening && !toolPending) Fail(AskProblem.NotHeard, now);
         }
 
         /// The server closed the session. An answer already playing plays out.
@@ -93,11 +120,14 @@ namespace Edith.Ask
                 case AskPhase.Connecting when inPhase > ConnectSeconds:
                     Fail(AskProblem.TimedOut, now);
                     break;
+                case AskPhase.Listening when toolAnswered && inPhase > ToolSpeakSeconds:
+                    Fade(now, ToolLingerSeconds);
+                    break;
                 case AskPhase.Listening when inPhase > HearSeconds:
                     Fail(AskProblem.NotHeard, now);
                     break;
                 case AskPhase.Answering when (turnComplete && speechLeft <= 0) || inPhase > AnswerSeconds:
-                    Fade(now, AnswerLingerSeconds);
+                    Fade(now, toolAnswered ? ToolLingerSeconds : AnswerLingerSeconds);
                     break;
                 case AskPhase.Fading when now >= fadeAt:
                     Enter(AskPhase.Idle, now);

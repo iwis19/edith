@@ -302,7 +302,11 @@ namespace Edith.Ask
                 case LiveEventKind.TurnComplete:
                     session.TurnComplete(now);
                     return;
+                case LiveEventKind.ToolCalled:
+                    session.ToolCalled(now);
+                    return;
                 case LiveEventKind.Navigation:
+                    session.ToolAnswered(now);
                     Edith.Navigation.NavArrow.Poke();
                     return;
                 case LiveEventKind.Interrupted:

@@ -16,8 +16,21 @@ namespace Edith.Navigation
         public string name = "", kind = "", compass = "";
         public float distance_m = -1f, bearing_deg = -1f, fix_age_s = -1f, accuracy_m = -1f;
         public float heading_deg = -1f, heading_accuracy_deg = -1f, course_deg = -1f, speed_mps = -1f;
+        /// Present while the backend follows a walking route: the next route point to head for, the next turn
+        /// ("left", "slight_right", "uturn", "arrive" and so on) and the metres to it, and the walking metres left.
+        public float waypoint_distance_m = -1f, waypoint_bearing_deg = -1f, maneuver_distance_m = -1f,
+            route_remaining_m = -1f;
+        public string maneuver = "";
 
         public bool HasFix => distance_m >= 0f && bearing_deg >= 0f && fix_age_s >= 0f;
+
+        public bool HasRoute => waypoint_bearing_deg >= 0f && maneuver_distance_m >= 0f && route_remaining_m >= 0f;
+
+        /// Where the arrow points, clockwise from true north: the next route point, else straight at the target.
+        public float ArrowBearing => HasRoute ? waypoint_bearing_deg : bearing_deg;
+
+        /// The distance to show: the walk left along the route, else the straight line.
+        public float WalkMetres => HasRoute ? route_remaining_m : distance_m;
 
         /// Null when `json` is not a status.
         public static NavStatus Parse(string json)
