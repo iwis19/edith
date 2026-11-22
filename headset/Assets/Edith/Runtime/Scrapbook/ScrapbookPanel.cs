@@ -361,15 +361,28 @@ namespace Edith.Scrapbook
             Debug.Log($"[EDITH scrapbook] {Pick(reading.Pressed)} ({how})");
         }
 
-        /// What `ray` points at: a chip, which wins over a card behind it, or a card, and how far along the ray. The
-        /// distance is to the plane of the card in the middle, which the chips share closely enough for the cursor.
+        /// What `ray` points at: a chip, which wins over a card behind it, or a card, and how far along the ray it
+        /// meets the deck. The distance is to the plane of the card in the middle, which the chips share closely enough
+        /// for the cursor, and is 0 when the ray passes outside the deck and its chips.
         int TargetOn(Ray ray, out float distance)
         {
             var plane = new Plane(frame.forward, frame.TransformPoint(ScrapbookPlacement.CardCentre));
-            if (!plane.Raycast(ray, out distance)) distance = RaySelect.FreeLength;
+            if (!plane.Raycast(ray, out distance)) distance = 0f;
             var through = ray.GetPoint(1f);
-            if (bar.Hit(ray.origin, through, out var chip, out _)) return ChipTarget + (int)chip.Tier;
-            return deckView.Hit(ray.origin, through, out _);
+            var target = bar.Hit(ray.origin, through, out var chip, out _) ? ChipTarget + (int)chip.Tier
+                : deckView.Hit(ray.origin, through, out _);
+            if (target < 0 && distance > 0f && !OnDeck(frame.InverseTransformPoint(ray.GetPoint(distance)))) distance = 0f;
+            return target;
+        }
+
+        /// Whether `local`, a point on the middle card's plane in the deck's frame, lies over the deck: from the side
+        /// cards' outer edges across, and from the top of the photos down past the chips.
+        static bool OnDeck(Vector3 local)
+        {
+            const float sideways = ScrapbookPlacement.FirstAside + 2f * ScrapbookPlacement.NextAside + DeckLayout.CardWidth * 0.5f;
+            var top = ScrapbookPlacement.CardCentre.y + DeckLayout.CardHeight * 0.5f + 0.03f;
+            var bottom = ScrapbookPlacement.ChipsCentre.y * (ScrapbookPlacement.CardAhead / ScrapbookPlacement.ChipsCentre.z) - 0.05f;
+            return Mathf.Abs(local.x) <= sideways && local.y <= top && local.y >= bottom;
         }
 
         /// Does what the click on `target` chose, and says what that was.

@@ -5,13 +5,13 @@ using UnityEngine;
 namespace Edith.Hands
 {
     /// Both hands' rays for a page that is selected by pointing, drawn as Horizon OS draws its own: a thin line that
-    /// fades in from the hand, and a ring cursor where it meets something selectable, which shrinks and fills as the
-    /// fingers pinch. A page steps it every frame it is open and hides it when it closes.
+    /// fades in from the hand, and a ring cursor wherever it meets the page, which shrinks and fills as the fingers
+    /// pinch. A ray that misses the page fades out at its tip. A page steps it every frame it is open and hides it when it closes.
     public sealed class HandRays : IDisposable
     {
         // The line starts this far ahead of the hand, so it never shows through the fingers.
         const float StartAhead = 0.04f;
-        const float StartWidth = 0.004f, EndWidth = 0.0015f;
+        const float StartWidth = 0.006f, EndWidth = 0.002f;
         // The cursor fills about 1.2 degrees, whatever its distance, and lies this far in front of what it is on.
         const float CursorPerMetre = 0.021f, CursorLift = 0.003f;
         const float PinchedScale = 0.65f;
@@ -74,15 +74,15 @@ namespace Edith.Hands
         {
             var reaches = aim.Shown && aim.Distance > StartAhead;
             hand.Line.enabled = reaches;
-            hand.Cursor.gameObject.SetActive(reaches && aim.OnTarget);
+            hand.Cursor.gameObject.SetActive(reaches && aim.OnPage);
             if (!reaches) return;
 
             var ray = aim.Ray;
             hand.Line.SetPosition(0, ray.GetPoint(StartAhead));
             hand.Line.SetPosition(1, ray.GetPoint(aim.Distance));
-            var bright = aim.Held ? 0.95f : 0.7f;
-            hand.Line.colorGradient = Fade(bright * 0.6f, aim.OnTarget ? bright : 0f);
-            if (!aim.OnTarget) return;
+            var bright = aim.Held ? 0.95f : 0.75f;
+            hand.Line.colorGradient = Fade(bright * 0.8f, aim.OnPage ? bright : 0f);
+            if (!aim.OnPage) return;
 
             var pinch = aim.Held ? 1f : Mathf.Clamp01(aim.Pinch);
             hand.Cursor.SetPositionAndRotation(ray.GetPoint(aim.Distance - CursorLift), Quaternion.LookRotation(ray.direction));

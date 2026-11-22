@@ -152,16 +152,35 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void A_ray_on_nothing_is_drawn_short_with_no_cursor()
+        public void A_ray_that_misses_the_page_is_drawn_short_with_no_cursor()
         {
             var time = 0f;
             var select = Started(ref time);
             Run(select, ref time, false, 1, targets: Nothing);
             var aim = select.Aim(HandSide.Right);
             Assert.IsTrue(aim.Shown);
+            Assert.IsFalse(aim.OnPage);
             Assert.IsFalse(aim.OnTarget);
             Assert.AreEqual(RaySelect.FreeLength, aim.Distance);
             Assert.IsFalse(select.Aim(HandSide.Left).Shown);
+        }
+
+        [Test]
+        public void A_ray_on_the_page_between_buttons_reaches_it_and_shows_the_cursor()
+        {
+            var time = 0f;
+            var select = Started(ref time);
+            Run(select, ref time, false, 1, targets: PageOnly);
+            var aim = select.Aim(HandSide.Right);
+            Assert.IsTrue(aim.OnPage);
+            Assert.IsFalse(aim.OnTarget);
+            Assert.AreEqual(0.8f, aim.Distance);
+        }
+
+        static int PageOnly(Ray ray, out float distance)
+        {
+            distance = 0.8f;
+            return -1;
         }
     }
 }

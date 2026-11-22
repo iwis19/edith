@@ -76,7 +76,7 @@ namespace Edith.Welcome
 
         Canvas canvas;
         CanvasGroup group;
-        RectTransform screen, character, stepOne, stepTwo;
+        RectTransform screen, character, stepOne, stepTwo, pickCard;
         Text speechText, link;
         Font regular, semibold;
         WelcomeStep shownStep = WelcomeStep.Done;
@@ -170,27 +170,35 @@ namespace Edith.Welcome
             Refresh();
         }
 
-        /// The button of this step that `ray` meets on the panel, the last built first, and how far along it is.
+        /// The button of this step that `ray` meets on the panel, the last built first, and how far along the ray it
+        /// meets the glass card, or 0 when it misses the card.
         int TargetOn(Ray ray, out float distance)
         {
             distance = 0f;
             var normal = transform.forward;
             var along = Vector3.Dot(ray.direction, normal);
             if (Mathf.Abs(along) < 1e-4f) return -1;
-            distance = Vector3.Dot(transform.position - ray.origin, normal) / along;
-            if (distance <= 0f) return -1;
-            var hit = ray.GetPoint(distance);
+            var reach = Vector3.Dot(transform.position - ray.origin, normal) / along;
+            if (reach <= 0f) return -1;
+            var hit = ray.GetPoint(reach);
+            if (Within(pickCard, hit, TapMargin)) distance = reach;
             for (var i = targets.Count - 1; i >= 0; i--)
             {
                 var target = targets[i];
                 if (target.Step != flow.Step || !target.Rect.gameObject.activeInHierarchy) continue;
-                var local = target.Rect.InverseTransformPoint(hit);
-                var rect = target.Rect.rect;
-                if (local.x < rect.xMin - TapMargin || local.x > rect.xMax + TapMargin
-                    || local.y < rect.yMin - TapMargin || local.y > rect.yMax + TapMargin) continue;
+                if (!Within(target.Rect, hit, TapMargin)) continue;
+                distance = reach;
                 return i;
             }
             return -1;
+        }
+
+        /// Whether `point`, on the panel, lies on `rect` or within `margin` design units of it.
+        static bool Within(RectTransform rect, Vector3 point, float margin)
+        {
+            var local = rect.InverseTransformPoint(point);
+            var r = rect.rect;
+            return local.x >= r.xMin - margin && local.x <= r.xMax + margin && local.y >= r.yMin - margin && local.y <= r.yMax + margin;
         }
 
         void NextTapped()
@@ -419,6 +427,7 @@ namespace Edith.Welcome
             const float chipHeight = 43f, rowStep = 54f, chipsLeft = 546f, chipsRight = 1176f;
             var card = Panel(stepOne, "Interests", left, top, width, 505f, 44f);
             card.SetLook(Theme.PanelFill, new Color(1f, 1f, 1f, 0.14f), Theme.Accent, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.3f));
+            pickCard = card.Rect;
             var first = Panel(stepOne, "Pick", innerLeft, 83f, innerWidth, 187f, 28f);
             first.SetLook(Theme.InnerFill, new Color(1f, 1f, 1f, 0.06f), new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.5f), Color.clear);
             Label(stepOne, "Title", semibold, 29, Theme.Ice, TextAnchor.MiddleLeft, 546f, 104f, 400f, 40f).text = "What are you into?";

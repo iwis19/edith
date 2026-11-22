@@ -27,8 +27,10 @@ namespace Edith.Hands
     {
         public bool Shown;
         public UnityEngine.Ray Ray;
-        /// How far the ray reaches: to its target, or a fixed length when it is on nothing.
+        /// How far the ray reaches: to the page where it meets it, or a fixed length when it misses the page.
         public float Distance;
+        /// The ray meets the page, where the cursor shows, whether or not on something selectable.
+        public bool OnPage;
         public bool OnTarget;
         /// How closed the pinch is, 0 to 1.
         public float Pinch;
@@ -36,7 +38,8 @@ namespace Edith.Hands
         public bool Held;
     }
 
-    /// Finds what `ray` points at: a target number and how far along the ray it is, or -1.
+    /// Finds what `ray` points at: a target number, or -1, and how far along the ray it meets the page, or 0 when it
+    /// misses the page.
     public delegate int RayTargets(UnityEngine.Ray ray, out float distance);
 
     /// Selecting with Horizon OS's hand rays, as its own menus do: aim, pinch, and let go on the same target to click
@@ -48,8 +51,8 @@ namespace Edith.Hands
         public const float ReleaseSeconds = 0.08f;
         /// A pinching hand lost for this long gives up its pinch.
         public const float LostSeconds = 0.2f;
-        /// A ray on nothing is drawn this long.
-        public const float FreeLength = 0.4f;
+        /// A ray that misses the page is drawn this long.
+        public const float FreeLength = 0.5f;
 
         readonly RayAim[] aims = new RayAim[2];
         readonly bool[] wasPinching = { true, true };
@@ -138,7 +141,8 @@ namespace Edith.Hands
                 aim.Ray = hand.Pointer;
                 on = targets(aim.Ray, out var distance);
                 aim.OnTarget = on >= 0;
-                aim.Distance = on >= 0 ? distance : FreeLength;
+                aim.OnPage = distance > 0f;
+                aim.Distance = aim.OnPage ? distance : FreeLength;
             }
             aims[index] = aim;
             return on;
