@@ -22,8 +22,11 @@ namespace Edith.Navigation
         [SerializeField] Material material;
 
         const float UnitsPerMetre = 1000f;
-        const float ArrowMetres = 0.14f;
         const float AheadMetres = 0.55f, BelowMetres = 0.19f, LabelBelowMetres = 0.065f;
+        /// The arrow and label are laid out in metres as seen from 0.85 m and shrunk by this much, so held nearer
+        /// they look the same size.
+        const float Shrink = AheadMetres / 0.85f;
+        const float ArrowMetres = 0.14f;
         /// How far the arrow tips up from lying flat, so it reads from a standing eye height.
         const float TiltDegrees = 62f;
         const float FollowRate = 4f, TurnRate = 6f, FadeSeconds = 0.35f;
@@ -307,7 +310,7 @@ namespace Edith.Navigation
                 shownYaw = placed ? Mathf.LerpAngle(shownYaw, target, 1f - Mathf.Exp(-TurnRate * dt)) : target;
             }
             placed = true;
-            var bob = Mathf.Sin(now * 2f) * 0.006f;
+            var bob = Mathf.Sin(now * 2f) * 0.006f * Shrink;
             arrowRoot.SetPositionAndRotation(anchor + Vector3.up * bob,
                 Quaternion.Euler(0f, shownYaw, 0f) * Quaternion.Euler(TiltDegrees, 0f, 0f));
             for (var i = 0; i < chevrons.Length; i++)
@@ -351,7 +354,7 @@ namespace Edith.Navigation
             var root = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
             var rect = (RectTransform)root.transform;
             rect.sizeDelta = new Vector2(widthMetres, heightMetres) * UnitsPerMetre;
-            rect.localScale = Vector3.one / UnitsPerMetre;
+            rect.localScale = Vector3.one * (Shrink / UnitsPerMetre);
             var canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.sortingOrder = 2;
