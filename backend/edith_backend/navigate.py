@@ -44,6 +44,9 @@ STOP_KINDS = ("bus stop", "platform", "stop position", "stop", "station")
 TARGET_LIFE_S = 2 * 3600
 # The fix a search starts from must be this fresh: a position from half an hour ago is the wrong place to search near.
 SEARCH_FIX_S = 120.0
+# A search may start from an older fix when the phone has gone quiet, as a locked screen makes it: places are searched
+# kilometres around, so a few minutes of walking barely moves the answer. The arrow still waits for a fresh fix.
+SEARCH_STALE_FIX_S = 15 * 60.0
 # The whole search, every service and radius together. The headset gives the call a little longer.
 NAVIGATE_TIMEOUT_S = 8.0
 # Within this distance, or the fix's accuracy when that is worse (up to the cap), the person has arrived.
