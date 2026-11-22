@@ -10,7 +10,7 @@ namespace Edith.Welcome
         const string VoiceKey = "edith.voice";
         const char Separator = '|';
 
-        /// Gemini Live voices for the three styles: upbeat, gentle and easy-going.
+        /// Gemini Live voices for the three styles: upbeat, gentle and playful.
         public static string VoiceName(VoiceStyle style)
         {
             switch (style)

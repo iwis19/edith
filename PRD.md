@@ -39,7 +39,7 @@ A short guided start on first launch: EDITH introduces itself, you pick or say a
 
 ### EDITH's voice
 
-Multiple voices to choose from on welcome page, light/calm/enthusiastic, with no narrator personas. Ask is the only part that speaks; Look cards are text. The voice is a Gemini Live voice setting on the backend, so it changes with no headset rebuild.
+Multiple voices to choose from on welcome page, playful/calm/enthusiastic, with no narrator personas. Ask is the only part that speaks; Look cards are text. The voice is a Gemini Live voice setting on the backend, so it changes with no headset rebuild.
 
 ### Rarity
 

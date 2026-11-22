@@ -14,7 +14,7 @@ LINE = "Hi, I'm EDITH!"
 VOICES = {
     "Enthusiastic": ("Puck", "Say this with big, bright, excited energy"),
     "Calm": ("Vindemiatrix", "Say this calmly and warmly, at a normal speaking pace"),
-    "Light": ("Callirrhoe", "Say this in an easygoing, slightly cheeky way"),
+    "Playful": ("Callirrhoe", "Say this in an easygoing, slightly cheeky way"),
 }
 
 out = sys.argv[1]
