@@ -10,7 +10,7 @@ namespace Edith.Tests
         {
             var flow = new WelcomeFlow();
             Assert.AreEqual(WelcomeStep.Interests, flow.Step);
-            Assert.AreEqual(VoiceStyle.Light, flow.Voice);
+            Assert.AreEqual(VoiceStyle.Playful, flow.Voice);
             Assert.IsEmpty(flow.Interests);
         }
 
@@ -53,7 +53,7 @@ namespace Edith.Tests
             flow.Next();
             Assert.IsFalse(flow.Toggle("Food"));
             flow.ChooseVoice(VoiceStyle.Enthusiastic);
-            Assert.AreEqual(VoiceStyle.Light, flow.Voice);
+            Assert.AreEqual(VoiceStyle.Playful, flow.Voice);
         }
 
         [Test]
@@ -61,7 +61,7 @@ namespace Edith.Tests
         {
             Assert.AreEqual("Puck", WelcomeStore.VoiceName(VoiceStyle.Enthusiastic));
             Assert.AreEqual("Vindemiatrix", WelcomeStore.VoiceName(VoiceStyle.Calm));
-            Assert.AreEqual("Callirrhoe", WelcomeStore.VoiceName(VoiceStyle.Light));
+            Assert.AreEqual("Callirrhoe", WelcomeStore.VoiceName(VoiceStyle.Playful));
         }
     }
 }

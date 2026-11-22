@@ -501,7 +501,7 @@ namespace Edith.Welcome
             Label(stepOne, "VoiceTitle", semibold, 27, Theme.Ice, TextAnchor.MiddleLeft, 546f, voiceTop + 19f, 400f, 38f).text = "How should I sound?";
             AddVoice(VoiceStyle.Enthusiastic, "Enthusiastic", 545f, voiceCards);
             AddVoice(VoiceStyle.Calm, "Calm", 759f, voiceCards);
-            AddVoice(VoiceStyle.Light, "Light", 973f, voiceCards);
+            AddVoice(VoiceStyle.Playful, "Playful", 973f, voiceCards);
 
             var nextTop = voiceBottom + 17f;
             Label(stepOne, "Hint", regular, 16, Theme.Ice, TextAnchor.MiddleLeft, 530f, nextTop + 14f, 420f, 24f).text = "Point and pinch to pick, or say them out loud";

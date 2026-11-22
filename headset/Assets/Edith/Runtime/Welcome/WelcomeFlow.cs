@@ -6,7 +6,7 @@ namespace Edith.Welcome
     public enum WelcomeStep { Interests = 1, Pair = 2, Done = 3 }
 
     /// How EDITH sounds. Each maps to one of Gemini Live's voices through WelcomeStore.VoiceName.
-    public enum VoiceStyle { Enthusiastic, Calm, Light }
+    public enum VoiceStyle { Enthusiastic, Calm, Playful }
 
     /// Where the welcome is and what the person has picked, as a function of what happened. It knows nothing of
     /// drawing, hands or the network: the controller feeds it taps and the pairing result and draws what it says.
@@ -25,8 +25,8 @@ namespace Edith.Welcome
 
         public WelcomeStep Step { get; private set; } = WelcomeStep.Interests;
 
-        /// The voice picked, Light until the person picks another.
-        public VoiceStyle Voice { get; private set; } = VoiceStyle.Light;
+        /// The voice picked, Playful until the person picks another.
+        public VoiceStyle Voice { get; private set; } = VoiceStyle.Playful;
 
         public bool Finished => Step == WelcomeStep.Done;
 
