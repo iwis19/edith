@@ -15,7 +15,7 @@ namespace Edith.Welcome
         {
             switch (style)
             {
-                case VoiceStyle.Enthusiastic: return "Puck";
+                case VoiceStyle.Enthusiastic: return "Laomedeia";
                 case VoiceStyle.Calm: return "Vindemiatrix";
                 default: return "Callirrhoe";
             }

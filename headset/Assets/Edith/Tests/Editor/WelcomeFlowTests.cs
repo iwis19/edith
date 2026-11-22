@@ -59,7 +59,7 @@ namespace Edith.Tests
         [Test]
         public void Each_voice_style_maps_to_a_distinct_gemini_voice()
         {
-            Assert.AreEqual("Puck", WelcomeStore.VoiceName(VoiceStyle.Enthusiastic));
+            Assert.AreEqual("Laomedeia", WelcomeStore.VoiceName(VoiceStyle.Enthusiastic));
             Assert.AreEqual("Vindemiatrix", WelcomeStore.VoiceName(VoiceStyle.Calm));
             Assert.AreEqual("Callirrhoe", WelcomeStore.VoiceName(VoiceStyle.Playful));
         }
