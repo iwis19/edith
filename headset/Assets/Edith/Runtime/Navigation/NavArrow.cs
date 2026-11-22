@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Edith.Backend;
+using Edith.Hands;
 using Edith.Pairing;
+using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -16,8 +19,9 @@ namespace Edith.Navigation
     /// paired with the head's yaw at the moment each reading was taken, and only by readings taken while the head
     /// held still. North found by the compass alone is found afresh when directions start, since the phone may have
     /// been lying anywhere. Until north is known, and while the phone is silent, only the card shows. On arrival it
-    /// says so, then stops the directions.
-    public sealed class NavArrow : MonoBehaviour
+    /// says so, then stops the directions. Nothing shows while Welcome or the Scrapbook holds the hands, and EDITH's
+    /// answer orb keeps clear of what does.
+    public sealed class NavArrow : MonoBehaviour, IShownPanel
     {
         [SerializeField] Transform eye;
         [SerializeField] Font font;
@@ -50,6 +54,7 @@ namespace Edith.Navigation
         Transform arrowRoot, labelRoot;
         CanvasGroup arrowGroup, labelGroup;
         NavCard card;
+        HandGate hands;
         Texture2D arrowTexture;
         Vector3 anchor;
         bool placed;
@@ -105,13 +110,17 @@ namespace Edith.Navigation
             arrowGroup.alpha = labelGroup.alpha = 0f;
         }
 
+        void Start() => hands = FindAnyObjectByType<HandGate>();
+
         void OnEnable()
         {
+            ShownPanels.Add(this);
             if (OVRManager.display != null) OVRManager.display.RecenteredPose += OnRecentered;
         }
 
         void OnDisable()
         {
+            ShownPanels.Remove(this);
             if (OVRManager.display != null) OVRManager.display.RecenteredPose -= OnRecentered;
         }
 
@@ -231,7 +240,7 @@ namespace Edith.Navigation
             var s = status;
             var wantArrow = false;
             var wantLabel = false;
-            if (!PairingGate.Open)
+            if (!PairingGate.Open || hands != null && hands.Held)
             {
             }
             else if (now < noticeUntil)
@@ -307,6 +316,13 @@ namespace Edith.Navigation
                 facing * Quaternion.Euler(0f, 0f, -NavMath.ChevronTurn(shownYaw, eye.eulerAngles.y)));
             var labelAt = anchor + Vector3.down * LabelBelowMetres;
             labelRoot.SetPositionAndRotation(labelAt, Quaternion.LookRotation(labelAt - eye.position, Vector3.up));
+        }
+
+        public void AddQuads(List<PanelQuad> into)
+        {
+            if (arrowGroup == null || !placed) return;
+            if (arrowGroup.alpha > 0f) into.Add(PanelQuad.Of((RectTransform)arrowRoot));
+            if (labelGroup.alpha > 0f) into.Add(PanelQuad.Of(card.Rect));
         }
 
         void Stop()

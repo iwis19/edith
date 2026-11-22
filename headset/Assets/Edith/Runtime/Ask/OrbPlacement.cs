@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Edith.UI;
 using UnityEngine;
 
 namespace Edith.Ask
@@ -34,6 +35,13 @@ namespace Edith.Ask
             var top = size.y * 0.5f + BorderMetres;
             var bottom = -(size.y * 0.5f + TextGapMetres + TextMetres);
             return Seen(eye, photo.position, photo.rotation, -halfWidth, halfWidth, bottom, top);
+        }
+
+        /// The patch of view a panel `quad` takes from `eye`, or null when any of it is at or behind the eye.
+        public static Rect? Covered(Pose eye, PanelQuad quad)
+        {
+            var half = quad.Size * 0.5f;
+            return Seen(eye, quad.Pose.position, quad.Pose.rotation, -half.x, half.x, -half.y, half.y);
         }
 
         /// The row's patch of view for an orb centred at the head-relative spot `orb`, facing the eye, with a row

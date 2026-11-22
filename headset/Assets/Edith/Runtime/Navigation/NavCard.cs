@@ -18,6 +18,9 @@ namespace Edith.Navigation
         readonly Text title, address, line;
         string shown;
 
+        /// The card's glass, as laid out for the text shown last.
+        public RectTransform Rect => card.Rect;
+
         public NavCard(RectTransform root, Font font, Material material)
         {
             var accent = Theme.Accent;

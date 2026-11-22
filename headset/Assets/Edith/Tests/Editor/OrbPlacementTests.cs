@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Edith.Ask;
 using Edith.Snapshots;
+using Edith.UI;
 using NUnit.Framework;
 using UnityEngine;
 using static Edith.Tests.SnapshotShelfTests;
@@ -69,6 +70,34 @@ namespace Edith.Tests
             Assert.IsTrue(OrbPlacement.HeadRow(OrbPlacement.Home, HomeRow).Overlaps(SeenSnapshot(snapshot)), "home is covered");
             var orb = Create();
             Assert.IsFalse(SeenRow(orb, HomeRow).Overlaps(SeenSnapshot(snapshot)));
+        }
+
+        sealed class FixedPanel : IShownPanel
+        {
+            public PanelQuad Quad;
+            public void AddQuads(List<PanelQuad> into) => into.Add(Quad);
+        }
+
+        [Test]
+        public void A_shown_panel_over_home_makes_it_appear_clear_of_it()
+        {
+            var centre = OrbPlacement.AtHead(EyePose, OrbPlacement.Home + new Vector2(0.2f, 0f));
+            var panel = new FixedPanel
+            {
+                Quad = new PanelQuad(new Pose(centre, OrbPlacement.FacingEye(EyePose, centre)), new Vector2(0.3f, 0.1f)),
+            };
+            ShownPanels.Add(panel);
+            try
+            {
+                var seen = OrbPlacement.Covered(EyePose, panel.Quad).Value;
+                Assert.IsTrue(OrbPlacement.HeadRow(OrbPlacement.Home, HomeRow).Overlaps(seen), "home is covered");
+                var orb = Create();
+                Assert.IsFalse(SeenRow(orb, HomeRow).Overlaps(seen));
+            }
+            finally
+            {
+                ShownPanels.Remove(panel);
+            }
         }
 
         [Test]

@@ -8,6 +8,7 @@ using Edith.Grab;
 using Edith.Hands;
 using Edith.Look;
 using Edith.Scan;
+using Edith.UI;
 using UnityEngine;
 
 namespace Edith.Scrapbook
@@ -18,7 +19,7 @@ namespace Edith.Scrapbook
     /// and let go on the same thing. A pinch pressed on a card that moves 6 cm or more sideways scrubs the deck
     /// instead. A chip narrows the deck to one tier and wins over a card behind it. While it is open it holds the
     /// hand gate, so pinches make no Looks and palms start no Scan.
-    public sealed class ScrapbookPanel : MonoBehaviour
+    public sealed class ScrapbookPanel : MonoBehaviour, IShownPanel
     {
         [SerializeField] LeftHandSource leftHand;
         [SerializeField] RightHandSource rightHand;
@@ -107,10 +108,15 @@ namespace Edith.Scrapbook
             if (settings != null) client = new ScrapbookClient(settings.Url, settings.DeviceToken, BackendSettings.ProfileId);
         }
 
-        void OnEnable() => gestures.Recognized += OnGesture;
+        void OnEnable()
+        {
+            gestures.Recognized += OnGesture;
+            ShownPanels.Add(this);
+        }
 
         void OnDisable()
         {
+            ShownPanels.Remove(this);
             gestures.Recognized -= OnGesture;
             if (listeningForRecentre && OVRManager.display != null) OVRManager.display.RecenteredPose -= OnRecentred;
             listeningForRecentre = false;
@@ -395,14 +401,21 @@ namespace Edith.Scrapbook
             return target;
         }
 
-        /// Whether `local`, a point on the middle card's plane in the deck's frame, lies over the deck: from the side
-        /// cards' outer edges across, and from the top of the photos down past the chips.
-        static bool OnDeck(Vector3 local)
+        // The deck's extent on the middle card's plane in its frame: from the side cards' outer edges across, and from
+        // the top of the photos down past the chips.
+        const float DeckSideways = ScrapbookPlacement.FirstAside + 2f * ScrapbookPlacement.NextAside + DeckLayout.CardWidth * 0.5f;
+        static float DeckTop => ScrapbookPlacement.CardCentre.y + DeckLayout.CardHeight * 0.5f + 0.03f;
+        static float DeckBottom =>
+            ScrapbookPlacement.ChipsCentre.y * (ScrapbookPlacement.CardAhead / ScrapbookPlacement.ChipsCentre.z) - 0.05f;
+
+        /// Whether `local`, a point on the middle card's plane in the deck's frame, lies over the deck.
+        static bool OnDeck(Vector3 local) => Mathf.Abs(local.x) <= DeckSideways && local.y <= DeckTop && local.y >= DeckBottom;
+
+        public void AddQuads(List<PanelQuad> into)
         {
-            const float sideways = ScrapbookPlacement.FirstAside + 2f * ScrapbookPlacement.NextAside + DeckLayout.CardWidth * 0.5f;
-            var top = ScrapbookPlacement.CardCentre.y + DeckLayout.CardHeight * 0.5f + 0.03f;
-            var bottom = ScrapbookPlacement.ChipsCentre.y * (ScrapbookPlacement.CardAhead / ScrapbookPlacement.ChipsCentre.z) - 0.05f;
-            return Mathf.Abs(local.x) <= sideways && local.y <= top && local.y >= bottom;
+            if (!frame.gameObject.activeSelf || fade <= 0f) return;
+            var centre = frame.TransformPoint(new Vector3(0f, (DeckTop + DeckBottom) * 0.5f, ScrapbookPlacement.CardCentre.z));
+            into.Add(new PanelQuad(new Pose(centre, frame.rotation), new Vector2(2f * DeckSideways, DeckTop - DeckBottom)));
         }
 
         /// Does what the click on `target` chose, and says what that was.

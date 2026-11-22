@@ -8,10 +8,10 @@ using UnityEngine.UI;
 namespace Edith.Ask
 {
     /// EDITH's presence while a question is under way: a small glowing orb with a caption of at most two lines to its
-    /// right. It lines up along the top edge of the snapshot asked about when that covers no other snapshot, and
-    /// otherwise rests low and to the left of the line of sight and drifts after the head, moving to the nearest clear
-    /// spot while a snapshot is in the way. It appears where it rests, pulses with the answer's loudness, and types the
-    /// answer out as it is spoken.
+    /// right. It lines up along the top edge of the snapshot asked about when that covers no other snapshot or panel,
+    /// and otherwise rests low and to the left of the line of sight and drifts after the head, moving to the nearest
+    /// clear spot while a snapshot or a shown panel, such as the directions or the Scrapbook, is in the way. It appears
+    /// where it rests, pulses with the answer's loudness, and types the answer out as it is spoken.
     public sealed class AnswerOrb : MonoBehaviour
     {
         // Four canvas units per millimetre, so the font is rasterised sharply at this size.
@@ -41,6 +41,7 @@ namespace Edith.Ask
 
         readonly TextGenerator lines = new TextGenerator();
         readonly List<Rect> covered = new List<Rect>();
+        readonly List<PanelQuad> panels = new List<PanelQuad>();
         Transform eye;
         SnapshotRoom room;
         Snapshot asked;
@@ -172,10 +173,14 @@ namespace Edith.Ask
                 spot = OrbPlacement.Nearest(spot, covered, rowMetres);
         }
 
-        /// Fills `covered` with what each snapshot in the room but `except` takes of the view from `eyePose`.
+        /// Fills `covered` with what each shown panel, and each snapshot in the room but `except`, takes of the view
+        /// from `eyePose`.
         void Gather(Pose eyePose, Snapshot except)
         {
             covered.Clear();
+            ShownPanels.Gather(panels);
+            for (var i = 0; i < panels.Count; i++)
+                if (OrbPlacement.Covered(eyePose, panels[i]) is { } patch) covered.Add(patch);
             if (room == null) return;
             var snapshots = room.Snapshots;
             for (var i = 0; i < snapshots.Count; i++)
