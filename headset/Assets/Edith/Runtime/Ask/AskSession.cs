@@ -22,6 +22,9 @@ namespace Edith.Ask
         float phaseAt;
         float fadeAt;
         bool turnComplete;
+        // Gemini called a tool and speaks only once the tool's answer is back, so a turn that ends before any audio is
+        // not a question it missed.
+        bool toolPending;
 
         public AskPhase Phase { get; private set; }
         /// Why the last question got no answer; None while one is under way or after an answer.
@@ -41,6 +44,7 @@ namespace Edith.Ask
             if (Busy) return false;
             tappedAt = now;
             turnComplete = false;
+            toolPending = false;
             Problem = AskProblem.None;
             Enter(AskPhase.Connecting, now);
             return true;
@@ -53,13 +57,23 @@ namespace Edith.Ask
 
         public void AnswerAudio(float now)
         {
-            if (Phase == AskPhase.Listening) Enter(AskPhase.Answering, now);
+            if (Phase != AskPhase.Listening) return;
+            toolPending = false;
+            Enter(AskPhase.Answering, now);
+        }
+
+        /// Gemini asked for a tool while listening. The hearing clock restarts so the tool has time to answer.
+        public void ToolCalled(float now)
+        {
+            if (Phase != AskPhase.Listening) return;
+            toolPending = true;
+            phaseAt = now;
         }
 
         public void TurnComplete(float now)
         {
             if (Phase == AskPhase.Answering) turnComplete = true;
-            else if (Phase == AskPhase.Listening) Fail(AskProblem.NotHeard, now);
+            else if (Phase == AskPhase.Listening && !toolPending) Fail(AskProblem.NotHeard, now);
         }
 
         /// The server closed the session. An answer already playing plays out.

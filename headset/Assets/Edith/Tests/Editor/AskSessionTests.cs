@@ -131,6 +131,20 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void A_turn_that_ends_on_a_tool_call_waits_for_the_spoken_answer()
+        {
+            session.Tap(0f);
+            session.Ready(1f);
+            session.ToolCalled(3f);
+            session.TurnComplete(3f);
+            session.Tick(3f + AskSession.HearSeconds - 1f, 0);
+            Assert.AreEqual(AskPhase.Listening, session.Phase);
+            session.AnswerAudio(10f);
+            Assert.AreEqual(AskPhase.Answering, session.Phase);
+            Assert.AreEqual(AskProblem.None, session.Problem);
+        }
+
+        [Test]
         public void A_closed_socket_drops_a_waiting_question_but_lets_an_answer_play_out()
         {
             session.Tap(0f);
