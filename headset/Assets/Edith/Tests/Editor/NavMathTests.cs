@@ -81,6 +81,17 @@ namespace Edith.Tests
             Assert.That(NavStatus.Parse("{\"active\":false,\"arrived\":false}").HasFix, Is.False);
         }
 
+        [Test]
+        public void TheChevronPulseRunsFromTheBackToTheTip()
+        {
+            // The back chevron peaks half a period in, and each chevron towards the tip peaks a lag later.
+            Assert.That(NavMath.ChevronPulse(0.6f, 0, 1.2f, 0.2f, 0.25f), Is.EqualTo(1f).Within(1e-4f));
+            Assert.That(NavMath.ChevronPulse(0.8f, 1, 1.2f, 0.2f, 0.25f), Is.EqualTo(1f).Within(1e-4f));
+            Assert.That(NavMath.ChevronPulse(1.0f, 2, 1.2f, 0.2f, 0.25f), Is.EqualTo(1f).Within(1e-4f));
+            // At its dimmest a chevron still shows.
+            Assert.That(NavMath.ChevronPulse(0f, 0, 1.2f, 0.2f, 0.25f), Is.EqualTo(0.25f).Within(1e-4f));
+        }
+
         [TestCase("left", 40f, "Turn left in 40 m")]
         [TestCase("slight_right", 8f, "Bear right now")]
         [TestCase("arrive", 1250f, "Arrive in 1.3 km")]
