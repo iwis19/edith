@@ -234,6 +234,26 @@ namespace Edith.Scrapbook
             }
         }
 
+        /// Opens the Scrapbook as the pose does. False when it is already open.
+        public bool OpenByVoice()
+        {
+            if (Open) return false;
+            Debug.Log("[EDITH book] opened by voice");
+            Play(659.3f, 987.8f);
+            Show();
+            return true;
+        }
+
+        /// Closes the Scrapbook as the pose does. False when it is not open.
+        public bool CloseByVoice()
+        {
+            if (!Open) return false;
+            Debug.Log("[EDITH book] closed by voice");
+            Play(987.8f, 659.3f);
+            Close();
+            return true;
+        }
+
         static (string title, string body) Notice(Content content)
         {
             switch (content)

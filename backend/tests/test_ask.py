@@ -93,10 +93,10 @@ def declarations(setup: dict) -> list[list[str]]:
 
 async def test_the_navigation_tools_are_offered_only_to_the_directions_gesture(settings, store):
     plain = setup_of(await ask_session(settings, store, live()))
-    assert declarations(plain) == [["scan", "collect_snapshot", "clear_snapshots"]]
+    assert declarations(plain) == [["scan", "collect_snapshot", "clear_snapshots", "open_scrapbook", "close_scrapbook"]]
     assert NAV_NOTE not in plain["systemInstruction"]["parts"][0]["text"]
     gesture = setup_of(await ask_session(settings, store, live(), {"navigate": True}))
-    assert declarations(gesture) == [["find_place", "stop_navigation", "scan", "collect_snapshot", "clear_snapshots"]]
+    assert declarations(gesture) == [["find_place", "stop_navigation", "scan", "collect_snapshot", "clear_snapshots", "open_scrapbook", "close_scrapbook"]]
     assert NAV_NOTE in gesture["systemInstruction"]["parts"][0]["text"]
 
 
@@ -105,14 +105,14 @@ async def test_the_hand_actions_are_always_offered_in_the_one_declaration(settin
         for body in (None, {"navigate": True}):
             setup = setup_of(await ask_session(settings, store, live(search=search), body))
             [declared] = declarations(setup)
-            assert declared[-3:] == ["scan", "collect_snapshot", "clear_snapshots"]
+            assert declared[-5:] == ["scan", "collect_snapshot", "clear_snapshots", "open_scrapbook", "close_scrapbook"]
             assert ACTIONS_NOTE in setup["systemInstruction"]["parts"][0]["text"]
 
 
 async def test_the_hand_actions_take_no_arguments(settings, store):
     setup = setup_of(await ask_session(settings, store, live()))
     functions = {f["name"]: f for f in setup["tools"][0]["functionDeclarations"]}
-    for name in ("scan", "collect_snapshot", "clear_snapshots"):
+    for name in ("scan", "collect_snapshot", "clear_snapshots", "open_scrapbook", "close_scrapbook"):
         assert "parameters" not in functions[name]
         assert functions[name]["description"]
 
@@ -122,6 +122,7 @@ async def test_the_persona_says_when_to_call_each_hand_action_and_what_to_say_af
     assert "call scan, then name the things it pinned" in text
     assert "call collect_snapshot and say in a few words what you saved" in text
     assert "call clear_snapshots and say how many went" in text
+    assert "call open_scrapbook" in text and "call close_scrapbook" in text
 
 
 async def test_the_persona_limits_search_to_questions_that_need_the_web(settings, store):

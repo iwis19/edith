@@ -61,6 +61,18 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void Scrapbook_calls_are_read_and_answer_what_they_did()
+        {
+            var message = LiveMessage.Parse("{\"toolCall\":{\"functionCalls\":[{\"id\":\"o\",\"name\":\"open_scrapbook\"},{\"id\":\"x\",\"name\":\"close_scrapbook\"}]}}");
+            Assert.AreEqual(("o", ToolCall.OpenScrapbook), Read(message.ToolCalls[0]));
+            Assert.AreEqual(("x", ToolCall.CloseScrapbook), Read(message.ToolCalls[1]));
+            Assert.AreEqual("{\"opened\":true}", HandReplies.Opened);
+            Assert.AreEqual("{\"closed\":true}", HandReplies.Closed);
+            StringAssert.StartsWith("{\"error\":{\"code\":\"already_open\",", HandReplies.AlreadyOpen);
+            StringAssert.StartsWith("{\"error\":{\"code\":\"not_open\",", HandReplies.NotOpen);
+        }
+
+        [Test]
         public void Collect_and_clear_answer_what_they_did()
         {
             Assert.AreEqual("{\"collected\":\"a brass \\\"owl\\\"\"}", HandReplies.Collected("a brass \"owl\""));

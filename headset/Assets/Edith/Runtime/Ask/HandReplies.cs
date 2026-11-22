@@ -45,6 +45,10 @@ namespace Edith.Ask
 
         public static string Collected(string name) => "{\"collected\":" + LiveRequest.Quote(name ?? "") + "}";
 
+        public const string Opened = "{\"opened\":true}", Closed = "{\"closed\":true}";
+        public static readonly string AlreadyOpen = Error("already_open", "The Scrapbook is already open.");
+        public static readonly string NotOpen = Error("not_open", "The Scrapbook is not open.");
+
         public static string Cleared(int count) => "{\"cleared\":" + count.ToString(CultureInfo.InvariantCulture) + "}";
 
         /// `reply`'s result, or `onTimeout` once `limit` passes first, so a call that never ends cannot hold the

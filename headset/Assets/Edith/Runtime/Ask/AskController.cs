@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Edith.Backend;
 using Edith.Capture;
 using Edith.Grab;
+using Edith.Scrapbook;
 using Edith.Navigation;
 using Edith.Scan;
 using Edith.Snapshots;
@@ -51,6 +52,7 @@ namespace Edith.Ask
         float lastHeardAt, firstChunkAt;
         bool playingLogged;
         SnapshotRoom room;
+        ScrapbookPanel book;
         AnswerOrb current;
         LiveLink link;
         BackendSettings backend;
@@ -364,6 +366,10 @@ namespace Edith.Ask
                 case ToolCall.ClearSnapshots:
                     reply = Task.FromResult(room == null ? NoSnapshots : HandReplies.Cleared(room.Clear()));
                     break;
+                case ToolCall.OpenScrapbook:
+                case ToolCall.CloseScrapbook:
+                    reply = Task.FromResult(ToggleScrapbook(call.Name == ToolCall.OpenScrapbook));
+                    break;
                 default:
                     reply = Task.FromResult(HandReplies.Error("unknown_function", "There is no function named " + call.Name + "."));
                     break;
@@ -399,6 +405,15 @@ namespace Edith.Ask
             var scanned = scan.Scan().ContinueWith(done => HandReplies.Scanned(done.Result),
                 TaskContinuationOptions.ExecuteSynchronously);
             return HandReplies.WithTimeout(scanned, HandReplies.ScanLimit, HandReplies.ScanTimedOut);
+        }
+
+        /// Opens or closes the Scrapbook as the open-book pose does.
+        string ToggleScrapbook(bool open)
+        {
+            if (book == null) book = FindFirstObjectByType<ScrapbookPanel>(FindObjectsInactive.Include);
+            if (book == null) return HandReplies.Error("unavailable", "The Scrapbook is not available on this headset.");
+            if (open) return book.OpenByVoice() ? HandReplies.Opened : HandReplies.AlreadyOpen;
+            return book.CloseByVoice() ? HandReplies.Closed : HandReplies.NotOpen;
         }
 
         /// Collects the snapshot nearest the line of sight as a pull to the chest does, into a spot below the eye.

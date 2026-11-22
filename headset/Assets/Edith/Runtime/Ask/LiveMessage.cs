@@ -9,7 +9,8 @@ namespace Edith.Ask
     /// the hand actions, which take none.
     public readonly struct ToolCall
     {
-        public const string Scan = "scan", CollectSnapshot = "collect_snapshot", ClearSnapshots = "clear_snapshots";
+        public const string Scan = "scan", CollectSnapshot = "collect_snapshot", ClearSnapshots = "clear_snapshots",
+            OpenScrapbook = "open_scrapbook", CloseScrapbook = "close_scrapbook";
 
         public readonly string Id, Name, Category, PlaceName;
 

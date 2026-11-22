@@ -139,7 +139,7 @@ Ask can guide the person to something nearby: "where's the nearest subway?", "ta
 - Keep gestures in front of the chest and under a second long.
 - A grab only counts when the hand was clearly open within the last second before it closes into a fist, so a hand relaxing after a pinch never grabs.
 - Every gesture gets visual or audio feedback.
-- Scan, Collect and clearing the snapshots can also be asked for by voice through Ask: "scan" or "what's around me" runs the same scan as the palms-out pose, "save this" collects the snapshot in view as the fist pull does, and "clear these" removes the snapshots in the room. EDITH runs each and says what happened.
+- Scan, Collect, clearing the snapshots and the Scrapbook can also be asked for by voice through Ask: "scan" or "what's around me" runs the same scan as the palms-out pose, "save this" collects the snapshot in view as the fist pull does, "clear these" removes the snapshots in the room, and "open my scrapbook" or "close the scrapbook" opens or closes it as the open-book pose does. EDITH runs each and says what happened.
 - It should also be made easy at the end for people to start a new profile (new interests, new voices, new wtv yk)
 
 ## Architecture
