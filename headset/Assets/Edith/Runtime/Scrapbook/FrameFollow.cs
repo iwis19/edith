@@ -1,9 +1,10 @@
+using System;
 using UnityEngine;
 
 namespace Edith.Scrapbook
 {
-    /// Keeps the Scrapbook in front of the user without making it chase the head: the deck stays put until the head
-    /// has pointed well away from it, or the user has walked off, for a moment, and then eases back in front.
+    /// Keeps a panel in front of the user without making it chase the head: the panel stays put until the head has
+    /// pointed well away from it, or the user has walked off, for a moment, and then eases back in front.
     public sealed class FrameFollow
     {
         /// The head must turn this far from the deck's heading, or move this far, before the deck follows.
@@ -13,8 +14,12 @@ namespace Edith.Scrapbook
         /// The rate of the ease back, per second.
         public const float Rate = 4f;
 
+        readonly Func<Pose, Pose> front;
         float offFor;
         bool moving;
+
+        /// `front` gives the panel's frame in front of an eye pose, the Scrapbook deck's when null.
+        public FrameFollow(Func<Pose, Pose> front = null) => this.front = front ?? DeckLayout.Frame;
 
         /// The deck's frame after `seconds`, given where it is and where the eye is. Nothing moves while `busy`, such as
         /// during a pinch, so a target never slides away from the hand.
@@ -26,7 +31,7 @@ namespace Edith.Scrapbook
                 moving = false;
                 return frame;
             }
-            var target = DeckLayout.Frame(eye);
+            var target = front(eye);
             if (!moving)
             {
                 var off = Quaternion.Angle(frame.rotation, target.rotation) > OffDegrees

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Edith.Hands;
 using Edith.Look;
 using Edith.Pairing;
+using Edith.Scrapbook;
 using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
@@ -32,15 +33,15 @@ namespace Edith.Welcome
         /// The phone paired or the person skipped pairing.
         public event Action Finished;
 
-        // The screen is laid out in 1280 by 820 design units. 2500 units to the metre makes it 51 cm wide, held 0.55 m
-        // out, which fills about 50 degrees of view.
+        // The screen is laid out in 1280 by 820 design units. 2500 units to the metre makes step one's 1170 units 47 cm
+        // wide, held 0.75 m out, which fills about 35 degrees of view: readable without moving the eyes.
         const float UnitsPerMetre = 2500f;
-        const float Ahead = 0.55f, FollowRate = 20f, FadeSeconds = 0.35f;
+        const float Ahead = 0.75f, FadeSeconds = 0.35f;
         const float ScreenWidth = 1280f, ScreenHeight = 820f;
-        // The pairing pane, in design units, and where it is held: 0.45 m out and 6 cm below the line of sight, as
-        // PhonePairing holds its panel, and a tenth wider than that panel's 15 cm.
+        // The pairing pane, in design units, and where it is held: 0.45 m out on the line of sight, a tenth wider than
+        // PhonePairing's 15 cm panel.
         static readonly Rect PairPane = new Rect(500f, 93f, 720f, 455f);
-        const float PairWidthMetres = 0.165f, PairAhead = 0.45f, PairBelow = 0.06f;
+        const float PairWidthMetres = 0.165f, PairAhead = 0.45f;
         const float TapMargin = 10f;
         // A button under a ray brightens its fill by this much.
         const float HoverLift = 0.12f;
@@ -82,7 +83,8 @@ namespace Edith.Welcome
         WelcomeStep shownStep = WelcomeStep.Done;
         readonly PeaceSignsTracker summon = new PeaceSignsTracker();
         WelcomeFlow flow = new WelcomeFlow();
-        bool open, phoneKnown, leaving, greeted;
+        bool open, phoneKnown, leaving, greeted, pinching;
+        FrameFollow follow;
         AudioSource speaker;
         HandRays rays;
         HandGate gate;
@@ -115,7 +117,11 @@ namespace Edith.Welcome
             WatchPhone();
             // The pairing step has nothing to pick, so it shows no rays.
             if (!leaving && flow.Step == WelcomeStep.Interests) Point(rightHand, leftHand);
-            else rays.Hide();
+            else
+            {
+                rays.Hide();
+                pinching = false;
+            }
             if (flow.Step != shownStep) Enter(flow.Step);
             Draw();
         }
@@ -138,11 +144,10 @@ namespace Edith.Welcome
         void LateUpdate()
         {
             if (!open || group.alpha <= 0f) return;
-            // Close behind the head, with only enough smoothing to hide head tremor: 20 a second covers 63% of the gap
-            // in 50 ms.
-            var follow = 1f - Mathf.Exp(-FollowRate * Time.deltaTime);
-            var position = Vector3.Lerp(transform.position, Rest(), follow);
-            transform.SetPositionAndRotation(position, Quaternion.Slerp(transform.rotation, Facing(position), follow));
+            // Still through a glance, so a corner can be read or pointed at; back in front once the head turns well away.
+            var placed = follow.Step(new Pose(transform.position, transform.rotation), new Pose(eye.position, eye.rotation),
+                Time.deltaTime, pinching);
+            transform.SetPositionAndRotation(placed.position, placed.rotation);
         }
 
         // ---- flow
@@ -160,6 +165,7 @@ namespace Edith.Welcome
         void Point(in HandFrame rightHand, in HandFrame leftHand)
         {
             var reading = rays.Step(rightHand, leftHand, findTarget);
+            pinching = reading.Owner != null;
             if (reading.Hovered != hovered)
             {
                 hovered = reading.Hovered;
@@ -282,8 +288,8 @@ namespace Edith.Welcome
                 $"output {AudioSettings.outputSampleRate} Hz, volume {speaker.volume:F2}, listener {AudioListener.volume:F2}{(AudioListener.pause ? " paused" : "")}");
         }
 
-        /// Step one fills the screen with EDITH beside it. Step two shows only its pane, scaled and held like
-        /// PhonePairing's panel, with the screen shifted so the pane is centred on the canvas.
+        /// Step one shows EDITH beside the picks, step two only its pane, scaled like PhonePairing's panel. Either way
+        /// the screen is shifted so what shows is centred on the canvas, and the canvas is put dead ahead.
         void Arrange(bool pairOnly)
         {
             character.gameObject.SetActive(!pairOnly);
@@ -291,14 +297,41 @@ namespace Edith.Welcome
             root.localScale = Vector3.one / (pairOnly ? PairPane.width / PairWidthMetres : UnitsPerMetre);
             screen.anchoredPosition = pairOnly
                 ? new Vector2(ScreenWidth * 0.5f - PairPane.center.x, PairPane.center.y - ScreenHeight * 0.5f)
-                : Vector2.zero;
-            var rest = Rest();
-            transform.SetPositionAndRotation(rest, Facing(rest));
+                : -StepOneBounds().center;
+            follow = new FrameFollow(Front);
+            var front = Front(new Pose(eye.position, eye.rotation));
+            transform.SetPositionAndRotation(front.position, front.rotation);
         }
 
-        Vector3 Rest() => shownStep == WelcomeStep.Pair
-            ? eye.position + eye.forward * PairAhead - eye.up * PairBelow
-            : eye.position + eye.forward * Ahead;
+        /// What step one draws, EDITH and the picks card, in the screen's own units.
+        Rect StepOneBounds()
+        {
+            var corners = new Vector3[4];
+            float xMin = float.MaxValue, yMin = float.MaxValue, xMax = float.MinValue, yMax = float.MinValue;
+            void Cover(RectTransform rect)
+            {
+                rect.GetWorldCorners(corners);
+                foreach (var corner in corners)
+                {
+                    var local = screen.InverseTransformPoint(corner);
+                    xMin = Mathf.Min(xMin, local.x);
+                    xMax = Mathf.Max(xMax, local.x);
+                    yMin = Mathf.Min(yMin, local.y);
+                    yMax = Mathf.Max(yMax, local.y);
+                }
+            }
+            foreach (RectTransform part in character) Cover(part);
+            Cover(pickCard);
+            return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        }
+
+        /// The canvas centred on the line of sight, upright to the head as the Ask orb is, so it rolls with the head
+        /// instead of looking tilted.
+        Pose Front(Pose eyePose)
+        {
+            var ahead = shownStep == WelcomeStep.Pair ? PairAhead : Ahead;
+            return new Pose(eyePose.position + eyePose.rotation * Vector3.forward * ahead, eyePose.rotation);
+        }
 
         void Leave()
         {
@@ -601,8 +634,5 @@ namespace Edith.Welcome
                 return playTriangle;
             }
         }
-
-        // Upright to the head, as the Ask orb is, so the panel rolls with it instead of looking tilted.
-        Quaternion Facing(Vector3 position) => Quaternion.LookRotation(position - eye.position, eye.up);
     }
 }
