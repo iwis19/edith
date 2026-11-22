@@ -29,16 +29,6 @@ namespace Edith.Tests
         }
 
         [Test]
-        public void On_a_photo_the_orb_and_caption_span_its_width()
-        {
-            var width = 0.22f;
-            Assert.That(AnswerOrb.OrbMetres + AnswerOrb.GapMetres + AnswerOrb.PerchedCaptionMetres(width),
-                Is.EqualTo(width).Within(1e-5f));
-            Assert.AreEqual(AnswerOrb.MinCaptionMetres, AnswerOrb.PerchedCaptionMetres(0.05f), "a narrow photo keeps a readable caption");
-            Assert.AreEqual(AnswerOrb.HomeCaptionMetres, AnswerOrb.PerchedCaptionMetres(1f), "a wide photo keeps lines short");
-        }
-
-        [Test]
         public void A_long_answer_shows_only_its_last_two_lines_from_a_word()
         {
             orb.ShowAnswer(LongAnswer, 1f);

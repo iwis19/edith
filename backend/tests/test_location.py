@@ -320,3 +320,10 @@ def test_the_place_description_carries_wikipedia_facts_only_for_the_sights_shown
     crowded = Whereabouts(place="Town", sights=[sights[1], far_clock])
     assert "- Far Clock: Built in 1900." in describe_place(crowded, 1), "a sight with a fact is shown ahead of a nearer one"
     assert "Plain Hall" not in describe_place(crowded, 1)
+
+
+def test_the_prompt_gives_the_phone_coordinates():
+    found = Whereabouts(place="Western University, London, Ontario, Canada", sights=[], lat=43.0096, lon=-81.2737)
+    assert describe_place(found, 5).startswith(
+        "This person is at Western University, London, Ontario, Canada. "
+        "Their phone puts them at latitude 43.0096, longitude -81.2737.")

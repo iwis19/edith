@@ -35,8 +35,22 @@ namespace Edith.Tests
         public void A_new_snapshot_says_it_is_looking()
         {
             var snapshot = room.Place(Box(0f));
-            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
+            Assert.AreEqual("Looking.", Shown(snapshot, "Fact"));
             Assert.AreEqual(LookPhase.Looking, snapshot.Card.Phase);
+        }
+
+        [Test]
+        public void Looking_cycles_one_to_three_dots()
+        {
+            var snapshot = room.Place(Box(0f));
+            var shown = new List<string>();
+            for (var i = 0; i < 4; i++)
+            {
+                shown.Add(Shown(snapshot, "Fact"));
+                snapshot.Step(0.46f);
+            }
+            CollectionAssert.AreEqual(new[] { "Looking.", "Looking..", "Looking...", "Looking." }, shown);
+            Assert.IsTrue(snapshot.enabled, "keeps ticking while it looks");
         }
 
         [Test]
@@ -44,9 +58,9 @@ namespace Edith.Tests
         {
             var snapshot = room.Place(Box(0f));
             snapshot.Apply(LookEvent.Named("Red m", pending: true));
-            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
+            Assert.AreEqual("Looking.", Shown(snapshot, "Fact"));
             snapshot.Apply(LookEvent.Named("Red mug"));
-            Assert.AreEqual("Looking…", Shown(snapshot, "Fact"));
+            Assert.AreEqual("Looking.", Shown(snapshot, "Fact"));
             snapshot.Apply(LookEvent.Fact("Mugs are old."));
             snapshot.Card.Advance(10f);
             snapshot.Apply(LookEvent.Done());
@@ -78,6 +92,28 @@ namespace Edith.Tests
             snapshot.Card.Advance(10f);
             snapshot.Apply(LookEvent.Done());
             Assert.AreEqual("Red mug", Shown(snapshot, "Fact"));
+        }
+
+        static RectTransform GlassBody(Snapshot snapshot) =>
+            snapshot.GetComponentsInChildren<Image>().Single(image => image.name == "Body" && image.transform.parent.name == "Glass").rectTransform;
+
+        [Test]
+        public void A_new_card_opens_down_out_of_its_photo()
+        {
+            var snapshot = room.Place(Box(0f));
+            var photo = snapshot.GetComponentsInChildren<RawImage>().Single(image => image.name == "Photo").rectTransform;
+            var text = snapshot.GetComponentsInChildren<CanvasGroup>().Single(group => group.name == "Text");
+            var closed = GlassBody(snapshot).rect.size;
+            var closedTop = GlassBody(snapshot).parent.localPosition.y + closed.y * 0.5f;
+            Assert.AreEqual(closed.x - photo.rect.width, closed.y - photo.rect.height, 1e-3f, "hugs the photo, no room for text yet");
+            Assert.AreEqual(0f, text.alpha);
+
+            snapshot.Step(2f);
+            var open = GlassBody(snapshot).rect.size;
+            Assert.Greater(open.y, closed.y + 1f, "grown down to hold the text");
+            Assert.AreEqual(closed.x, open.x, 1e-3f, "same width");
+            Assert.AreEqual(closedTop, GlassBody(snapshot).parent.localPosition.y + open.y * 0.5f, 1e-3f, "top stays put");
+            Assert.AreEqual(1f, text.alpha);
         }
 
         [Test]

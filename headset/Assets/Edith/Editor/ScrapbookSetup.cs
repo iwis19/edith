@@ -12,7 +12,7 @@ using UnityEngine.SceneManagement;
 
 namespace Edith.Editor
 {
-    /// The Scrapbook in the scene: the panel, wired to both hands, the pinch and the thumb gestures, the material
+    /// The Scrapbook in the scene: the panel, wired to both hands and the thumb gestures, the material
     /// its cards and map are drawn with, and the hand gate it holds while open, which Look, Scan and the pinch
     /// outline check. Every step converges, so running it again is safe.
     public static class ScrapbookSetup
@@ -54,7 +54,6 @@ namespace Edith.Editor
             var panel = PinchSetup.Ensure<ScrapbookPanel>(host);
             PinchSetup.SetObject(panel, "leftHand", Find<LeftHandSource>(nameof(ScanSetup)));
             PinchSetup.SetObject(panel, "rightHand", Find<RightHandSource>(nameof(PinchSetup)));
-            PinchSetup.SetObject(panel, "pinch", Find<PinchInput>(nameof(PinchSetup)));
             PinchSetup.SetObject(panel, "gestures", Find<ThumbGestures>(nameof(AskSetup)));
             PinchSetup.SetObject(panel, "gate", gate);
             PinchSetup.SetObject(panel, "eye", rig.centerEyeAnchor);

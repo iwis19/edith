@@ -144,7 +144,7 @@ namespace Edith.Pairing
             }
             if (flow.Phase == PairPhase.Requesting)
             {
-                title.text = "Pair your phone";
+                title.text = "Turn on location!";
                 line.text = flow.Failures > 0 ? "Can't reach the EDITH server. Trying again." : "Getting a code...";
                 address.text = andType.text = "";
                 ShowCode(null);

@@ -26,7 +26,7 @@ EDITH is a hands-only Quest 3/3S mixed-reality companion that makes whatever you
 
 ### Welcome
 
-A short guided start on first launch: EDITH introduces itself, you pick or say a few interests (menu, typing or voice), and then it pairs your phone for location.
+A short guided start on first launch: EDITH introduces itself, you pick or say a few interests (menu, typing or voice), and then it pairs your phone for location. Its buttons are picked with Horizon OS's own hand ray: aim, pinch and let go. While Welcome or the Scrapbook is open, a pinch never starts a Look.
 
 ### Look result
 
@@ -86,7 +86,7 @@ The hook is not a fact: it is why the thing is worth a look, or something to do 
 
 ### Scrapbook
 
-A deck of memory cards, placed 0.7 m in front of where you look when it opens, at eye level and fixed there in the room. The middle card is full size and is a snapshot's card: the photo in a rarity-coloured border with the fun fact under it. Two smaller cards fade back on each side. Thumb swipe or a sideways pinch-drag scrolls, and a pinch on a side card brings it to the middle. A pinch chooses at the point where it was pressed unless it moves 6 cm or more sideways. A row of six rarity chips under the deck, Common to Mythic, each with its count and dimmed when empty, narrows the deck to one tier. A pinch on the chip in use shows every card again. The deck runs from Common to Mythic, newest first within a tier, and opens at its first card. Letting go of a drag lands on the card the drag was heading to: movement in the last 0.12 s before the release is ignored, and a small reversal at the end does not turn the deck back. Voice search lights up matching cards, using embeddings over labels and facts.
+A deck of memory cards, placed 0.7 m in front of where you look when it opens, at eye level and fixed there in the room. The middle card is full size and is a snapshot's card: the photo in a rarity-coloured border with the fun fact under it. Two smaller cards fade back on each side. While it is open both hands show Horizon OS's own pointer ray with a ring cursor: aim, pinch and let go on the same thing to pick it. Thumb swipe or a sideways pinch-drag pressed on a card scrolls, and picking a side card brings it to the middle. A pinch pressed on a card picks it unless it moves 6 cm or more sideways. A row of six rarity chips under the deck, Common to Mythic, each with its count and dimmed when empty, narrows the deck to one tier. A pinch on the chip in use shows every card again. The deck runs from Common to Mythic, newest first within a tier, and opens at its first card. Letting go of a drag lands on the card the drag was heading to: movement in the last 0.12 s before the release is ignored, and a small reversal at the end does not turn the deck back. Voice search lights up matching cards, using embeddings over labels and facts.
 
 A memory keeps only what its card shows: the photo, name, fun fact, tier, place, the local date it was collected (no time of day), the place's centre point for the map, and the search embedding. Your own position is never stored.
 
@@ -128,7 +128,7 @@ Ask can guide the person to something nearby: "where's the nearest subway?", "ta
 | Stop directions | Both hands as finger guns pointing up, held about 0.3 s |
 | Scan | Both palms open and facing away, held about 0.5 s; pinch a pin to open it |
 | App menu | Turn the left wrist inward and poke with the right index |
-| Scrapbook | Hold both palms up side by side for half a second to open, and again to close; thumb swipe or pinch-drag to scroll; pinch a chip or a side card |
+| Scrapbook | Hold both palms up side by side for half a second to open, and again to close; thumb swipe or pinch-drag to scroll; point the hand ray at a chip or a side card and pinch |
 | Spots globe | One-hand grab to spin; two-hand pull to zoom |
 
 **Rules**

@@ -6,13 +6,15 @@ using UnityEngine.UI;
 namespace Edith.Snapshots
 {
     /// A snapshot photo hanging where its box was drawn, at the box's size, facing the eye that drew it, with the
-    /// card the backend writes about it underneath. It fades in when placed, fades out while a new box covers it,
-    /// and fades out for good when it leaves the room. A fist can carry it off its hook and it floats back, or
-    /// shrink it into a pocket point.
+    /// card the backend writes about it underneath. It fades in when placed with its card opening down out of the
+    /// photo, fades out while a new box covers it, and fades out for good when it leaves the room. A fist can carry it
+    /// off its hook and it floats back, or shrink it into a pocket point.
     public sealed class Snapshot : MonoBehaviour
     {
         const float FadeSeconds = 0.25f;
         const float PocketSeconds = 0.3f;
+        // A new card opens out of the box round its photo while the backend is still looking.
+        const float OpenSeconds = 1.2f;
         // Rates of the exponential approach to the pose, per second. A carried card trails the hand slightly,
         // which hides tracking jitter; a released one drifts back more slowly.
         const float CarryFollow = 30f;
@@ -26,6 +28,8 @@ namespace Edith.Snapshots
         CanvasGroup group;
         float fade;
         float target = 1f;
+        float opened;
+        float looked;
         bool carried;
         Vector3 carryPosition;
         Quaternion carryRotation;
@@ -88,6 +92,7 @@ namespace Edith.Snapshots
             snapshot.group.interactable = false;
             snapshot.group.blocksRaycasts = false;
             snapshot.view = CardView.Build(rect, box.Size * UnitsPerMetre, box.Depth, font, material);
+            snapshot.view.Opened = 0f;
             snapshot.view.Show(snapshot.Card, null);
             return snapshot;
         }
@@ -109,7 +114,7 @@ namespace Edith.Snapshots
             Card.Apply(e);
             // The cue plays once, as the rarity arrives, for a Look and for a scan pin opened as one.
             if (!rated && Card.Tier != null) RaritySounds.Play(Card.Tier, transform.position);
-            view.Show(Card, caption);
+            view.Show(Card, caption, looked);
             enabled = true;
         }
 
@@ -121,7 +126,8 @@ namespace Edith.Snapshots
             set
             {
                 caption = value;
-                view.Show(Card, caption);
+                view.Show(Card, caption, looked);
+                enabled = true;
             }
         }
 
@@ -196,25 +202,33 @@ namespace Edith.Snapshots
             return rounded;
         }
 
-        void Update()
+        void Update() => Step(Time.deltaTime);
+
+        /// Moves its fade, opening, pose and typing on by `seconds`. Update calls it every frame.
+        public void Step(float seconds)
         {
-            fade = Mathf.MoveTowards(fade, target, Time.deltaTime / FadeSeconds);
+            fade = Mathf.MoveTowards(fade, target, seconds / FadeSeconds);
             group.alpha = fade * fade * (3f - 2f * fade);
-            var settled = pocketing ? Shrink() : Follow();
-            var typing = Card.Typing && !Leaving;
-            if (typing)
+            var opening = opened < 1f;
+            if (opening)
             {
-                Card.Advance(Time.deltaTime);
-                view.Show(Card, caption);
+                opened = Mathf.MoveTowards(opened, 1f, seconds / OpenSeconds);
+                view.Opened = opened;
             }
-            if (fade != target || !settled || typing) return;
+            var settled = pocketing ? Shrink(seconds) : Follow(seconds);
+            var typing = Card.Typing && !Leaving;
+            var looking = CardView.IsLooking(Card, caption) && !Leaving;
+            if (looking) looked += seconds;
+            if (typing) Card.Advance(seconds);
+            if (typing || looking) view.Show(Card, caption, looked);
+            if (fade != target || !settled || typing || looking || opening) return;
             if (Leaving) Destroy(gameObject);
             else enabled = false;
         }
 
-        bool Shrink()
+        bool Shrink(float seconds)
         {
-            pocketProgress = Mathf.MoveTowards(pocketProgress, 1f, Time.deltaTime / PocketSeconds);
+            pocketProgress = Mathf.MoveTowards(pocketProgress, 1f, seconds / PocketSeconds);
             var eased = pocketProgress * pocketProgress * (3f - 2f * pocketProgress);
             transform.position = Vector3.Lerp(pocketFrom, pocketPoint, eased);
             transform.localScale = fullScale * (1f - eased);
@@ -222,11 +236,11 @@ namespace Edith.Snapshots
         }
 
         /// True once it has come to rest at its box.
-        bool Follow()
+        bool Follow(float seconds)
         {
             var goalPosition = carried ? carryPosition : Box.Center;
             var goalRotation = carried ? carryRotation : Box.Eye.rotation;
-            var blend = 1f - Mathf.Exp(-(carried ? CarryFollow : ReturnFollow) * Time.deltaTime);
+            var blend = 1f - Mathf.Exp(-(carried ? CarryFollow : ReturnFollow) * seconds);
             var position = Vector3.Lerp(transform.position, goalPosition, blend);
             var rotation = Quaternion.Slerp(transform.rotation, goalRotation, blend);
             var arrived = !carried

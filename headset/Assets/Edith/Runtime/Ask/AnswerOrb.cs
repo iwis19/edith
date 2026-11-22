@@ -18,10 +18,12 @@ namespace Edith.Ask
         const float UnitsPerMetre = 4000f;
         public const float OrbMetres = 0.036f;
         public const float GapMetres = 0.012f;
-        const int FontSize = 56;
+        const int FontSize = 50;
+        const float LineSpacing = 0.9f;
         const float CaptionHeight = 160f;
         public const int MaxLines = 2;
-        public const float HomeCaptionMetres = 0.26f, MinCaptionMetres = 0.1f;
+        /// The caption's width, at home and on a photo alike, so an answer on a small snapshot is not squeezed.
+        public const float CaptionMetres = 0.26f;
         static readonly Color Quiet = Theme.Muted;
         static readonly Color Bright = Theme.Ice;
         const int ListeningFontSize = 34;
@@ -107,20 +109,22 @@ namespace Edith.Ask
             captionRect.anchorMin = captionRect.anchorMax = new Vector2(1f, 0.5f);
             captionRect.pivot = new Vector2(0f, 0.5f);
             captionRect.anchoredPosition = new Vector2(GapMetres * UnitsPerMetre, 0f);
+            text.lineSpacing = LineSpacing;
             orb.caption = text;
 
-            orb.listeningLabel = Theme.Label(rect, "Listening", regular, ListeningFontSize, Bright, TextAnchor.UpperCenter, material);
+            // Where the answer will appear, to the right of EDITH.
+            orb.listeningLabel = Theme.Label(rect, "Listening", regular, ListeningFontSize, Bright, TextAnchor.MiddleLeft, material);
             orb.listeningLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
             var labelRect = orb.listeningLabel.rectTransform;
-            labelRect.anchorMin = labelRect.anchorMax = new Vector2(0.5f, 0f);
-            labelRect.pivot = new Vector2(0.5f, 1f);
+            labelRect.anchorMin = labelRect.anchorMax = new Vector2(1f, 0.5f);
+            labelRect.pivot = new Vector2(0f, 0.5f);
             labelRect.sizeDelta = new Vector2(diameter * 2f, ListeningFontSize * 1.4f);
-            labelRect.anchoredPosition = new Vector2(0f, -diameter * 0.08f);
+            labelRect.anchoredPosition = new Vector2(GapMetres * UnitsPerMetre, 0f);
             orb.listeningLabel.text = "Listening";
             orb.listeningLabel.enabled = false;
 
             orb.Choose(Time.time, true);
-            orb.FitCaption(orb.CaptionMetres);
+            orb.FitCaption(CaptionMetres);
             var rest = orb.Rest();
             rect.SetPositionAndRotation(rest, orb.atPerch ? asked.transform.rotation : OrbPlacement.FacingEye(orb.EyePose, rest));
             orb.ShowListening();
@@ -129,8 +133,6 @@ namespace Edith.Ask
 
         /// Resting on the snapshot asked about rather than following the head.
         public bool Perched => atPerch;
-
-        float CaptionMetres => atPerch ? PerchedCaptionMetres(asked.Box.Size.x) : HomeCaptionMetres;
 
         static float RowMetres(float captionMetres) => OrbMetres + GapMetres + captionMetres;
 
@@ -148,7 +150,7 @@ namespace Edith.Ask
                 Gather(eyePose, asked);
                 var photo = asked.transform;
                 var perch = OrbPlacement.Perch(new Pose(photo.position, photo.rotation), asked.Box.Size);
-                var row = OrbPlacement.WorldRow(eyePose, perch, photo.rotation, RowMetres(PerchedCaptionMetres(asked.Box.Size.x)));
+                var row = OrbPlacement.WorldRow(eyePose, perch, photo.rotation, RowMetres(CaptionMetres));
                 if (row is { } seen && OrbPlacement.Overlap(seen, covered) <= 0f)
                 {
                     atPerch = true;
@@ -157,7 +159,7 @@ namespace Edith.Ask
             }
 
             Gather(eyePose, null);
-            var rowMetres = RowMetres(HomeCaptionMetres);
+            var rowMetres = RowMetres(CaptionMetres);
             var homeClear = OrbPlacement.Overlap(OrbPlacement.HeadRow(OrbPlacement.Home, rowMetres), covered) <= 0f;
             if (!homeClear) homeClearSince = -1f;
             else if (homeClearSince < 0f) homeClearSince = now;
@@ -240,11 +242,6 @@ namespace Edith.Ask
             if (total <= count) return value;
             return value.Substring(generator.lines[total - count].startCharIdx).TrimStart();
         }
-
-        /// The caption's width on a photo `photoMetres` wide: the orb and caption together span the photo, but never
-        /// narrower than MinCaptionMetres or wider than at home.
-        public static float PerchedCaptionMetres(float photoMetres) =>
-            Mathf.Clamp(photoMetres - OrbMetres - GapMetres, MinCaptionMetres, HomeCaptionMetres);
 
         void Show(string value, Color color)
         {

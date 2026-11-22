@@ -13,7 +13,7 @@ namespace Edith.Tests
         [Test]
         public void The_middle_card_photo_sits_just_above_eye_level()
         {
-            Assert.AreEqual(5f, -Elevation(ScrapbookPlacement.CardCentre), 0.01f);
+            Assert.AreEqual(8f, -Elevation(ScrapbookPlacement.CardCentre), 0.01f);
             Assert.AreEqual(0.70f, ScrapbookPlacement.CardCentre.z, 1e-6f);
             Assert.AreEqual(0.25f, DeckLayout.CardWidth, 1e-6f);
         }
@@ -45,16 +45,16 @@ namespace Edith.Tests
             Assert.AreEqual(0.2875f, DeckLayout.Pose(2f).Position.x, 1e-5f);
         }
 
-        // The fact under the photo hangs about this far below the photo's bottom edge, and the chip row reaches about
-        // this far above and below its centre.
-        const float TextDropDegrees = 6.5f, ChipHalfDegrees = 1.5f;
+        // A five-line fact's card hangs this far below the photo's bottom edge: divider and gap 17 mm, five 17.5 mm
+        // lines and 11 mm of glass, 115 mm at 0.7 m. The chip row reaches about this far above and below its centre.
+        const float TextDropDegrees = 9.5f, ChipHalfDegrees = 1.5f;
 
         static float PhotoBottom => Elevation(ScrapbookPlacement.CardCentre - new Vector3(0f, DeckLayout.CardHeight * 0.5f, 0f));
 
         [Test]
         public void The_chip_row_sits_under_the_card_text_without_touching_it()
         {
-            Assert.AreEqual(13f, Elevation(ScrapbookPlacement.ChipsCentre), 0.01f);
+            Assert.AreEqual(17f, Elevation(ScrapbookPlacement.ChipsCentre), 0.01f);
             Assert.That(ScrapbookPlacement.ChipsCentre.magnitude, Is.GreaterThanOrEqualTo(MinMeters));
             Assert.That(PhotoBottom + TextDropDegrees, Is.LessThan(Elevation(ScrapbookPlacement.ChipsCentre) - ChipHalfDegrees));
         }

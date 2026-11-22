@@ -23,14 +23,22 @@ namespace Edith.Hands
         public bool Pinching;
         public Vector3 ThumbTip, IndexTip, Wrist, IndexKnuckle, LittleKnuckle;
         public Vector3 MiddleKnuckle, MiddleTip, RingKnuckle, RingTip;
+        /// Horizon OS's pointer pose, the ray its own menus select with. False while the hand is lost or the palm
+        /// faces the user for the system gesture.
+        public bool Pointing;
+        public Vector3 PointerOrigin;
+        public Quaternion PointerRotation;
+        /// How closed the index pinch is, 0 open to 1 touching.
+        public float PinchStrength;
 
         public Vector3 PinchPoint => (ThumbTip + IndexTip) * 0.5f;
+        public Ray Pointer => new Ray(PointerOrigin, PointerRotation * Vector3.forward);
 
         /// This frame with the hand unseen, so every gesture reads it as lost. The clock and the eye stay.
         public HandFrame Unseen()
         {
             var frame = this;
-            frame.Tracked = frame.Visible = frame.Pinching = false;
+            frame.Tracked = frame.Visible = frame.Pinching = frame.Pointing = false;
             return frame;
         }
 

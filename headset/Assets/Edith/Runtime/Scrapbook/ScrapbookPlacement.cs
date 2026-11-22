@@ -15,12 +15,12 @@ namespace Edith.Scrapbook
         public const float CardScale = 1.25f;
         /// The middle card's photo is centred here.
         public const float CardAhead = 0.70f;
-        public static readonly Vector3 CardCentre = Below(CardAhead, -5f);
+        public static readonly Vector3 CardCentre = Below(CardAhead, -8f);
         public const float CardWidth = 0.20f * CardScale;
         public const float FirstAside = 0.16f * CardScale, NextAside = 0.07f * CardScale, Back = 0.06f * CardScale;
 
         /// The rarity chips grow by this much over the bar they replace and are centred here, under the card's text.
         public const float BarScale = 1.3f;
-        public static readonly Vector3 ChipsCentre = Below(0.66f, 13f);
+        public static readonly Vector3 ChipsCentre = Below(0.66f, 17f);
     }
 }
