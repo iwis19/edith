@@ -19,10 +19,10 @@ namespace Edith.Tests
         {
             var flow = new WelcomeFlow();
             Assert.IsTrue(flow.Toggle("Food"));
-            Assert.IsTrue(flow.Toggle("Design"));
-            CollectionAssert.AreEqual(new[] { "Food", "Design" }, flow.Interests);
+            Assert.IsTrue(flow.Toggle("Art"));
+            CollectionAssert.AreEqual(new[] { "Food", "Art" }, flow.Interests);
             Assert.IsTrue(flow.Toggle("Food"));
-            CollectionAssert.AreEqual(new[] { "Design" }, flow.Interests);
+            CollectionAssert.AreEqual(new[] { "Art" }, flow.Interests);
             Assert.IsFalse(flow.Toggle("Knitting"), "only the twelve offered");
         }
 

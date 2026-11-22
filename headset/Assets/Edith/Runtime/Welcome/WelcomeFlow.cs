@@ -16,8 +16,8 @@ namespace Edith.Welcome
         /// The twelve interests offered, in the order they are drawn.
         public static readonly string[] AllInterests =
         {
-            "Architecture", "Nature", "Food", "History", "Art", "Animals",
-            "Tech", "Music", "Sports", "Design", "Science", "Cars",
+            "Nature", "Food", "History", "Art", "Animals",
+            "Tech", "Music", "Sports", "Science",
         };
 
         readonly List<string> interests = new List<string>();
