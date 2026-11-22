@@ -90,27 +90,99 @@ def test_a_name_matches_when_every_asked_word_is_in_the_place_name(name, ok):
     assert matches_name(CAFE, name) is ok
 
 
-async def test_the_finder_filters_a_category_by_name_and_falls_back_to_nominatim():
+async def no_sleep(_):
+    pass
+
+
+async def test_a_named_place_beyond_a_short_walk_comes_from_the_name_search_without_the_wide_search():
+    seen: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if "overpass" in request.url.host:
+            if b"around%3A3000" in request.content:
+                await asyncio.sleep(5)
+            return httpx.Response(200, json={"elements": []})
+        return httpx.Response(200, json=[{"lat": "43.0116", "lon": "-81.2712", "name": "McDonald's", "type": "fast_food"}])
+
+    finder = HttpPlaceFinder(httpx.AsyncClient(transport=httpx.MockTransport(handler)), sleep=no_sleep)
+    started = asyncio.get_running_loop().time()
+    found = await finder.find(43.00961234, -81.27371234, NavigateRequest(category="fast_food", name="McDonald's"))
+    assert [p.name for p in found] == ["McDonald's"]
+    assert asyncio.get_running_loop().time() - started < 1
+    by_name = [r for r in seen if "nominatim" in r.url.host]
+    assert len(by_name) == 1 and by_name[0].url.params["q"] == "McDonald's" and by_name[0].url.params["bounded"] == "1"
+
+
+async def test_the_kind_search_finds_a_name_the_name_search_missed_and_coordinates_leave_rounded():
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         if "overpass" in request.url.host:
             return httpx.Response(200, json={"elements": [
-                {"type": "node", "lat": 43.0100, "lon": -81.2740, "tags": {"name": "Starbucks", "amenity": "cafe"}}]})
-        return httpx.Response(200, json=[{"lat": "43.0116", "lon": "-81.2712", "name": "Tim Hortons", "type": "cafe"}])
-
-    async def no_sleep(_):
-        pass
+                {"type": "node", "lat": 43.0100, "lon": -81.2740, "tags": {"name": "Starbucks", "amenity": "cafe"}},
+                {"type": "node", "lat": 43.0110, "lon": -81.2750, "tags": {"name": "Tim Hortons", "amenity": "cafe"}}]})
+        return httpx.Response(200, json=[])
 
     finder = HttpPlaceFinder(httpx.AsyncClient(transport=httpx.MockTransport(handler)), sleep=no_sleep)
     found = await finder.find(43.00961234, -81.27371234, NavigateRequest(category="cafe", name="Tim Hortons"))
-    assert [p.name for p in found] == ["Tim Hortons"]
-    # Coordinates leave the backend rounded, both radii were tried, and the name was searched alongside them.
+    assert [p.name for p in found] == ["Tim Hortons"] and found[0].kind == "cafe"
     overpass = [r for r in seen if "overpass" in r.url.host]
-    assert len(overpass) == 2 and b"43.0096" in overpass[0].content and b"43.00961234" not in overpass[0].content
-    by_name = [r for r in seen if "nominatim" in r.url.host]
-    assert len(by_name) == 1 and by_name[0].url.params["q"] == "Tim Hortons" and by_name[0].url.params["bounded"] == "1"
+    assert b"43.0096" in overpass[0].content and b"43.00961234" not in overpass[0].content
+
+
+async def test_a_name_search_answer_without_the_whole_name_is_kept_for_when_the_map_finds_nothing():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "overpass" in request.url.host:
+            return httpx.Response(200, json={"elements": []})
+        return httpx.Response(200, json=[{"lat": "43.0116", "lon": "-81.2717", "name": "Huron College", "type": "bus_stop"},
+                                         {"lat": "43.0116", "lon": "-81.2712", "name": "Schmeichel Building",
+                                          "type": "university"}])
+
+    finder = HttpPlaceFinder(httpx.AsyncClient(transport=httpx.MockTransport(handler)), sleep=no_sleep)
+    found = await finder.find(*HERE, NavigateRequest(category="university",
+                                                     name="Ronald D. Schmeichel Building for Entrepreneurship"))
+    assert [p.name for p in found] == ["Schmeichel Building"]
+
+
+async def test_a_wide_search_that_would_overrun_the_limit_ends_in_nothing_found_not_a_failure(monkeypatch):
+    monkeypatch.setattr("edith_backend.navigate.NAVIGATE_TIMEOUT_S", 1.0)
+    monkeypatch.setattr("edith_backend.navigate.WIDE_MIN_S", 0.1)
+    queries: list[bytes] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        queries.append(request.content)
+        if b"around%3A3000" in request.content or b"around:3000" in request.content:
+            await asyncio.sleep(5)
+        return httpx.Response(200, json={"elements": []})
+
+    finder = HttpPlaceFinder(httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    started = asyncio.get_running_loop().time()
+    assert await finder.find(*HERE, NavigateRequest(category="hospital")) == []
+    assert asyncio.get_running_loop().time() - started < 1.2
+    assert len(queries) >= 2
+
+
+async def test_the_same_search_nearby_is_remembered_with_distances_from_the_new_fix():
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"elements": [
+            {"type": "node", "lat": 43.0100, "lon": -81.2740, "tags": {"name": "Weldon Library", "amenity": "library"}}]})
+
+    clock = Clock()
+    finder = HttpPlaceFinder(httpx.AsyncClient(transport=httpx.MockTransport(handler)), clock=clock)
+    first = await finder.find(43.0096, -81.2737, NavigateRequest(category="library"))
+    asked = calls
+    again = await finder.find(43.0098, -81.2738, NavigateRequest(category="library"))
+    assert calls == asked and [p.name for p in again] == ["Weldon Library"]
+    assert again[0].distance_m < first[0].distance_m
+    clock.now += 31 * 60
+    await finder.find(43.0098, -81.2738, NavigateRequest(category="library"))
+    assert calls > asked
 
 
 async def test_the_finder_reports_a_failure_only_when_no_service_answered():

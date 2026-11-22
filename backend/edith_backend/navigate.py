@@ -7,6 +7,7 @@ leave the backend rounded to 4 decimals (about 11 m), as in resolve.py, and are 
 import asyncio
 import logging
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, get_args
@@ -24,9 +25,21 @@ log = logging.getLogger("edith.navigate")
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 # An Overpass mirror that has not answered in this long gets company from the next mirror.
 OVERPASS_HEDGE_S = 1.5
-# Searched in turn until one finds something: a short walk first, then a long one.
-SEARCH_RADII_M = (1500, 5000)
+# Searched in turn until one finds something: a short walk first, then a long one. A 5 km Overpass query does not
+# finish within NAVIGATE_TIMEOUT_S on the public mirrors, so the long one is 3 km.
+SEARCH_RADII_M = (1500, 3000)
 MAX_CHOICES = 3
+# The finder stops this long before NAVIGATE_TIMEOUT_S and answers with what it has, so a slow wide search ends in
+# "nothing found nearby" rather than a failed call.
+SEARCH_MARGIN_S = 0.5
+# A wide search is not started with less than this left: it would not finish.
+WIDE_MIN_S = 1.5
+# The same search from within about 100 m reuses its places for this long, with distances from the new fix.
+SEARCH_CACHE_S = 30 * 60
+SEARCH_CACHE_MAX = 256
+# A name search often finds a stop named after a building; those count only when transit was asked for.
+TRANSIT = ("bus", "transit", "train", "subway")
+STOP_KINDS = ("bus stop", "platform", "stop position", "stop", "station")
 # A target is forgotten this long after it was set, so a session left running does not guide anyone forever.
 TARGET_LIFE_S = 2 * 3600
 # The fix a search starts from must be this fresh: a position from half an hour ago is the wrong place to search near.
@@ -249,27 +262,82 @@ def dedupe(places: list[Place]) -> list[Place]:
 
 
 class HttpPlaceFinder:
-    """Overpass for a kind of place, Nominatim for a name Overpass did not find."""
+    """Nominatim for a name, Overpass for a kind of place, and the places found remembered for a while."""
 
     def __init__(self, http: httpx.AsyncClient, sleep: Callable[[float], Awaitable] = asyncio.sleep,
                  clock: Callable[[], float] = time.monotonic) -> None:
         self._http, self._sleep, self._clock = http, sleep, clock
         self._nominatim_lock = asyncio.Lock()
         self._nominatim_last: float | None = None
+        self._cache: OrderedDict[tuple, tuple[float, list[Place]]] = OrderedDict()
 
     async def find(self, lat: float, lon: float, request: NavigateRequest) -> list[Place]:
         lat, lon = round(lat, 4), round(lon, 4)
         name = (request.name or "").strip()
-        # A named place is searched by name at the same time as by kind, so a miss in the kind search costs no extra
-        # wait. The kind search still wins when it finds the name, since its places carry their real kind.
+        key = (round(lat, 3), round(lon, 3), request.category, normalise(name))
+        cached = self._cache.get(key)
+        if cached is not None and self._clock() - cached[0] <= SEARCH_CACHE_S:
+            self._cache.move_to_end(key)
+            moved = [p.model_copy(update={"distance_m": round(distance_m(lat, lon, p.lat, p.lon))}) for p in cached[1]]
+            return sorted(moved, key=lambda p: p.distance_m)
+        found = await self._search(lat, lon, request.category, name)
+        if found:
+            self._cache[key] = (self._clock(), found)
+            self._cache.move_to_end(key)
+            while len(self._cache) > SEARCH_CACHE_MAX:
+                self._cache.popitem(last=False)
+        return found
+
+    async def _search(self, lat: float, lon: float, category: str, name: str) -> list[Place]:
+        """Raises SearchFailed only when no service answered at all: an empty answer is NoPlace, not a failure."""
+        ends = self._clock() + NAVIGATE_TIMEOUT_S - SEARCH_MARGIN_S
+        # Both start at once. The kind search nearby answers first in turn, since its places carry their real kind and
+        # are truly the nearest; the name search returns only its ten best matches in about 5 km, and often stops
+        # named after a building. When the kind search nearby misses a named place, the name search, usually done by
+        # then, answers before any wider kind search is waited for.
         by_name = asyncio.create_task(self._nominatim(lat, lon, name)) if name else None
+        near = asyncio.create_task(self._overpass(lat, lon, SEARCH_RADII_M[0], category)) if category != "any" else None
+        answered = False
         try:
-            # Raised only when no service answered at all: an empty answer is NoPlace, not a failure.
-            answered = False
-            if request.category != "any":
-                for radius in SEARCH_RADII_M:
+            if near:
+                try:
+                    found = await asyncio.wait_for(near, max(ends - self._clock(), 0.1))
+                    answered = True
+                    if name:
+                        found = [p for p in found if matches_name(p, name)]
+                    if found:
+                        return dedupe(found)[:MAX_CHOICES]
+                except TimeoutError:
+                    log.info("the %d m search ran out of time", SEARCH_RADII_M[0])
+                except (httpx.HTTPError, ValueError) as exc:
+                    log.info("overpass search failed: %s", type(exc).__name__)
+            loose: list[Place] = []
+            if by_name:
+                try:
+                    found = await asyncio.wait_for(by_name, max(ends - self._clock(), 0.1))
+                    answered = True
+                    found = [p for p in found if category in TRANSIT or p.kind not in STOP_KINDS]
+                    named = [p for p in found if matches_name(p, name)]
+                    if named:
+                        return dedupe(named)[:MAX_CHOICES]
+                    # Not every word of the asked name is in these, as with a long official name; they are used only
+                    # when the wider kind search finds nothing with the name either.
+                    loose = found
+                except TimeoutError:
+                    log.info("the name search ran out of time")
+                except (httpx.HTTPError, ValueError) as exc:
+                    log.info("nominatim search failed: %s", type(exc).__name__)
+            if near:
+                for radius in SEARCH_RADII_M[1:]:
+                    left = ends - self._clock()
+                    if left < WIDE_MIN_S:
+                        log.info("no time left for the %d m search", radius)
+                        break
                     try:
-                        found = await self._overpass(lat, lon, radius, request.category)
+                        found = await asyncio.wait_for(self._overpass(lat, lon, radius, category), left)
+                    except TimeoutError:
+                        log.info("the %d m search ran out of time", radius)
+                        break
                     except (httpx.HTTPError, ValueError) as exc:
                         log.info("overpass search failed: %s", type(exc).__name__)
                         break
@@ -278,20 +346,15 @@ class HttpPlaceFinder:
                         found = [p for p in found if matches_name(p, name)]
                     if found:
                         return dedupe(found)[:MAX_CHOICES]
-            if by_name:
-                try:
-                    found = await by_name
-                    answered = True
-                    if found:
-                        return dedupe(found)[:MAX_CHOICES]
-                except (httpx.HTTPError, ValueError) as exc:
-                    log.info("nominatim search failed: %s", type(exc).__name__)
+            if loose:
+                return dedupe(loose)[:MAX_CHOICES]
             if not answered:
                 raise SearchFailed
             return []
         finally:
-            if by_name and not by_name.done():
-                by_name.cancel()
+            for task in (by_name, near):
+                if task is not None and not task.done():
+                    task.cancel()
 
     async def _overpass(self, lat: float, lon: float, radius: int, category: str) -> list[Place]:
         """Asks the first mirror, and each next one too whenever the ones asked so far are slow or fail. The first

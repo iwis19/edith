@@ -340,7 +340,7 @@ def create_app(
         except (SearchFailed, TimeoutError):
             raise ApiError(502, "search_failed", "The map services did not answer.")
         if not places:
-            raise ApiError(404, "no_place", "Nothing like that was found within about five kilometres.")
+            raise ApiError(404, "no_place", "Nothing like that was found nearby.")
         new_area = None
         if request.new_area:
             walked = await trails.walked_cells(profile_id, fix.lat, fix.lon, SEARCH_RADII_M[-1])
