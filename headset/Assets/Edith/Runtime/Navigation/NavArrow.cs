@@ -23,7 +23,7 @@ namespace Edith.Navigation
 
         const float UnitsPerMetre = 1000f;
         const float ArrowMetres = 0.14f;
-        const float AheadMetres = 0.85f, BelowMetres = 0.3f, LabelBelowMetres = 0.1f;
+        const float AheadMetres = 0.55f, BelowMetres = 0.19f, LabelBelowMetres = 0.065f;
         /// How far the arrow tips up from lying flat, so it reads from a standing eye height.
         const float TiltDegrees = 62f;
         const float FollowRate = 4f, TurnRate = 6f, FadeSeconds = 0.35f;
