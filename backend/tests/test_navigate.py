@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import UTC, datetime
 
@@ -105,10 +106,11 @@ async def test_the_finder_filters_a_category_by_name_and_falls_back_to_nominatim
     finder = HttpPlaceFinder(httpx.AsyncClient(transport=httpx.MockTransport(handler)), sleep=no_sleep)
     found = await finder.find(43.00961234, -81.27371234, NavigateRequest(category="cafe", name="Tim Hortons"))
     assert [p.name for p in found] == ["Tim Hortons"]
-    # Coordinates leave the backend rounded, both radii were tried before the name search.
+    # Coordinates leave the backend rounded, both radii were tried, and the name was searched alongside them.
     overpass = [r for r in seen if "overpass" in r.url.host]
     assert len(overpass) == 2 and b"43.0096" in overpass[0].content and b"43.00961234" not in overpass[0].content
-    assert seen[-1].url.params["q"] == "Tim Hortons" and seen[-1].url.params["bounded"] == "1"
+    by_name = [r for r in seen if "nominatim" in r.url.host]
+    assert len(by_name) == 1 and by_name[0].url.params["q"] == "Tim Hortons" and by_name[0].url.params["bounded"] == "1"
 
 
 async def test_the_finder_reports_a_failure_only_when_no_service_answered():
@@ -211,3 +213,22 @@ async def test_the_other_matches_are_offered_without_coordinates(nav):
 async def test_navigation_needs_the_device_token(nav):
     for call in (nav.get("/navigate"), nav.delete("/navigate"), nav.post("/navigate", json={"category": "cafe"})):
         assert (await call).status_code == 401
+
+
+async def test_a_slow_overpass_mirror_is_overtaken_by_the_next_one(monkeypatch):
+    monkeypatch.setattr("edith_backend.navigate.OVERPASS_HEDGE_S", 0.05)
+    hosts: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        if request.url.host == "overpass-api.de":
+            await asyncio.sleep(5)
+        return httpx.Response(200, json={"elements": [
+            {"type": "node", "lat": 43.0100, "lon": -81.2740, "tags": {"name": "Weldon Library", "amenity": "library"}}]})
+
+    finder = HttpPlaceFinder(httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    started = asyncio.get_running_loop().time()
+    found = await finder.find(43.0096, -81.2737, NavigateRequest(category="library"))
+    assert [p.name for p in found] == ["Weldon Library"]
+    assert asyncio.get_running_loop().time() - started < 1
+    assert hosts[:2] == ["overpass-api.de", "overpass.openstreetmap.fr"]

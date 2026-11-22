@@ -22,6 +22,8 @@ from .route import ROUTE_TIMEOUT_S, Guidance, Route, RouteFailed, Router, bearin
 log = logging.getLogger("edith.navigate")
 
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
+# An Overpass mirror that has not answered in this long gets company from the next mirror.
+OVERPASS_HEDGE_S = 1.5
 # Searched in turn until one finds something: a short walk first, then a long one.
 SEARCH_RADII_M = (1500, 5000)
 MAX_CHOICES = 3
@@ -258,45 +260,70 @@ class HttpPlaceFinder:
     async def find(self, lat: float, lon: float, request: NavigateRequest) -> list[Place]:
         lat, lon = round(lat, 4), round(lon, 4)
         name = (request.name or "").strip()
-        # Raised only when no service answered at all: an empty answer is NoPlace, not a failure.
-        answered = False
-        if request.category != "any":
-            for radius in SEARCH_RADII_M:
+        # A named place is searched by name at the same time as by kind, so a miss in the kind search costs no extra
+        # wait. The kind search still wins when it finds the name, since its places carry their real kind.
+        by_name = asyncio.create_task(self._nominatim(lat, lon, name)) if name else None
+        try:
+            # Raised only when no service answered at all: an empty answer is NoPlace, not a failure.
+            answered = False
+            if request.category != "any":
+                for radius in SEARCH_RADII_M:
+                    try:
+                        found = await self._overpass(lat, lon, radius, request.category)
+                    except (httpx.HTTPError, ValueError) as exc:
+                        log.info("overpass search failed: %s", type(exc).__name__)
+                        break
+                    answered = True
+                    if name:
+                        found = [p for p in found if matches_name(p, name)]
+                    if found:
+                        return dedupe(found)[:MAX_CHOICES]
+            if by_name:
                 try:
-                    found = await self._overpass(lat, lon, radius, request.category)
+                    found = await by_name
+                    answered = True
+                    if found:
+                        return dedupe(found)[:MAX_CHOICES]
                 except (httpx.HTTPError, ValueError) as exc:
-                    log.info("overpass search failed: %s", type(exc).__name__)
-                    break
-                answered = True
-                if name:
-                    found = [p for p in found if matches_name(p, name)]
-                if found:
-                    return dedupe(found)[:MAX_CHOICES]
-        if name:
-            try:
-                found = await self._nominatim(lat, lon, name)
-                answered = True
-                if found:
-                    return dedupe(found)[:MAX_CHOICES]
-            except (httpx.HTTPError, ValueError) as exc:
-                log.info("nominatim search failed: %s", type(exc).__name__)
-        if not answered:
-            raise SearchFailed
-        return []
+                    log.info("nominatim search failed: %s", type(exc).__name__)
+            if not answered:
+                raise SearchFailed
+            return []
+        finally:
+            if by_name and not by_name.done():
+                by_name.cancel()
 
     async def _overpass(self, lat: float, lon: float, radius: int, category: str) -> list[Place]:
+        """Asks the first mirror, and each next one too whenever the ones asked so far are slow or fail. The first
+        good answer wins and the rest are dropped."""
+        query = overpass_query(lat, lon, radius, category)
+
+        async def ask(url: str) -> list[Place]:
+            response = await self._http.post(url, data={"data": query}, timeout=SERVICE_TIMEOUT_S,
+                                             headers={"User-Agent": USER_AGENT})
+            response.raise_for_status()
+            reply = response.json()
+            if isinstance(reply, dict) and reply.get("remark"):
+                raise ValueError("Overpass reported a runtime error.")
+            return overpass_places(reply, lat, lon)
+
+        mirrors = iter(OVERPASS_URLS)
+        pending = {asyncio.create_task(ask(next(mirrors)))}
         last: Exception | None = None
-        for url in OVERPASS_URLS:
-            try:
-                response = await self._http.post(url, data={"data": overpass_query(lat, lon, radius, category)},
-                                                 timeout=SERVICE_TIMEOUT_S, headers={"User-Agent": USER_AGENT})
-                response.raise_for_status()
-                reply = response.json()
-                if isinstance(reply, dict) and reply.get("remark"):
-                    raise ValueError("Overpass reported a runtime error.")
-                return overpass_places(reply, lat, lon)
-            except (httpx.HTTPError, ValueError) as exc:
-                last = exc
+        try:
+            while pending:
+                done, pending = await asyncio.wait(pending, timeout=OVERPASS_HEDGE_S,
+                                                   return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    try:
+                        return task.result()
+                    except (httpx.HTTPError, ValueError) as exc:
+                        last = exc
+                if (url := next(mirrors, None)) is not None:
+                    pending.add(asyncio.create_task(ask(url)))
+        finally:
+            for task in pending:
+                task.cancel()
         assert last is not None
         raise last
 
