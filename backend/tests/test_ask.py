@@ -54,10 +54,10 @@ async def test_the_setup_asks_for_spoken_english_with_transcripts(settings, stor
     assert config["responseModalities"] == ["AUDIO"]
     assert config["speechConfig"]["languageCode"] == "en-US"
     assert config["speechConfig"]["voiceConfig"] == {"prebuiltVoiceConfig": {"voiceName": "Kore"}}
-    assert setup["inputAudioTranscription"] == {}
+    assert setup["inputAudioTranscription"] == {"languageCodes": ["en-US"]}
     assert setup["outputAudioTranscription"] == {}
     assert setup["systemInstruction"]["parts"][0]["text"] == ASK_PROMPT
-    assert "always answer in English" in ASK_PROMPT
+    assert "always answer in English" in ASK_PROMPT and "English only, with no exceptions" in ASK_PROMPT
 
 
 async def test_a_voice_in_the_request_replaces_the_default(settings, store):
