@@ -58,6 +58,8 @@ namespace Edith.Ask
         Task<CameraFrame> view;
         HeadsetCamera headsetCamera;
         bool photoSent;
+        /// The question under way was opened by the directions gesture, so a thumb tap may replace it.
+        bool askingDirections;
 
         /// The room whose snapshot photos can go with a question, and the camera that pictures the view when no
         /// snapshot is looked at. Without them, questions go without that photo.
@@ -91,6 +93,13 @@ namespace Edith.Ask
             switch (gesture)
             {
                 case ThumbGesture.Tap:
+                    // A tap is ignored while a question is under way, except a directions question, which it drops for
+                    // an ordinary one, so asking EDITH anything never waits on naming a place.
+                    if (askingDirections && session.Busy)
+                    {
+                        Debug.Log("[EDITH ask] tap during the directions question: asking EDITH instead");
+                        Drop(now);
+                    }
                     if (session.Tap(now)) Begin();
                     Sync(now);
                     return;
@@ -116,20 +125,24 @@ namespace Edith.Ask
         public void BeginNavigation()
         {
             var now = Time.time;
-            if (session.Busy)
-            {
-                if (current != null) current.Leave(0f);
-                current = null;
-                session.Dismiss(now);
-                Sync(now);
-            }
+            if (session.Busy) Drop(now);
             if (session.Tap(now)) Begin(navigate: true);
+            Sync(now);
+        }
+
+        /// Ends the question under way at once, orb and connection, so another can open in its place.
+        void Drop(float now)
+        {
+            if (current != null) current.Leave(0f);
+            current = null;
+            session.Dismiss(now);
             Sync(now);
         }
 
         void Begin(bool navigate = false)
         {
             if (current != null) current.Leave(-1f);
+            askingDirections = navigate;
             Snapshot asked = null;
             AskHint? hint = null;
             if (!navigate)
