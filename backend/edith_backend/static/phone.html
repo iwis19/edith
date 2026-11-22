@@ -390,6 +390,11 @@
   $("code").addEventListener("input", function () {
     this.value = this.value.replace(/\D/g, "").slice(0, 4);
     drawCode();
+    if (this.value.length === 4) {
+      // A typed digit may not count as a tap for iOS motion access, so a later tap can still ask for the compass.
+      if (compassNeedsTap()) document.addEventListener("click", startCompass, { once: true });
+      claim();
+    }
   });
   $("code").addEventListener("focus", function () { $("code-boxes").classList.add("focused"); });
   $("code").addEventListener("blur", function () { $("code-boxes").classList.remove("focused"); });
