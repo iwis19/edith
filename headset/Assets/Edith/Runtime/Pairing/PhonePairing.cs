@@ -38,6 +38,11 @@ namespace Edith.Pairing
         readonly Glass[] boxes = new Glass[4];
         PairPhase? shown;
         readonly CancellationTokenSource lifetime = new CancellationTokenSource();
+        static volatile bool positionMissing;
+
+        /// A feature asked the backend for the phone position and found none, as directions do; the gate closes on the
+        /// next frame. Safe to call from any thread.
+        public static void ReportPositionMissing() => positionMissing = true;
 
         /// The pairing state, or null when the build has no backend and the panel never started.
         public PairingFlow Flow => flow;
@@ -84,6 +89,12 @@ namespace Edith.Pairing
         void Update()
         {
             if (flow == null) return;
+            if (positionMissing)
+            {
+                positionMissing = false;
+                Debug.Log("[EDITH pair] a feature found no phone position");
+                flow.PositionMissing(Time.realtimeSinceStartup);
+            }
             var call = flow.Next(Time.realtimeSinceStartup);
             if (call != PairCall.None) _ = Run(call);
             PairingGate.Current.Paired = !flow.Locked;
@@ -147,6 +158,14 @@ namespace Edith.Pairing
                 title.text = "Turn on location!";
                 line.text = flow.Failures > 0 ? "Can't reach the EDITH server. Trying again." : "Getting a code...";
                 address.text = andType.text = "";
+                ShowCode(null);
+            }
+            else if (flow.Phase == PairPhase.Waiting)
+            {
+                title.text = "Open EDITH on your phone";
+                line.text = "Your phone stopped sharing its location.";
+                address.text = "";
+                andType.text = "Unlock it and keep the EDITH page open";
                 ShowCode(null);
             }
             else if (flow.Phase == PairPhase.Showing)

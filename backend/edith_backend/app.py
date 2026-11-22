@@ -31,7 +31,7 @@ from .jpeg import is_jpeg, jpeg_size
 from .location import LocationFix, Locations, LocationSummary
 from .maps import MapError, TileMap
 from .navigate import (
-    NAVIGATE_TIMEOUT_S, SEARCH_FIX_S, SEARCH_RADII_M, HttpPlaceFinder, NavigateReply, NavigateRequest, Navigations, NavStatus, PlaceFinder, SearchFailed,
+    NAVIGATE_TIMEOUT_S, SEARCH_FIX_S, SEARCH_RADII_M, SEARCH_STALE_FIX_S, HttpPlaceFinder, NavigateReply, NavigateRequest, Navigations, NavStatus, PlaceFinder, SearchFailed,
     others, status,
 )
 from .pairing import BadCode, Pairings, PhoneTokens, TooManyTries
@@ -329,7 +329,7 @@ def create_app(
         """Ask's find_place tool: finds the nearest match around the phone's position and makes it the target."""
         if request.category == "any" and not (request.name or "").strip():
             raise ApiError(422, "nothing_asked", "Give a category, a name or both.")
-        latest = locations.latest(profile_id, SEARCH_FIX_S)
+        latest = locations.latest(profile_id, SEARCH_STALE_FIX_S)
         if latest is None:
             raise ApiError(409, "no_location", "The phone has not sent a recent position, so nothing can be searched.")
         fix, _ = latest

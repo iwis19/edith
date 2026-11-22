@@ -231,6 +231,16 @@ async def test_navigating_needs_a_recent_position(nav):
     assert nav.finder.asked == []
 
 
+async def test_a_quiet_phone_still_lets_a_search_start_from_its_last_position(nav):
+    await nav.post("/location", json=body(), headers=nav.phone)
+    nav.clock.now += 10 * 60
+    found = await nav.post("/navigate", json={"category": "cafe"}, headers=HEADERS)
+    assert found.status_code == 200 and nav.finder.asked
+    nav.clock.now += 6 * 60
+    refused = await nav.post("/navigate", json={"category": "cafe"}, headers=HEADERS)
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "no_location"
+
+
 async def test_navigating_needs_a_category_or_a_name(nav):
     await nav.post("/location", json=body(), headers=nav.phone)
     assert (await nav.post("/navigate", json={}, headers=HEADERS)).status_code == 422

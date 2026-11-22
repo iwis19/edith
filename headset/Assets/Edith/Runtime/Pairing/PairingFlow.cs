@@ -3,8 +3,9 @@ using System;
 namespace Edith.Pairing
 {
     /// Confirming checks, at a launch the headset remembers a pairing, that the backend still keeps the phone's
-    /// position before anything turns on. Paired watches that it stays kept.
-    public enum PairPhase { Confirming, Requesting, Showing, Connected, Paired }
+    /// position before anything turns on. Paired watches that it stays kept. Waiting is a remembered pairing whose phone
+    /// has gone quiet: its pairing still holds, so the person is asked to open EDITH on the phone before a new code.
+    public enum PairPhase { Confirming, Requesting, Showing, Connected, Paired, Waiting }
 
     public enum PairCall { None, CheckLocation, RequestCode, PollStatus }
 
@@ -12,22 +13,27 @@ namespace Edith.Pairing
     /// what to call, makes at most one call at a time, and hands back what happened. All times are seconds on one
     /// clock. Only a code claimed on the phone pairs an unpaired headset; until then the flow is Locked and keeps
     /// asking, however long it takes. A remembered pairing stays Locked at launch until the backend confirms the phone
-    /// position, and a missing one shows a code at once. Once paired it checks every WatchSeconds and locks again when
-    /// the position is gone LostAfterMisses times in a row. A backend that cannot be reached never locks a paired
-    /// headset.
+    /// position. Once paired it checks every WatchSeconds and locks again when the position is gone LostAfterMisses
+    /// times in a row, or at once when a feature finds it gone. A lost position first waits, locked, for the phone to
+    /// come back for up to WaitSeconds, checking every PollSeconds, and only then asks for a new code. A backend that
+    /// cannot be reached never locks a paired headset.
     public sealed class PairingFlow
     {
         public const float PollSeconds = 3f;
         public const float RetrySeconds = 10f;
         public const float ConnectedSeconds = 2f;
-        public const float WatchSeconds = 30f;
-        // Three misses 30 s apart give a restarted backend a minute to hear again from a phone that resends every 10 s.
-        public const int LostAfterMisses = 3;
+        // The phone resends every 10 s and the backend calls it silent after 30 s, so two misses 10 s apart catch a
+        // quiet phone within about 40 s.
+        public const float WatchSeconds = 10f;
+        public const int LostAfterMisses = 2;
+        // A phone that only slept comes back once it is unlocked; a new code is for a phone that lost its pairing.
+        public const float WaitSeconds = 45f;
 
         float nextCallAt;
         float connectedUntil;
         bool inFlight;
         int misses;
+        float waitUntil;
 
         /// `paired`: the headset remembers a pairing from an earlier launch.
         public PairingFlow(bool paired, float now)
@@ -47,11 +53,12 @@ namespace Edith.Pairing
         public int Failures { get; private set; }
 
         /// Every feature but the pairing panel stays off.
-        public bool Locked => Phase == PairPhase.Confirming || Phase == PairPhase.Requesting || Phase == PairPhase.Showing;
+        public bool Locked => Phase == PairPhase.Confirming || Phase == PairPhase.Requesting || Phase == PairPhase.Showing
+                              || Phase == PairPhase.Waiting;
 
         /// The panel is on screen: a code is on its way or up. It goes as soon as the phone connects, and confirming a
         /// remembered pairing takes one call and shows nothing.
-        public bool Visible => Phase == PairPhase.Requesting || Phase == PairPhase.Showing;
+        public bool Visible => Phase == PairPhase.Requesting || Phase == PairPhase.Showing || Phase == PairPhase.Waiting;
 
         /// The call to make now, or None. Asking again before its result comes back returns None.
         public PairCall Next(float now)
@@ -60,6 +67,11 @@ namespace Edith.Pairing
             {
                 if (now >= connectedUntil) Watch(now);
                 return PairCall.None;
+            }
+            if (Phase == PairPhase.Waiting && !inFlight && now >= waitUntil)
+            {
+                Phase = PairPhase.Requesting;
+                nextCallAt = now;
             }
             if (inFlight || now < nextCallAt) return PairCall.None;
             inFlight = true;
@@ -73,10 +85,15 @@ namespace Edith.Pairing
 
         public void OnLocation(bool hasPhoneLocation, float now)
         {
-            if (!Answer(PairPhase.Confirming) && !Answer(PairPhase.Paired)) return;
+            if (!Answer(PairPhase.Confirming) && !Answer(PairPhase.Paired) && !Answer(PairPhase.Waiting)) return;
             if (hasPhoneLocation)
             {
                 Watch(now);
+                return;
+            }
+            if (Phase == PairPhase.Waiting)
+            {
+                nextCallAt = now + PollSeconds;
                 return;
             }
             if (Phase == PairPhase.Paired && ++misses < LostAfterMisses)
@@ -84,8 +101,14 @@ namespace Edith.Pairing
                 nextCallAt = now + WatchSeconds;
                 return;
             }
-            Phase = PairPhase.Requesting;
-            nextCallAt = now;
+            Wait(now);
+        }
+
+        /// A feature asked the backend for the phone position and found none, so the headset locks now rather than at
+        /// its next misses. Only a paired headset is affected.
+        public void PositionMissing(float now)
+        {
+            if (Phase == PairPhase.Paired) Wait(now);
         }
 
         public void OnCode(string code, string phoneUrl, float now, float expiresInSeconds = 600f)
@@ -142,6 +165,13 @@ namespace Edith.Pairing
             inFlight = false;
             Failures = 0;
             return true;
+        }
+
+        void Wait(float now)
+        {
+            Phase = PairPhase.Waiting;
+            waitUntil = now + WaitSeconds;
+            nextCallAt = inFlight ? nextCallAt : now + PollSeconds;
         }
 
         void Watch(float now)
