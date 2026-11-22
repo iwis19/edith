@@ -57,6 +57,8 @@ namespace Edith.Navigation
     /// Both hands' finger guns over time: two guns pointing ahead start directions, two pointing up stop them. A pose
     /// must be held by both hands for HoldSeconds and fires once. It fires again only after the hands have left that
     /// pose for ReleaseSeconds, so a tracking flicker mid-hold does not fire twice, and never within the cooldown.
+    /// Starting also needs both hands to have dropped the finger guns entirely for ReleaseSeconds since the last
+    /// gesture: lowering the hands after pointing up passes through pointing ahead, and that must not start again.
     public sealed class FingerGunPair
     {
         public const float ReleaseSeconds = 0.25f;
@@ -66,6 +68,9 @@ namespace Edith.Navigation
         float heldSince, firedSeenAt;
         bool latched;
         float firedAt = float.NegativeInfinity;
+        // Both hands showed no finger gun for ReleaseSeconds since the last gesture fired.
+        bool dropped = true;
+        float noGunSince = float.NaN;
 
         public FingerGunPair(FingerGunTuning tuning) => this.tuning = tuning;
 
@@ -80,14 +85,21 @@ namespace Edith.Navigation
                 holding = both;
                 heldSince = now;
             }
+            if (r == GunPose.None && l == GunPose.None)
+            {
+                if (float.IsNaN(noGunSince)) noGunSince = now;
+                if (now - noGunSince >= ReleaseSeconds) dropped = true;
+            }
+            else noGunSince = float.NaN;
             if (latched)
             {
                 if (both == fired) firedSeenAt = now;
                 else if (now - firedSeenAt >= ReleaseSeconds) latched = false;
             }
             if (latched || both == GunPose.None || now - heldSince < tuning.HoldSeconds
-                || now - firedAt < tuning.CooldownSeconds) return NavGesture.None;
+                || now - firedAt < tuning.CooldownSeconds || (both == GunPose.Forward && !dropped)) return NavGesture.None;
             latched = true;
+            dropped = false;
             fired = both;
             firedAt = firedSeenAt = now;
             return both == GunPose.Forward ? NavGesture.Start : NavGesture.Stop;

@@ -99,6 +99,36 @@ namespace Edith.Tests
         }
 
         [Test]
+        public void LoweringTheHandsAfterStoppingDoesNotStartAgain()
+        {
+            var pair = new FingerGunPair(Tuning);
+            Assert.That(Run(pair, 0f, 0.5f, Up, Up)[0].Item2, Is.EqualTo(NavGesture.Stop));
+            // On the way down the guns point ahead for a while, well past the cooldown.
+            Assert.That(Run(pair, 0.5f, 1.2f, Up, Up), Is.Empty);
+            Assert.That(Run(pair, 1.2f, 4f, Ahead, Ahead), Is.Empty);
+        }
+
+        [Test]
+        public void DroppingTheGunsBetweenGesturesLetsTheNextOneStart()
+        {
+            var pair = new FingerGunPair(Tuning);
+            Assert.That(Run(pair, 0f, 0.5f, Up, Up)[0].Item2, Is.EqualTo(NavGesture.Stop));
+            Assert.That(Run(pair, 0.5f, 1f, Quaternion.Euler(0f, 90f, 0f), Quaternion.Euler(0f, 90f, 0f)), Is.Empty);
+            var fired = Run(pair, 2f, 3f, Ahead, Ahead);
+            Assert.That(fired, Has.Count.EqualTo(1));
+            Assert.That(fired[0].Item2, Is.EqualTo(NavGesture.Start));
+        }
+
+        [Test]
+        public void OneHandFlickeringWhileHoldingDoesNotStartTwice()
+        {
+            var pair = new FingerGunPair(Tuning);
+            Assert.That(Run(pair, 0f, 1f, Ahead, Ahead), Has.Count.EqualTo(1));
+            Assert.That(Run(pair, 1f, 1.4f, Ahead, null), Is.Empty);
+            Assert.That(Run(pair, 1.4f, 4f, Ahead, Ahead), Is.Empty);
+        }
+
+        [Test]
         public void HandsPointingDifferentWaysDoNothing()
         {
             Assert.That(Run(new FingerGunPair(Tuning), 0f, 2f, Ahead, Up), Is.Empty);
