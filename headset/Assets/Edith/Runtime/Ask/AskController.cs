@@ -185,7 +185,8 @@ namespace Edith.Ask
             view = !navigate && asked == null && hint == null ? CaptureView() : null;
             var about = navigate ? "for directions" : hint is { } h ? $"about the pin on {h.Name}"
                 : photo != null ? "with a snapshot photo" : view != null ? "with the view" : "without a hint";
-            Debug.Log($"[EDITH ask] listening, {about}, voice {Edith.Welcome.WelcomeStore.Voice ?? \"backend default\"}");
+            var voiceName = Edith.Welcome.WelcomeStore.Voice ?? "backend default";
+            Debug.Log($"[EDITH ask] listening, {about}, voice {voiceName}");
         }
 
         /// A picture of the whole camera view, or null when the camera is not streaming.
