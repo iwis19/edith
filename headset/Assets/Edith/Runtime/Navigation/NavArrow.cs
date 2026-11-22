@@ -61,6 +61,8 @@ namespace Edith.Navigation
         float shownYaw;
         float nextPoll, nextYawRecord, lastSampledAt = float.NegativeInfinity, arrivedAt = -1f;
         volatile bool polling;
+        // True while a stop is on its way, so no poll sent meanwhile brings back the old target.
+        volatile bool stopping;
         bool stopSent;
         NavStatus status, arrivedStatus;
         // Set by the poll on a worker thread, taken by Update. A failed poll leaves `received` null.
@@ -110,7 +112,14 @@ namespace Edith.Navigation
             arrowGroup.alpha = labelGroup.alpha = 0f;
         }
 
-        void Start() => hands = FindAnyObjectByType<HandGate>();
+        /// A destination left from an earlier run is dropped, so the app opens with no directions under way.
+        void Start()
+        {
+            hands = FindAnyObjectByType<HandGate>();
+            ignoreBefore = Time.realtimeSinceStartup;
+            Debug.Log("[EDITH nav] clearing any directions from an earlier run");
+            Stop();
+        }
 
         void OnEnable()
         {
@@ -149,7 +158,7 @@ namespace Edith.Navigation
                 nextYawRecord = now + YawRecordSeconds;
             }
             TakeReceived();
-            if (PairingGate.Open && !polling && (poked || now >= nextPoll)) StartPoll(now);
+            if (PairingGate.Open && !polling && !stopping && (poked || now >= nextPoll)) StartPoll(now);
             Show(now);
         }
 
@@ -334,6 +343,7 @@ namespace Edith.Navigation
             var url = settings.Url;
             var token = settings.DeviceToken;
             var profile = BackendSettings.ProfileId;
+            stopping = true;
             Task.Run(async () =>
             {
                 try
@@ -347,6 +357,7 @@ namespace Edith.Navigation
                 catch (Exception)
                 {
                 }
+                stopping = false;
                 Poke();
             });
         }
