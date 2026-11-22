@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Edith.Hands;
 using Edith.Look;
 using Edith.Pairing;
-using Edith.Pinch;
 using Edith.UI;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,8 +12,9 @@ namespace Edith.Welcome
     /// The first-launch welcome in two steps. One is EDITH on her horse at the left and, at the right in glass, the
     /// interests and voice to pick. Two is the pairing code alone in glass, held where PhonePairing holds its panel
     /// and as large. The steps and what has been picked live in WelcomeFlow; the pairing itself keeps running in
-    /// PhonePairing, which stays hidden while this is up. Both steps are tapped with a quick pinch, read straight from
-    /// the hands because every gesture but this one stays off until a phone is paired.
+    /// PhonePairing, which stays hidden while this is up. Its buttons are picked with the hand rays, read straight
+    /// from the hands because every gesture but this one stays off until a phone is paired. While it is up it holds
+    /// the hand gate, so pinches make no Looks.
     public sealed class WelcomeController : MonoBehaviour
     {
         [SerializeField] Transform eye;
@@ -42,6 +42,8 @@ namespace Edith.Welcome
         static readonly Rect PairPane = new Rect(500f, 93f, 720f, 455f);
         const float PairWidthMetres = 0.165f, PairAhead = 0.45f, PairBelow = 0.06f;
         const float TapMargin = 10f;
+        // A button under a ray brightens its fill by this much.
+        const float HoverLift = 0.12f;
         const float TypeCharsPerSecond = 55f;
         const float ResumeOverlapSeconds = 0.15f;
 
@@ -50,6 +52,7 @@ namespace Edith.Welcome
             public RectTransform Rect;
             public Action Tap;
             public WelcomeStep Step;
+            public Glass Glass;
         }
 
         sealed class Chip
@@ -65,7 +68,6 @@ namespace Edith.Welcome
             public Glass Glass, Play;
         }
 
-        readonly PinchPair taps = new PinchPair(new PinchTuning());
         readonly List<Target> targets = new List<Target>();
         readonly List<Chip> chips = new List<Chip>();
         readonly List<VoiceCard> voices = new List<VoiceCard>();
@@ -82,6 +84,10 @@ namespace Edith.Welcome
         WelcomeFlow flow = new WelcomeFlow();
         bool open, phoneKnown, leaving, greeted;
         AudioSource speaker;
+        HandRays rays;
+        HandGate gate;
+        int hovered = -1;
+        RayTargets findTarget;
         // What EDITH was last told to say and when, so a line cut off by an audio reset can start again.
         VoiceStyle? saying;
         float sayingFrom, sayingUntil;
@@ -91,6 +97,9 @@ namespace Edith.Welcome
         {
             // Ask resets the audio output shortly after launch and after every pause, which stops whatever is playing.
             AudioSettings.OnAudioConfigurationChanged += OnAudioReset;
+            rays = new HandRays("Welcome");
+            findTarget = TargetOn;
+            gate = FindAnyObjectByType<HandGate>();
             Build();
             if (!WelcomeStore.Done || everyLaunch) Open();
         }
@@ -104,7 +113,9 @@ namespace Edith.Welcome
             if (!open) return;
             KeepSaying();
             WatchPhone();
-            if (!leaving) ReadTaps(rightHand, leftHand);
+            // The pairing step has nothing to pick, so it shows no rays.
+            if (!leaving && flow.Step == WelcomeStep.Interests) Point(rightHand, leftHand);
+            else rays.Hide();
             if (flow.Step != shownStep) Enter(flow.Step);
             Draw();
         }
@@ -119,6 +130,7 @@ namespace Edith.Welcome
             speech.Set("");
             shownStep = WelcomeStep.Done;
             if (pairing != null) pairing.Suppressed = true;
+            if (gate != null) gate.Hold(this, true);
             Refresh();
             Debug.Log("[EDITH welcome] opened");
         }
@@ -145,21 +157,29 @@ namespace Edith.Welcome
             flow.PhoneConnected();
         }
 
-        void ReadTaps(in HandFrame rightHand, in HandFrame leftHand)
+        void Point(in HandFrame rightHand, in HandFrame leftHand)
         {
-            var reading = taps.Step(rightHand, leftHand);
-            if (reading.Event == PinchEvent.Tap) Tap(reading.Start);
+            var reading = rays.Step(rightHand, leftHand, findTarget);
+            if (reading.Hovered != hovered)
+            {
+                hovered = reading.Hovered;
+                Refresh();
+            }
+            if (reading.Event != RayEvent.Clicked) return;
+            targets[reading.Pressed].Tap();
+            Refresh();
         }
 
-        void Tap(Vector3 pinchPoint)
+        /// The button of this step that `ray` meets on the panel, the last built first, and how far along it is.
+        int TargetOn(Ray ray, out float distance)
         {
-            var toPanel = pinchPoint - eye.position;
+            distance = 0f;
             var normal = transform.forward;
-            var along = Vector3.Dot(toPanel, normal);
-            if (Mathf.Abs(along) < 1e-4f) return;
-            var t = Vector3.Dot(transform.position - eye.position, normal) / along;
-            if (t <= 0f) return;
-            var hit = eye.position + toPanel * t;
+            var along = Vector3.Dot(ray.direction, normal);
+            if (Mathf.Abs(along) < 1e-4f) return -1;
+            distance = Vector3.Dot(transform.position - ray.origin, normal) / along;
+            if (distance <= 0f) return -1;
+            var hit = ray.GetPoint(distance);
             for (var i = targets.Count - 1; i >= 0; i--)
             {
                 var target = targets[i];
@@ -168,10 +188,9 @@ namespace Edith.Welcome
                 var rect = target.Rect.rect;
                 if (local.x < rect.xMin - TapMargin || local.x > rect.xMax + TapMargin
                     || local.y < rect.yMin - TapMargin || local.y > rect.yMax + TapMargin) continue;
-                target.Tap();
-                Refresh();
-                return;
+                return i;
             }
+            return -1;
         }
 
         void NextTapped()
@@ -198,7 +217,11 @@ namespace Edith.Welcome
             if (step == WelcomeStep.Done) Leave();
         }
 
-        void OnDestroy() => AudioSettings.OnAudioConfigurationChanged -= OnAudioReset;
+        void OnDestroy()
+        {
+            AudioSettings.OnAudioConfigurationChanged -= OnAudioReset;
+            rays?.Dispose();
+        }
 
         /// Starts the line again on the next frame when an audio reset cut it off, once the reset is over.
         void OnAudioReset(bool deviceWasChanged)
@@ -278,6 +301,9 @@ namespace Edith.Welcome
             // A paired phone completes the welcome.
             WelcomeStore.Done = true;
             if (pairing != null) pairing.Suppressed = false;
+            if (gate != null) gate.Hold(this, false);
+            rays.Hide();
+            hovered = -1;
             Finished?.Invoke();
         }
 
@@ -326,17 +352,24 @@ namespace Edith.Welcome
             foreach (var chip in chips)
             {
                 var on = flow.IsPicked(chip.Name);
-                chip.Glass.SetLook(on ? Theme.Accent : Theme.ChipFill, on ? Color.clear : new Color(1f, 1f, 1f, 0.1f),
+                chip.Glass.SetLook(on ? Theme.Accent : Lifted(Theme.ChipFill, chip.Glass), on ? Color.clear : new Color(1f, 1f, 1f, 0.1f),
                     on ? Theme.Accent : new Color(1f, 1f, 1f, 0.45f), on ? new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f) : Color.clear);
                 chip.Label.color = on ? Theme.OnAccent : Theme.Ice;
             }
             foreach (var voice in voices)
             {
                 var on = flow.Voice == voice.Style;
-                voice.Glass.SetLook(on ? Theme.Tint(0.55f) : Theme.ChipFill, new Color(1f, 1f, 1f, on ? 0.18f : 0.08f),
+                voice.Glass.SetLook(Lifted(on ? Theme.Tint(0.55f) : Theme.ChipFill, voice.Glass), new Color(1f, 1f, 1f, on ? 0.18f : 0.08f),
                     on ? Theme.Accent : new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f),
                     on ? new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.4f) : Color.clear);
             }
+        }
+
+        /// `fill` brightened while a ray is on the button drawn by `glass`.
+        Color Lifted(Color fill, Glass glass)
+        {
+            if (hovered < 0 || targets[hovered].Glass != glass) return fill;
+            return new Color(fill.r + HoverLift, fill.g + HoverLift, fill.b + HoverLift, fill.a + HoverLift);
         }
 
         // ---- building
@@ -408,7 +441,7 @@ namespace Edith.Welcome
                 chip.Label.horizontalOverflow = HorizontalWrapMode.Overflow;
                 chips.Add(chip);
                 var picked = name;
-                AddTarget(chip.Glass.Rect, WelcomeStep.Interests, () => flow.Toggle(picked));
+                AddTarget(chip.Glass, WelcomeStep.Interests, () => flow.Toggle(picked));
                 x += chipWidth + 12f;
             }
             Destroy(measure.gameObject);
@@ -426,12 +459,12 @@ namespace Edith.Welcome
             AddVoice(VoiceStyle.Light, "Light", 973f, voiceCards);
 
             var nextTop = voiceBottom + 17f;
-            Label(stepOne, "Hint", regular, 16, Theme.Ice, TextAnchor.MiddleLeft, 530f, nextTop + 14f, 420f, 24f).text = "Pinch to pick, or say them out loud";
+            Label(stepOne, "Hint", regular, 16, Theme.Ice, TextAnchor.MiddleLeft, 530f, nextTop + 14f, 420f, 24f).text = "Point and pinch to pick, or say them out loud";
             var next = Panel(stepOne, "Next", 1100f, nextTop, 96f, 52f, 26f);
             next.SetLook(Theme.Accent, Color.clear, Theme.Accent, new Color(Theme.Accent.r, Theme.Accent.g, Theme.Accent.b, 0.45f));
             var nextLabel = Label(next.Rect, "Label", semibold, 21, Theme.OnAccent, TextAnchor.MiddleCenter, 0f, 0f, 96f, 52f, centred: true);
             nextLabel.text = "Next";
-            AddTarget(next.Rect, WelcomeStep.Interests, NextTapped);
+            AddTarget(next, WelcomeStep.Interests, NextTapped);
             Reframe(card, left, top, width, nextTop + 52f + 19f - top);
         }
 
@@ -453,7 +486,7 @@ namespace Edith.Welcome
             triangle.rectTransform.anchoredPosition = new Vector2(1.5f, 0f);
             voices.Add(new VoiceCard { Style = style, Glass = glass, Play = play });
             // The whole card, play button included, picks the voice and plays its sample.
-            AddTarget(glass.Rect, WelcomeStep.Interests, () =>
+            AddTarget(glass, WelcomeStep.Interests, () =>
             {
                 flow.ChooseVoice(style);
                 Say(style);
@@ -531,8 +564,8 @@ namespace Edith.Welcome
             return text;
         }
 
-        void AddTarget(RectTransform rect, WelcomeStep step, Action tap) =>
-            targets.Add(new Target { Rect = rect, Step = step, Tap = tap });
+        void AddTarget(Glass glass, WelcomeStep step, Action tap) =>
+            targets.Add(new Target { Rect = glass.Rect, Glass = glass, Step = step, Tap = tap });
 
         static Texture2D playTriangle;
 

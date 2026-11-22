@@ -7,7 +7,6 @@ using Edith.Backend;
 using Edith.Grab;
 using Edith.Hands;
 using Edith.Look;
-using Edith.Pinch;
 using Edith.Scan;
 using UnityEngine;
 
@@ -15,15 +14,14 @@ namespace Edith.Scrapbook
 {
     /// The Scrapbook: the collected memories as a deck of cards to scroll through. Both palms held up side by side
     /// open it in front of the user, where it stays put in the room, and the same pose held again closes it. A
-    /// thumb swipe moves one card. A pinch chooses what was under the line of sight when it was pressed, once it
-    /// ends, unless the pinch point moved 6 cm or more sideways, which scrubs the deck. The rarity chips under the
-    /// deck narrow it to one tier, and the chip nearest the line of sight wins over a card. While it is open it holds
-    /// the hand gate, so pinches make no Looks and palms start no Scan.
+    /// thumb swipe moves one card. Cards and the rarity chips under the deck are picked with the hand rays: aim, pinch
+    /// and let go on the same thing. A pinch pressed on a card that moves 6 cm or more sideways scrubs the deck
+    /// instead. A chip narrows the deck to one tier and wins over a card behind it. While it is open it holds the
+    /// hand gate, so pinches make no Looks and palms start no Scan.
     public sealed class ScrapbookPanel : MonoBehaviour
     {
         [SerializeField] LeftHandSource leftHand;
         [SerializeField] RightHandSource rightHand;
-        [SerializeField] PinchInput pinch;
         [SerializeField] ThumbGestures gestures;
         [SerializeField] HandGate gate;
         [SerializeField] Transform eye;
@@ -40,6 +38,8 @@ namespace Edith.Scrapbook
         // More than the cards in reach, so scrolling back a few cards shows their photos at once.
         const int PhotosKept = 16;
         const int PhotosAtOnce = 3;
+        // Ray targets: cards are their index in the deck, chips this plus their tier.
+        const int ChipTarget = 1 << 24;
 
         enum Content { Loading, Browsing, Empty, Failed }
 
@@ -75,11 +75,10 @@ namespace Edith.Scrapbook
         float fade;
         /// The scrubbing hand's pinch point in the deck's frame, a frame ago.
         Vector3 draggedTo;
-        /// The pinch under way, or null between pinches, with where and from what eye it was pressed.
+        /// The pinch pressed on a card, or null, which scrubs once it sweeps far enough sideways.
         PinchIntent intent;
-        Vector3 pressedAt, pressedEye;
-        /// Whether the pinch under way has already chosen something.
-        bool chosen;
+        HandRays rays;
+        RayTargets findTarget;
 
         public bool Open { get; private set; }
 
@@ -98,6 +97,8 @@ namespace Edith.Scrapbook
             sound = gameObject.AddComponent<AudioSource>();
             sound.spatialBlend = 0f;
             sound.playOnAwake = false;
+            rays = new HandRays("Scrapbook");
+            findTarget = TargetOn;
         }
 
         void Start()
@@ -106,15 +107,10 @@ namespace Edith.Scrapbook
             if (settings != null) client = new ScrapbookClient(settings.Url, settings.DeviceToken, BackendSettings.ProfileId);
         }
 
-        void OnEnable()
-        {
-            pinch.Stepped += OnPinch;
-            gestures.Recognized += OnGesture;
-        }
+        void OnEnable() => gestures.Recognized += OnGesture;
 
         void OnDisable()
         {
-            pinch.Stepped -= OnPinch;
             gestures.Recognized -= OnGesture;
             if (listeningForRecentre && OVRManager.display != null) OVRManager.display.RecenteredPose -= OnRecentred;
             listeningForRecentre = false;
@@ -129,6 +125,7 @@ namespace Edith.Scrapbook
             session?.Cancel();
             photos.Clear();
             ring.Dispose();
+            rays.Dispose();
         }
 
         void Update()
@@ -213,6 +210,7 @@ namespace Edith.Scrapbook
             // A hand closing on, holding or letting go of a card is busy, so it cannot pose.
             if (grab != null && grab.Claimed(HandSide.Left)) left = left.Unseen();
             if (grab != null && grab.Claimed(HandSide.Right)) right = right.Unseen();
+            Point(left, right);
             var reading = pose.Step(left, right);
             ringProgress = reading.Progress;
             if (reading.Progress > 0f) ringAt = reading.Between + Vector3.up * RingAboveMeters;
@@ -252,7 +250,7 @@ namespace Edith.Scrapbook
         async void Show()
         {
             Open = true;
-            gate.Held = true;
+            gate.Hold(this, true);
             content = Content.Loading;
             barShows = null;
             bar.Hide();
@@ -288,8 +286,9 @@ namespace Edith.Scrapbook
         void Close()
         {
             Open = false;
-            gate.Held = false;
+            gate.Hold(this, false);
             intent = null;
+            rays.Hide();
             session.Cancel();
             Debug.Log("[EDITH scrapbook] closed");
         }
@@ -302,36 +301,40 @@ namespace Edith.Scrapbook
             else if (gesture == ThumbGesture.SwipeRight) deck.Step(-1);
         }
 
-        void OnPinch(PinchReading reading)
+        /// Steps the hand rays while the deck is up: a click picks, and a pinch pressed on a card can scrub instead.
+        void Point(in HandFrame left, in HandFrame right)
         {
             if (!Open || content != Content.Browsing)
             {
                 intent = null;
+                if (!Open) rays.Hide();
+                else rays.Step(right, left, NoTargets);
                 return;
             }
-            if (intent == null && reading.Phase == PinchPhase.Pressed && reading.Event == PinchEvent.None)
+            var reading = rays.Step(right, left, findTarget);
+            if (reading.Event == RayEvent.Pressed && reading.Pressed >= 0 && reading.Pressed < ChipTarget)
             {
-                pressedAt = reading.Start;
-                pressedEye = eye.position;
-                var pressedInFrame = frame.InverseTransformPoint(pressedAt);
+                var pressedInFrame = frame.InverseTransformPoint((reading.Owner == HandSide.Left ? left : right).PinchPoint);
                 intent = new PinchIntent(pressedInFrame);
                 // The deck scrubs from where the sweep began, so it does not jump by the 6 cm it took to tell a sweep
                 // from a reach.
                 draggedTo = pressedInFrame;
-                chosen = false;
             }
-            if (intent == null) return;
-            if (reading.Phase == PinchPhase.Pressed || reading.Phase == PinchPhase.Dragging) Follow();
-            if (reading.Event == PinchEvent.Tap || reading.Event == PinchEvent.Completed || reading.Event == PinchEvent.Cancelled) End(reading.Event);
-            if (reading.Phase == PinchPhase.Idle) intent = null;
+            if (intent != null && reading.Owner is HandSide side) Follow(side == HandSide.Left ? left : right);
+            if (reading.Event is RayEvent.Clicked or RayEvent.Released or RayEvent.Cancelled) End(reading);
+        }
+
+        static int NoTargets(Ray ray, out float distance)
+        {
+            distance = 0f;
+            return -1;
         }
 
         /// Moves the deck with the pinch once it has gone far enough sideways to scrub.
-        void Follow()
+        void Follow(in HandFrame hand)
         {
-            var hand = pinch.Owner == HandSide.Left ? leftHand.Read() : rightHand.Read();
             // A hand lost mid-drag reads wherever its joints were left.
-            if (chosen || !hand.Tracked) return;
+            if (!hand.Tracked) return;
             var at = frame.InverseTransformPoint(hand.PinchPoint);
             var wasDragging = intent.Scrubbing;
             if (!intent.Move(at)) return;
@@ -339,34 +342,49 @@ namespace Edith.Scrapbook
             draggedTo = at;
         }
 
-        /// A pinch ends in a choice at the point it was pressed, unless it scrubbed.
-        void End(PinchEvent ended)
+        /// A pinch ends in a scrub's landing, or a click picks what it was pressed on.
+        void End(in RayReading reading)
         {
-            if (chosen) return;
-            var how = $"{ended}, {intent.Sideways * 100f:0.0} cm sideways";
-            if (intent.Scrubbing)
+            var scrubbed = intent != null && intent.Scrubbing;
+            var how = intent != null ? $"{reading.Event}, {intent.Sideways * 100f:0.0} cm sideways" : reading.Event.ToString();
+            intent = null;
+            if (scrubbed)
             {
                 Debug.Log($"[EDITH scrapbook] scrubbed the deck ({how}), landed on card {deck.Release(Time.time)}");
                 return;
             }
-            chosen = true;
-            Debug.Log($"[EDITH scrapbook] {Pick(pressedEye, pressedAt) ?? "ignored pinch: nothing at the press point"} ({how})");
+            if (reading.Event != RayEvent.Clicked)
+            {
+                Debug.Log($"[EDITH scrapbook] ignored pinch ({how})");
+                return;
+            }
+            Debug.Log($"[EDITH scrapbook] {Pick(reading.Pressed)} ({how})");
         }
 
-        /// Does what the pinch pressed at `point` chose, and says what that was, or returns null when it chose nothing.
-        /// A chip wins over a card.
-        string Pick(Vector3 from, Vector3 point)
+        /// What `ray` points at: a chip, which wins over a card behind it, or a card, and how far along the ray. The
+        /// distance is to the plane of the card in the middle, which the chips share closely enough for the cursor.
+        int TargetOn(Ray ray, out float distance)
         {
-            if (bar.Hit(from, point, out var chip, out _))
+            var plane = new Plane(frame.forward, frame.TransformPoint(ScrapbookPlacement.CardCentre));
+            if (!plane.Raycast(ray, out distance)) distance = RaySelect.FreeLength;
+            var through = ray.GetPoint(1f);
+            if (bar.Hit(ray.origin, through, out var chip, out _)) return ChipTarget + (int)chip.Tier;
+            return deckView.Hit(ray.origin, through, out _);
+        }
+
+        /// Does what the click on `target` chose, and says what that was.
+        string Pick(int target)
+        {
+            if (target >= ChipTarget)
             {
-                Narrow(() => browse.ToggleFilter(chip.Tier));
+                var tier = (Rarity)(target - ChipTarget);
+                var chip = chips.Find(c => c.Tier == tier);
+                Narrow(() => browse.ToggleFilter(tier));
                 Play(1318.5f);
                 return $"chose tier \"{chip.Label}\"";
             }
-            var card = deckView.Hit(from, point, out _);
-            if (card < 0) return null;
-            deck.JumpTo(card);
-            return $"chose card {card} \"{browse.Visible[card].Name}\"";
+            deck.JumpTo(target);
+            return $"chose card {target} \"{browse.Visible[target].Name}\"";
         }
 
         /// Changes what the deck is narrowed to. The card in the middle stays there when it is still in the deck, and

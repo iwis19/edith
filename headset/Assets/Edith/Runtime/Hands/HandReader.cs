@@ -30,6 +30,16 @@ namespace Edith.Hands
                 && hand.GetFingerConfidence(OVRHand.HandFinger.Thumb) == OVRHand.TrackingConfidence.High
                 && hand.GetFingerConfidence(OVRHand.HandFinger.Index) == OVRHand.TrackingConfidence.High;
             frame.Pinching = frame.Tracked && hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+            frame.PinchStrength = hand.IsTracked ? hand.GetFingerPinchStrength(OVRHand.HandFinger.Index) : 0f;
+            frame.Pointing = hand.IsTracked && hand.IsPointerPoseValid && !hand.IsSystemGestureInProgress;
+            if (frame.Pointing)
+            {
+                // OVRHand leaves the pointer pose unparented, in tracking space, which the eye's parent is.
+                var pointer = hand.PointerPose;
+                var space = eye.parent;
+                frame.PointerOrigin = space != null ? space.TransformPoint(pointer.localPosition) : pointer.localPosition;
+                frame.PointerRotation = space != null ? space.rotation * pointer.localRotation : pointer.localRotation;
+            }
             frame.ThumbTip = thumbTip.position;
             frame.IndexTip = indexTip.position;
             frame.Wrist = wrist.position;
