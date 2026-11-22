@@ -136,6 +136,7 @@
     <h1>You’re paired!</h1>
     <p class="lede">Put your phone away and look back through the headset. Keep this page open while you explore so EDITH knows where you are.</p>
     <p class="tip">For directions, hold the phone flat and pointing the way you face.</p>
+    <button id="compass-on" type="button" class="hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Turn on compass</span></button>
     <div id="status" class="status hidden" aria-live="polite"><div id="place"></div><span id="sent"></span><span id="compass"></span></div>
     <button id="share" type="button" class="hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.1-7-11.5a7 7 0 0 1 14 0C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Share location</span></button>
     <button id="recode" type="button" class="link">Use a new code</button>
@@ -151,6 +152,7 @@
   // While the headset is giving directions, the position and compass go every two seconds so the arrow keeps up.
   var SEND_EVERY_MS = 10000, NAV_SEND_EVERY_MS = 2000, SEND_AFTER_METRES = 25, HEADING_FRESH_MS = 3000;
   var navigating = false, heading = null, headingAccuracy = null, headingAt = 0, compassOn = false, compassAsked = false;
+  var compassMissing = false;
   var $ = function (id) { return document.getElementById(id); };
   var TOKEN_KEY = "edith.phone";
   var token = null, watchId = null, wakeLock = null, recoding = false;
@@ -163,7 +165,7 @@
     } catch (e) {}
     showScreen();
     // A paired phone starts sharing as soon as the page opens. iOS asks for compass access only inside a tap, so
-    // there the compass waits for the first tap anywhere on the page.
+    // there the compass waits for the Turn on compass button, or any other tap on the page.
     if (token) {
       if (compassNeedsTap()) document.addEventListener("click", startCompass, { once: true });
       start(false);
@@ -182,7 +184,13 @@
     $("pair").classList.toggle("hidden", !asking);
     $("paired").classList.toggle("hidden", asking);
     $("share").classList.toggle("hidden", watchId !== null);
+    showCompassButton();
     if (asking) { drawCode(); $("code").focus(); }
+  }
+
+  // Shown on a paired iPhone until compass readings arrive, since only a tap can turn the compass on there.
+  function showCompassButton() {
+    $("compass-on").classList.toggle("hidden", !token || recoding || compassOn || compassMissing || !compassNeedsTap());
   }
 
   function drawCode() {
@@ -308,13 +316,18 @@
     var turn = screen.orientation && typeof screen.orientation.angle === "number" ? screen.orientation.angle : (window.orientation || 0);
     heading = Math.round((((h + turn) % 360) + 360) % 360 * 10) / 10;
     headingAt = Date.now();
-    if (!compassOn) { compassOn = true; showCompass("on"); }
+    if (!compassOn) { compassOn = true; showCompass("on"); showCompassButton(); }
   }
 
   function listenCompass() {
     if ("ondeviceorientationabsolute" in window) window.addEventListener("deviceorientationabsolute", onOrientation);
     else window.addEventListener("deviceorientation", onOrientation);
-    setTimeout(function () { if (!compassOn) showCompass("not available on this phone"); }, 4000);
+    setTimeout(function () {
+      if (compassOn) return;
+      compassMissing = true;
+      showCompass("not available on this phone");
+      showCompassButton();
+    }, 4000);
   }
 
   function compassNeedsTap() {
@@ -385,6 +398,7 @@
   });
 
   $("share").addEventListener("click", start);
+  $("compass-on").addEventListener("click", startCompass);
   $("recode").addEventListener("click", function () { recoding = true; showError(""); showScreen(); });
   $("pair").addEventListener("submit", function (e) { e.preventDefault(); claim(); });
   $("code").addEventListener("input", function () {
