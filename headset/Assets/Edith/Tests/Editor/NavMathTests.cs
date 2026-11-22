@@ -145,8 +145,11 @@ namespace Edith.Tests
         }
 
         [TestCase("left", 40f, "Turn left in 40 m")]
-        [TestCase("right", 8f, "Turn right")]
-        [TestCase("slight_right", 8f, "Keep right")]
+        [TestCase("right", 8f, "Turn right in 10 m")]
+        [TestCase("right", 14f, "Turn right in 10 m")]
+        [TestCase("right", 3f, "Turn right")]
+        [TestCase("slight_right", 8f, "Keep right in 10 m")]
+        [TestCase("slight_right", 2f, "Keep right")]
         [TestCase("arrive", 1250f, "Arrive in 1.3 km")]
         [TestCase("straight", 40f, "")]
         public void AManeuverReadsAsATurnAndItsDistance(string kind, float metres, string expected) =>

@@ -178,9 +178,10 @@ namespace Edith.Navigation
                 "uturn" => "Turn around", "arrive" => "Arrive", _ => "",
             };
             if (phrase.Length == 0) return "";
-            // Within 15 m the turn is here, so it reads as a plain instruction with no distance.
-            if (metres < 15f) return phrase;
-            return $"{phrase} in {Metres(metres)}";
+            // Within 5 m the turn is here, so it reads as a plain instruction with no distance. Further out the
+            // distance never rounds below 10 m.
+            if (metres < 5f) return phrase;
+            return $"{phrase} in {Metres(Mathf.Max(metres, 10f))}";
         }
 
         /// "3 min · 240 m", "18 min · 1.4 km".
