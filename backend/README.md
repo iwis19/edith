@@ -88,7 +88,7 @@ Returns `{"status": "ok", "version": "...", "db": "connected" | "unreachable" | 
 A multipart form with two fields:
 
 - `image`: the cropped JPEG, at most 2 MB and 1024 px on its longest side.
-- `meta`: JSON `{"look_id": int, "source": "pinch" | "scan", "captured_at": ISO 8601}`. The image size is read from the JPEG itself.
+- `meta`: JSON `{"look_id": int, "source": "pinch" | "scan", "captured_at": ISO 8601, "interests": [string]}`. `interests` is optional: up to 12 strings of 1 to 40 characters, the picks from the headset's Welcome. They steer only the fact, never the name. The image size is read from the JPEG itself.
 
 The response is newline-delimited JSON (`application/x-ndjson`), one event per line, each with `t_ms` since the request arrived:
 
@@ -144,7 +144,7 @@ Tiles are fetched 2 at a time, and the process keeps the last 512 tiles and the 
 Picks the 2 or 3 things in one camera frame most worth a look, with one Gemini call that answers in JSON held to a schema. A multipart form with two fields:
 
 - `image`: the whole camera frame as a JPEG, at most 2 MB and 1280 px on its longest side.
-- `meta`: JSON `{"captured_at": ISO 8601, "session": UUID}`. The headset makes `session` once per launch.
+- `meta`: JSON `{"captured_at": ISO 8601, "session": UUID, "interests": [string]}`. The headset makes `session` once per launch. `interests` is optional, with the same limits as on `/look`; when two things are about equally worth a look, the one tied to an interest is picked first.
 
 The response is `{"scan_ref", "ms", "picks"}`. `picks` holds 0 to 3 items, most interesting first, and an empty list is a normal answer for a dull view. Each pick is:
 
@@ -169,7 +169,7 @@ The model is also told three things when they exist: the phone's place and up to
 
 Mints a Gemini Live session for one spoken question. The headset opens the websocket and talks to Gemini directly, so no audio passes through the backend and the API key never leaves it.
 
-The body is optional JSON. `{"voice": "Kore"}` picks the voice for this session; omit it, or send no body, for `LIVE_VOICE`. Any voice Gemini Live does not list is refused with 422 `invalid_request`. `{"hint": {"name": "...", "hook": "..."}}` names the Scan pin nearest the person's line of sight, and the persona then takes "this" and "it" to mean that pin (name at most 200 characters, hook at most 300).
+The body is optional JSON. `{"voice": "Kore"}` picks the voice for this session; omit it, or send no body, for `LIVE_VOICE`. Any voice Gemini Live does not list is refused with 422 `invalid_request`. `{"hint": {"name": "...", "hook": "..."}}` names the Scan pin nearest the person's line of sight, and the persona then takes "this" and "it" to mean that pin (name at most 200 characters, hook at most 300). `{"interests": ["Art", "Cars"]}` lists the person's Welcome picks, with the same limits as on `/look`, and the persona then leans towards them when an answer links to one.
 
 The response is `{"url", "setup", "model"}`:
 

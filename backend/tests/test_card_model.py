@@ -382,3 +382,27 @@ async def test_the_same_thing_keeps_its_first_rarity():
     agent = CardModelAgent(FakeWriter(first, again), FakeWriter(MOKA_A, MOKA_B))
     tiers = [[e.tier for e in await run(agent) if e.type == "rarity"] for _ in range(2)]
     assert tiers == [["rare"], ["rare"]]
+
+
+async def test_only_the_fact_call_is_told_the_interests():
+    namer, facts = FakeWriter(NAMING), FakeWriter(MOKA_A)
+    meta = LookMeta(look_id=1, source="pinch", captured_at=datetime.now(timezone.utc), interests=["Design", "Cars"])
+    [_ async for _ in CardModelAgent(namer, facts).run(b"jpeg", meta, PROFILE)]
+    assert "Design" in facts.calls[0]["context"] and "Cars" in facts.calls[0]["context"]
+    assert namer.calls[0]["context"] is None
+
+
+async def test_the_fact_context_has_the_phone_note_then_the_interests():
+    facts = FakeWriter(MOKA_A)
+    western = Whereabouts(place="Western University, London, Ontario, Canada", sights=[], lat=43.0096, lon=-81.2737)
+    meta = LookMeta(look_id=1, source="pinch", captured_at=datetime.now(timezone.utc), interests=["Design"])
+    agent = CardModelAgent(FakeWriter(NAMING), facts, whereabouts=lambda profile_id: western)
+    [_ async for _ in agent.run(b"jpeg", meta, PROFILE)]
+    context = facts.calls[0]["context"]
+    assert context.index("Western University") < context.index("Design")
+
+
+async def test_with_no_interests_the_fact_call_has_no_context():
+    facts = FakeWriter(MOKA_A)
+    await run(CardModelAgent(FakeWriter(NAMING), facts))
+    assert facts.calls[0]["context"] is None

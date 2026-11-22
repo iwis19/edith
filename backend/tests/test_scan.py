@@ -130,6 +130,7 @@ async def test_scan_image_limits(settings, store):
 @pytest.mark.parametrize("bad", [
     "not json", "{}", '{"captured_at": "yesterday", "session": "11111111-0000-4000-8000-000000000001"}',
     '{"captured_at": "2026-11-21T10:00:00Z"}', '{"captured_at": "2026-11-21T10:00:00Z", "session": "launch-1"}',
+    scan_meta(interests=["art"] * 13), scan_meta(interests=["x" * 41]), scan_meta(interests=[""]),
 ])
 async def test_scan_bad_meta_is_422(settings, store, bad):
     async with client_for(agent_app(settings, store, [])) as c:
@@ -147,7 +148,7 @@ class Failing:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    async def scan(self, image, profile_id, session):
+    async def scan(self, image, profile_id, session, interests=()):
         raise self._error
 
 
@@ -160,7 +161,7 @@ async def test_model_failure_is_502(settings, store, error):
 
 async def test_a_scan_over_its_budget_is_504(settings, store):
     class Slow:
-        async def scan(self, image, profile_id, session):
+        async def scan(self, image, profile_id, session, interests=()):
             await asyncio.sleep(5)
 
     settings.scan_timeout_s = 0.05
@@ -462,3 +463,38 @@ async def test_openai_scanner_asks_for_strict_json_with_the_image_and_context():
 async def test_openai_scanner_raises_on_a_refusal():
     with pytest.raises(RuntimeError, match="refused"):
         await openai_scanner(FakeCompletions(None, refusal="no")).pick("system", None, b"jpeg")
+
+
+async def test_scan_meta_takes_interests_or_none(settings, store):
+    async with client_for(agent_app(settings, store, [], [])) as c:
+        assert (await post_scan(c, meta=scan_meta())).status_code == 200
+        assert (await post_scan(c, meta=scan_meta(interests=["Art", "Cars"]))).status_code == 200
+
+
+async def test_the_interests_follow_the_place_and_come_before_what_was_said_and_collected():
+    found = Whereabouts(place="Western University, London, Canada", sights=[])
+    model = FakeModel([pick()], [])
+    agent = ScanAgent(model, FakeStore([memory("a globe")]), lambda profile: found)
+    await agent.scan(b"", ME, SESSION, ["Design", "Cars"])
+    await agent.scan(b"", ME, SESSION, ["Design", "Cars"])
+    context = model.contexts[1]
+    order = [context.index(part) for part in ("Western University", "Design", "a brass compass", "a globe")]
+    assert order == sorted(order)
+    assert "Cars" in context
+
+
+async def test_with_no_interests_the_scan_context_has_none():
+    model = FakeModel([], [])
+    agent = ScanAgent(model, FakeStore([memory("a globe")]))
+    await agent.scan(b"", ME, SESSION)
+    await agent.scan(b"", ME, SESSION, [])
+    assert model.contexts[0] == model.contexts[1]
+    assert "interests" not in model.contexts[0]
+
+
+async def test_the_scan_route_passes_the_interests_to_the_agent(settings, store):
+    model = FakeModel([])
+    app = create_app(settings, store=store, scanner=ScanAgent(model, FakeStore()))
+    async with client_for(app) as c:
+        await post_scan(c, meta=scan_meta(interests=["Music"]))
+    assert "Music" in model.contexts[0]

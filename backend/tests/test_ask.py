@@ -203,3 +203,29 @@ async def test_the_directions_gesture_tells_gemini_to_search_for_what_is_said(se
     assert NAV_START_NOTE not in plain
     gesture = setup_of(await ask_session(settings, store, live(), {"navigate": True}))
     assert NAV_START_NOTE in gesture["systemInstruction"]["parts"][0]["text"]
+
+
+def persona_of(response: httpx.Response) -> str:
+    return setup_of(response)["systemInstruction"]["parts"][0]["text"]
+
+
+async def test_the_interests_end_the_persona_after_the_hint(settings, store):
+    body = {"hint": {"name": "the Peace Tower"}, "interests": ["Architecture", "Music"]}
+    text = persona_of(await ask_session(settings, store, live(), body))
+    assert "Architecture" in text and "Music" in text
+    assert text.index("the Peace Tower") < text.index("Architecture")
+
+
+@pytest.mark.parametrize("body", [None, {}, {"interests": []}])
+async def test_without_interests_the_persona_is_the_same(settings, store, body):
+    plain = persona_of(await ask_session(settings, store, live()))
+    assert persona_of(await ask_session(settings, store, live(), body)) == plain
+    assert "interests" not in plain
+
+
+@pytest.mark.parametrize("interests", [["art"] * 13, ["x" * 41], [""]])
+async def test_malformed_interests_are_refused_before_a_token_is_minted(settings, store, interests):
+    seen: list[httpx.Request] = []
+    response = await ask_session(settings, store, live(seen), {"interests": interests})
+    assert response.status_code == 422
+    assert seen == []
