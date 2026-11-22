@@ -9,8 +9,9 @@ namespace Edith.Ask
     {
         /// How far ahead of the eye a row that follows the head sits.
         public const float Depth = 0.55f;
-        /// The usual spot, as the orb's centre: low and well left of the line of sight, about 22° left and 17° down.
-        public static readonly Vector2 Home = new Vector2(-0.4f, -0.3f);
+        /// The usual spot, as the orb's centre: low and left of the line of sight, about 17° left and 11° down, so the
+        /// row stays inside the centre crop of a headset recording.
+        public static readonly Vector2 Home = new Vector2(-0.3f, -0.2f);
         /// The row's half height; the two-line caption is a little shorter than the orb.
         public const float RowHalfHeightMetres = 0.02f;
         /// The clear space between a snapshot photo's top edge and an orb perched on it, past the photo's border.
