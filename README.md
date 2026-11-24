@@ -7,7 +7,7 @@ Turning the places you walk through into side quests with a mixed-reality compan
 ## Repository Note
 
 Built at **Hack Western 13** for Meta Quest 3 / 3S:
-- Best Use of Gemini API
+- Best Use of Gemini API, used `gemini 3.5 flash-lite`, `gemini embedding 2`, `gemini 3.8 live`
 
 Check out the Devpost submission: [click](https://devpost.com/software/edith-w3m9c8?ref_content=user-portfolio&ref_feature=in_progress)
 
